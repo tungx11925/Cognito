@@ -78,8 +78,6 @@ jobs:
       - name: Install dependencies
         run: npm ci || npm install
 
-      - name: Prisma Generate
-        run: npx prisma generate --schema=src/prisma/schema.prisma
 
       - name: TypeScript Compile Check
         # Biên dịch thử TypeScript (Chỉ kiểm tra lỗi type, không xuất file)

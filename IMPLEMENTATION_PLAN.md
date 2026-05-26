@@ -235,3 +235,4 @@ erDiagram
 - [ ] **Giai đoạn 4**: Tích hợp API Gemini AI vào backend (Phân tích tài liệu, Trả lời câu hỏi học tập).
 - [ ] **Giai đoạn 5**: Thiết kế giao diện Frontend Premium (Document Viewer + Widget Timer, Sidebar AI Chat, Note editor & Flashcards board).
 - [ ] **Giai đoạn 6**: Ghép nối dữ liệu (API Integration), tối ưu hóa trải nghiệm người dùng & đóng gói dự án.
+ 
