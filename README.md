@@ -51,3 +51,8 @@ docker-compose exec backend npm run migrate:up
 - **Quản lý Database (pgAdmin):** [http://localhost:5050](http://localhost:5050)
   - Đăng nhập: Dùng email/password khai báo ở file `.env` root (vd: `admin@example.com` / `admin`).
   - Kết nối DB: Chọn Add New Server, khai báo Host name là `postgres`, Username & Password theo file `.env` root.
+
+-
+- **Nếu muốn tắt hẳn dự án:**  Gõ lệnh docker-compose down vào Terminal.
+
+- **Lần tới muốn bật lại dự án** : Chỉ cần mở Docker Desktop lên và gõ docker-compose up -d.
