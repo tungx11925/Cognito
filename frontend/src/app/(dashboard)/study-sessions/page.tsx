@@ -1,71 +1,120 @@
 "use client";
+import { motion } from "framer-motion";
+import { Play, Clock, CheckCircle2, BarChart2, Calendar } from "lucide-react";
 
-import React from 'react';
-import { useStudy } from '../../../context/StudyContext';
+const sessions = [
+  { deck: "Advanced Algorithms", date: "Today, 9:14 AM", duration: "12m 4s", cards: 20, accuracy: 85, score: "Good" },
+  { deck: "System Design", date: "Today, 8:50 AM", duration: "3m 15s", cards: 5, accuracy: 60, score: "Fair" },
+  { deck: "Network Security", date: "Yesterday, 7:22 PM", duration: "8m 42s", cards: 18, accuracy: 100, score: "Perfect" },
+  { deck: "Advanced Algorithms", date: "Yesterday, 6:05 PM", duration: "5m 20s", cards: 8, accuracy: 75, score: "Good" },
+  { deck: "Data Science", date: "2 days ago", duration: "14m 30s", cards: 25, accuracy: 96, score: "Excellent" },
+];
+
+const scoreColor: Record<string, string> = {
+  Perfect: "#16a34a",
+  Excellent: "#1a3a2a",
+  Good: "#2563eb",
+  Fair: "#ea580c",
+};
 
 export default function StudySessionsPage() {
-  const { analyticsData } = useStudy();
-
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-lg font-black text-[#0D2B24] tracking-tight">Thống kê Học tập & Hiệu suất</h2>
-        <p className="text-xs text-[#0D2B24]/50 font-semibold mt-0.5">Biểu đồ tiến trình, thời gian tích lũy và số giờ học tập trung.</p>
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 style={{ color: "#111827", marginBottom: "4px", fontSize: "22px", fontWeight: 700 }}>Study Sessions</h1>
+          <p style={{ fontSize: "13px", color: "#9ca3af" }}>Track your review history and performance</p>
+        </div>
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-white"
+          style={{ fontSize: "13px", fontWeight: 600, background: "#1a3a2a" }}
+        >
+          <Play size={13} /> Start Session
+        </motion.button>
       </div>
 
-      {/* Aggregate Widgets */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Summary cards */}
+      <div className="grid grid-cols-3 gap-4">
         {[
-          { title: 'Thời gian học tập', value: `${analyticsData.total_study_minutes} phút`, desc: 'Tích lũy từ tất cả các phiên' },
-          { title: 'Số phiên đếm giờ', value: `${analyticsData.total_sessions} phiên`, desc: 'Đã hoàn thành tập trung' },
-          { title: 'Tài liệu học tập', value: `${analyticsData.total_documents} tài liệu`, desc: 'Lưu trong thư viện' },
-          { title: 'Bộ thẻ Flashcards', value: `${analyticsData.total_flashcards} thẻ`, desc: 'Tự động hóa bằng AI' },
-        ].map((item, idx) => (
-          <div key={idx} className="bg-white border border-[#0D2B24]/10 rounded-2xl p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-[#0D2B24]/50 uppercase tracking-wider">{item.title}</p>
-            <h3 className="text-2xl font-black text-[#0D2B24] mt-2 leading-none">{item.value}</h3>
-            <p className="text-[10px] text-[#0D2B24]/40 mt-2.5 font-semibold leading-none">{item.desc}</p>
-          </div>
+          { label: "Total Sessions", value: "47", icon: Calendar, color: "#1a3a2a" },
+          { label: "Avg Accuracy", value: "83%", icon: BarChart2, color: "#16a34a" },
+          { label: "Total Time", value: "6h 14m", icon: Clock, color: "#2563eb" },
+        ].map(({ label, value, icon: Icon, color }, i) => (
+          <motion.div
+            key={label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.07 }}
+            className="bg-white rounded-xl p-4"
+            style={{ border: "1px solid #e5e7eb" }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span style={{ fontSize: "12px", color: "#9ca3af" }}>{label}</span>
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${color}18` }}>
+                <Icon size={14} style={{ color }} />
+              </div>
+            </div>
+            <div style={{ fontSize: "24px", fontWeight: 700, color: "#111827" }}>{value}</div>
+          </motion.div>
         ))}
       </div>
 
-      {/* Weekly Progress Chart */}
-      <div className="bg-white border border-[#0D2B24]/10 rounded-3xl p-6.5 shadow-sm">
-        <div className="mb-6">
-          <h3 className="text-sm font-black text-[#0D2B24]">Biểu đồ tiến trình tuần này</h3>
-          <p className="text-xs text-[#0D2B24]/50 font-semibold mt-0.5">Thời gian học tập trung (phút) được ghi nhận tự động theo ngày.</p>
+      {/* Sessions list */}
+      <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #e5e7eb" }}>
+        <div className="px-5 py-4" style={{ borderBottom: "1px solid #f3f4f6" }}>
+          <span style={{ fontSize: "13.5px", fontWeight: 600, color: "#111827" }}>Recent Sessions</span>
         </div>
-
-        <div className="space-y-4">
-          {(analyticsData.chart_data.length > 0 ? analyticsData.chart_data : [
-            { day: 'Thứ 2', minutes: 30 },
-            { day: 'Thứ 3', minutes: 45 },
-            { day: 'Thứ 4', minutes: 20 },
-            { day: 'Thứ 5', minutes: 60 },
-            { day: 'Thứ 6', minutes: 15 },
-            { day: 'Thứ 7', minutes: 40 },
-            { day: 'Chủ Nhật', minutes: 50 },
-          ]).map((bar, idx) => (
-            <div key={idx} className="flex items-center gap-4 text-xs font-semibold">
-              <span className="w-16 text-[#0D2B24]/60 text-left font-bold">{bar.day}</span>
-              <div className="flex-1 bg-[#FAF8F5] h-6 rounded-full overflow-hidden border border-[#0D2B24]/10">
-                <div 
-                  style={{ width: `${Math.min(100, (bar.minutes / 80) * 100)}%` }}
-                  className="h-full bg-[#0D2B24] rounded-full flex items-center justify-end pr-2 transition-all duration-500 shadow-sm"
-                >
-                  <span className="text-[8px] font-black text-white font-sans">{bar.minutes}m</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="border-t border-[#0D2B24]/10 pt-5 mt-6 flex justify-between text-[10px] text-[#0D2B24]/40 font-black tracking-wide uppercase">
-          <span>MỤC TIÊU HÀNG TUẦN: 350 PHÚT HỌC TẬP</span>
-          <span className="text-[#0D2B24]">Đã hoàn thành 75% chỉ tiêu</span>
-        </div>
+        <table className="w-full">
+          <thead>
+            <tr style={{ borderBottom: "1px solid #f3f4f6" }}>
+              {["DECK", "DATE", "DURATION", "CARDS", "ACCURACY", "SCORE"].map(col => (
+                <th key={col} className="px-5 py-3 text-left"
+                  style={{ fontSize: "10px", fontWeight: 700, color: "#9ca3af", letterSpacing: "0.07em" }}>
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((s, i) => (
+              <motion.tr
+                key={i}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 + i * 0.06 }}
+                style={{ borderBottom: "1px solid #f9fafb" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#f9fafb")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              >
+                <td className="px-5 py-3.5" style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>{s.deck}</td>
+                <td className="px-5 py-3.5" style={{ fontSize: "12px", color: "#9ca3af" }}>{s.date}</td>
+                <td className="px-5 py-3.5">
+                  <div className="flex items-center gap-1.5" style={{ fontSize: "12.5px", color: "#6b7280" }}>
+                    <Clock size={12} /> {s.duration}
+                  </div>
+                </td>
+                <td className="px-5 py-3.5" style={{ fontSize: "12.5px", color: "#6b7280" }}>{s.cards} cards</td>
+                <td className="px-5 py-3.5">
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 rounded-full w-16 overflow-hidden" style={{ background: "#f3f4f6" }}>
+                      <div className="h-full rounded-full" style={{ width: `${s.accuracy}%`, background: "#1a3a2a" }} />
+                    </div>
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "#374151" }}>{s.accuracy}%</span>
+                  </div>
+                </td>
+                <td className="px-5 py-3.5">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 size={13} style={{ color: scoreColor[s.score] }} />
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: scoreColor[s.score] }}>{s.score}</span>
+                  </div>
+                </td>
+              </motion.tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-
     </div>
   );
 }
