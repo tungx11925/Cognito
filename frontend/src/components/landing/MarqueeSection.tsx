@@ -1,16 +1,15 @@
 import { motion } from "framer-motion";
 
 const items = [
-  { icon: "🧠", text: "Precision AI Analysis" },
-  { icon: "📚", text: "Smart Flashcards" },
-  { icon: "⚡", text: "Focus Flow" },
-  { icon: "🌐", text: "Collective Intelligence" },
-  { icon: "📊", text: "500K+ Scholars" },
-  { icon: "🔁", text: "98% Recall Rate" },
-  { icon: "📄", text: "12M+ Cross-References" },
-  { icon: "🎯", text: "Deep Work Engine" },
-  { icon: "✨", text: "GPT-4o Powered" },
-  { icon: "🔬", text: "Semantic Mapping" },
+  { icon: "🧠", text: "Trợ lý AI Thông minh" },
+  { icon: "📚", text: "Flashcards Tự động" },
+  { icon: "⚡", text: "Đồng hồ Pomodoro" },
+  { icon: "✍️", text: "Ghi chép Tương tác" },
+  { icon: "📄", text: "Quản lý Tài liệu PDF/Word" },
+  { icon: "🔁", text: "Spaced Repetition" },
+  { icon: "🎓", text: "Tối ưu hóa Ghi nhớ" },
+  { icon: "✨", text: "Tích hợp AI Tiên tiến" },
+  { icon: "📝", text: "Tạo Câu hỏi Trắc nghiệm" },
 ];
 
 function MarqueeTrack({ reverse = false }: { reverse?: boolean }) {

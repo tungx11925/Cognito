@@ -55,7 +55,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                 className="transition-colors duration-200 text-xs font-bold cursor-pointer"
                 style={{ color: "#1a3d28" }}
               >
-                Dashboard
+                Bảng điều khiển
               </span>
             )}
             <a
@@ -65,7 +65,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
               onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#1a3d28"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#4a5a52"; }}
             >
-              Features
+              Tính năng
             </a>
             <a
               href="#stats"
@@ -74,7 +74,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
               onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#1a3d28"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#4a5a52"; }}
             >
-              Stats
+              Thống kê
             </a>
           </nav>
 
@@ -89,7 +89,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#143020"; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#1a3d28"; }}
                 >
-                  Go to Dashboard
+                  Vào bảng điều khiển
                 </button>
                 <div 
                   className="w-7 h-7 rounded-full overflow-hidden bg-emerald-700 text-white flex items-center justify-center font-bold text-xs cursor-pointer select-none" 
@@ -136,7 +136,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   className="w-full py-2.5 rounded-lg mt-1" 
                   style={{ background: "#1a3d28", color: "#f5f3ee", fontWeight: 600, border: "none", cursor: "pointer" }}
                 >
-                  Go to Dashboard
+                  Vào bảng điều khiển
                 </button>
               ) : (
                 <button 
@@ -144,7 +144,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   className="w-full py-2.5 rounded-lg mt-1" 
                   style={{ background: "#1a3d28", color: "#f5f3ee", fontWeight: 600, border: "none", cursor: "pointer" }}
                 >
-                  Sign In
+                  Đăng nhập
                 </button>
               )}
             </div>

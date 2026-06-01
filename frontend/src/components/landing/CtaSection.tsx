@@ -47,9 +47,9 @@ export function CtaSection({ onStartClick, onExploreClick }: CtaSectionProps) {
                 letterSpacing: "-0.02em",
               }}
             >
-              Elevate your academic
+              Nâng cao hiệu suất học tập
               <br />
-              performance today.
+              của bạn ngay hôm nay.
             </motion.h2>
 
             <motion.p
@@ -60,7 +60,7 @@ export function CtaSection({ onStartClick, onExploreClick }: CtaSectionProps) {
               className="mb-10 max-w-lg mx-auto"
               style={{ color: "rgba(245,243,238,0.6)", lineHeight: 1.7, fontSize: "0.95rem" }}
             >
-              Join the global network of researchers and students using EduShare AI to master complex domains in record time.
+              Tham gia cộng đồng những người học tập thông minh. Tận dụng sức mạnh của EduShare AI để làm chủ kiến thức trong thời gian kỷ lục.
             </motion.p>
 
             <div className="flex flex-wrap gap-3 justify-center">
@@ -71,7 +71,7 @@ export function CtaSection({ onStartClick, onExploreClick }: CtaSectionProps) {
                 onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#e8e5de"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#f5f3ee"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; }}
               >
-                Get Started for Free
+                Bắt đầu học ngay
                 <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
               </button>
               <button
@@ -81,7 +81,7 @@ export function CtaSection({ onStartClick, onExploreClick }: CtaSectionProps) {
                 onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(245,243,238,0.08)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(245,243,238,0.5)"; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(245,243,238,0.3)"; }}
               >
-                Explore Features
+                Khám phá tính năng
               </button>
             </div>
           </div>

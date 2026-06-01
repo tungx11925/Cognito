@@ -1,9 +1,9 @@
 import { motion } from "framer-motion";
 
 const stats = [
-  { value: "500K+", label: "SCHOLARS" },
-  { value: "12M+", label: "CROSS-REFERENCES" },
-  { value: "98%", label: "RECALL SUCCESS" },
+  { value: "50+", label: "ĐỊNH DẠNG TÀI LIỆU" },
+  { value: "10K+", label: "FLASHCARDS TẠO TỰ ĐỘNG" },
+  { value: "98%", label: "TỶ LỆ GHI NHỚ" },
 ];
 
 export function StatsSection() {

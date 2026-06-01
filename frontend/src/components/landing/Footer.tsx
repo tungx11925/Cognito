@@ -1,7 +1,7 @@
 const footerLinks = {
-  Product: ["System Policies", "Integrations", "Pricing Plans"],
-  Library: ["Documentation", "Study Guides", "Community Hub"],
-  Institutional: ["About the Lab", "Privacy Policy", "Terms of Service"],
+  "Sản Phẩm": ["Tính năng", "Tích hợp AI", "Bảng giá"],
+  "Tài Nguyên": ["Tài liệu hướng dẫn", "Flashcards mẫu", "Cộng đồng"],
+  "Chính Sách": ["Về chúng tôi", "Bảo mật", "Điều khoản sử dụng"],
 };
 
 export function Footer() {
@@ -17,7 +17,7 @@ export function Footer() {
               <span style={{ color: "#0d1a14", fontWeight: 700, fontSize: "0.95rem" }}>EduShare AI</span>
             </div>
             <p style={{ color: "#6b7c72", fontSize: "0.8rem", lineHeight: 1.65 }}>
-              Developing high-performance learning environments for the next generation of collective intelligence.
+              Phát triển môi trường học tập hiệu suất cao cho thế hệ tri thức tương lai.
             </p>
             <div className="flex gap-2 mt-5">
               {["𝕏", "in", "gh"].map((icon) => (
@@ -60,7 +60,7 @@ export function Footer() {
 
         <div className="pt-7 flex flex-col md:flex-row items-center justify-between gap-3"
           style={{ borderTop: "1px solid rgba(26,61,40,0.07)" }}>
-          <p style={{ color: "#9aab9e", fontSize: "0.76rem" }}>© 2026 EduShare AI Laboratory. All rights reserved.</p>
+          <p style={{ color: "#9aab9e", fontSize: "0.76rem" }}>© 2026 EduShare AI. Đã đăng ký bản quyền.</p>
           <div className="flex gap-3">
             {["𝕏", "GitHub"].map((s) => (
               <a key={s} href="#" style={{ color: "#9aab9e", fontSize: "0.76rem" }}
