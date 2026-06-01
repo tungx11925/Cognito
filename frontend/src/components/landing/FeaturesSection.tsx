@@ -219,74 +219,97 @@ export function FeaturesSection() {
 
 
         {/* SECTION 2: HỌC CÙNG AI */}
-        <div className="flex flex-col-reverse lg:flex-row items-center gap-16">
+        <div className="space-y-12">
+          <div className="max-w-2xl mx-auto text-center">
+            <span className="text-xs font-bold tracking-widest uppercase mb-4 block" style={{ color: "#1a3d28" }}>
+              GHI CHÚ & TRỢ LÝ AI
+            </span>
+            <h2 className="mb-6" style={{ color: "#0d1a14", fontWeight: 800, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1, letterSpacing: "-0.03em" }}>
+              Học tài liệu song song cùng AI.
+            </h2>
+            <p className="mb-8" style={{ color: "#4a5a52", lineHeight: 1.7, fontSize: "1.05rem" }}>
+              Không cần chuyển màn hình. Đọc tài liệu, ghi chú và hỏi đáp trực tiếp với trợ lý AI ngay bên cạnh để giải quyết vấn đề tức thì. Hãy thử chat với AI bên dưới!
+            </p>
+          </div>
+
           <motion.div 
-            initial={{ opacity: 0, x: -40 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
-            className="w-full lg:w-1/2"
+            className="w-full rounded-2xl overflow-hidden shadow-2xl border border-gray-200 bg-white flex flex-col lg:flex-row h-auto lg:h-[500px]"
           >
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 max-w-md mx-auto h-[450px] flex flex-col">
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4 scrollbar-hide flex flex-col">
+            {/* Left: Document Area */}
+            <div className="flex-1 p-6 lg:p-10 overflow-y-auto border-b lg:border-b-0 lg:border-r border-gray-100 bg-[#faf9f6]">
+              {/* Sticky Note matching user image */}
+              <div className="bg-[#fef9c3] border border-[#fde047]/50 rounded-xl px-4 py-3 flex gap-3 items-center max-w-lg shadow-sm mb-10">
+                <span className="text-sm">📝</span>
+                <span className="text-gray-800 text-sm font-semibold">Ghi chú của bạn: Nhớ chọn u = phần dễ lấy đạo hàm</span>
+              </div>
+              
+              {/* Dummy Document Content */}
+              <div className="space-y-6 max-w-2xl">
+                 <h3 className="text-2xl font-bold font-serif text-gray-800">Tích phân từng phần</h3>
+                 <p className="text-gray-600 leading-relaxed">
+                   Trong vi tích phân, tích phân từng phần là một quá trình tìm tích phân của tích các hàm số dựa trên tích phân của đạo hàm và nguyên hàm của chúng. Nó thường được sử dụng để biến đổi nguyên hàm của một tích các hàm số thành một nguyên hàm dễ giải hơn.
+                 </p>
+                 <div className="bg-white p-6 rounded-xl border border-gray-200 text-center shadow-sm">
+                   <span className="font-serif text-xl font-medium">∫ u dv = uv - ∫ v du</span>
+                 </div>
+                 <p className="text-gray-600 leading-relaxed">
+                   Quy tắc có thể được suy ra bằng cách tích hợp quy tắc đạo hàm của tích số. Tích phân từng phần có thể được coi là một phiên bản liên tục của tính tổng từng phần.
+                 </p>
+                 <div className="space-y-3 opacity-50">
+                   <div className="h-3 bg-gray-200 rounded w-full"></div>
+                   <div className="h-3 bg-gray-200 rounded w-5/6"></div>
+                   <div className="h-3 bg-gray-200 rounded w-4/6"></div>
+                 </div>
+              </div>
+            </div>
+
+            {/* Right: AI Chat Interface */}
+            <div className="w-full lg:w-[450px] flex flex-col bg-white">
+              <div className="flex-1 overflow-y-auto p-6 space-y-5 scrollbar-hide">
                 {chatMessages.map((msg) => (
                   <div 
                     key={msg.id}
-                    className={`text-sm p-4 rounded-2xl max-w-[90%] leading-relaxed whitespace-pre-wrap ${
+                    className={`text-sm p-4 rounded-2xl max-w-[90%] leading-relaxed whitespace-pre-wrap shadow-sm ${
                       msg.sender === "ai" 
-                        ? "self-start bg-gray-100 text-gray-700 rounded-tl-sm" 
-                        : "self-end bg-[#1a3d28] text-white rounded-tr-sm shadow-sm"
+                        ? "self-start bg-white border border-gray-100 text-gray-700 rounded-tl-sm" 
+                        : "self-end bg-[#1a3d28] text-white rounded-tr-sm ml-auto"
                     }`}
                   >
                     {msg.text}
                   </div>
                 ))}
                 {isTyping && (
-                  <div className="self-start bg-gray-100 text-gray-700 text-sm p-4 rounded-2xl rounded-tl-sm w-16 h-12 flex items-center justify-center gap-1">
-                    <motion.div className="w-2 h-2 rounded-full bg-gray-400" animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0 }} />
-                    <motion.div className="w-2 h-2 rounded-full bg-gray-400" animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }} />
-                    <motion.div className="w-2 h-2 rounded-full bg-gray-400" animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.4 }} />
+                  <div className="self-start bg-white border border-gray-100 text-gray-700 text-sm p-4 rounded-2xl rounded-tl-sm shadow-sm w-16 h-12 flex items-center justify-center gap-1">
+                    <motion.div className="w-1.5 h-1.5 rounded-full bg-gray-400" animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0 }} />
+                    <motion.div className="w-1.5 h-1.5 rounded-full bg-gray-400" animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }} />
+                    <motion.div className="w-1.5 h-1.5 rounded-full bg-gray-400" animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.4 }} />
                   </div>
                 )}
               </div>
-              <form onSubmit={handleChatSubmit} className="mt-4 relative flex-shrink-0">
-                <input 
-                  type="text" 
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Hãy thử hỏi AI điều gì đó..." 
-                  className="w-full bg-gray-50 border border-gray-200 rounded-full px-5 py-3.5 text-sm focus:outline-none focus:border-[#1a3d28] pr-12 transition-colors" 
-                />
-                <button 
-                  type="submit"
-                  disabled={!chatInput.trim() || isTyping}
-                  className="absolute right-1.5 top-1.5 w-10 h-10 rounded-full bg-[#1a3d28] text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#112a1b] transition-colors"
-                >
-                  <Send size={16} />
-                </button>
-              </form>
-            </div>
-          </motion.div>
-
-          <div className="w-full lg:w-1/2">
-            <span className="text-xs font-bold tracking-widest uppercase mb-4 block" style={{ color: "#1a3d28" }}>
-              GHI CHÚ & TRỢ LÝ AI
-            </span>
-            <h2 className="mb-6" style={{ color: "#0d1a14", fontWeight: 800, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1, letterSpacing: "-0.03em" }}>
-              Tương tác trực tiếp.<br />Ghi nhớ sâu sắc.
-            </h2>
-            <p className="mb-8" style={{ color: "#4a5a52", lineHeight: 1.7, fontSize: "1.05rem" }}>
-              Hãy thử gõ câu hỏi vào khung chat bên trái để trải nghiệm! AI có thể giải thích khái niệm, tóm tắt bài đọc, hoặc thậm chí yêu cầu sinh bộ câu hỏi trắc nghiệm từ chính tài liệu của bạn.
-            </p>
-            
-            <div className="bg-[#fef9c3] border border-[#fde047] rounded-xl p-4 flex gap-3 items-start max-w-md shadow-sm">
-              <span className="text-lg">✍️</span>
-              <div>
-                <div className="font-semibold text-gray-800 text-sm mb-1">Ghi chú của bạn:</div>
-                <div className="text-gray-700 text-sm italic">"Nhớ chọn u = phần dễ lấy đạo hàm"</div>
+              <div className="p-4 bg-white border-t border-gray-50">
+                <form onSubmit={handleChatSubmit} className="relative flex-shrink-0 shadow-sm rounded-full bg-gray-50 border border-gray-200 focus-within:border-[#1a3d28] transition-colors">
+                  <input 
+                    type="text" 
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Hỏi AI về tài liệu..." 
+                    className="w-full bg-transparent px-5 py-3.5 text-sm focus:outline-none pr-12 text-gray-700" 
+                  />
+                  <button 
+                    type="submit"
+                    disabled={!chatInput.trim() || isTyping}
+                    className="absolute right-1.5 top-1.5 w-10 h-10 rounded-full bg-[#1a3d28] text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#112a1b] transition-colors"
+                  >
+                    <Send size={16} />
+                  </button>
+                </form>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
 
 
