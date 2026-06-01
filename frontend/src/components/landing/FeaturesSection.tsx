@@ -90,7 +90,7 @@ export function FeaturesSection() {
               <span className="text-xs font-bold tracking-widest uppercase mb-4 block" style={{ color: "#1a3d28" }}>
                 XEM TÀI LIỆU + TIMER
               </span>
-              <h2 className="mb-6" style={{ color: "#0d1a14", fontWeight: 800, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1, letterSpacing: "-0.03em" }}>
+              <h2 className="mb-6" style={{ color: "#0d1a14", fontWeight: 800, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1 }}>
                 Đọc tài liệu. Tập trung.<br />Theo dõi tiến độ.
               </h2>
               <p style={{ color: "#4a5a52", lineHeight: 1.7, fontSize: "1.05rem" }}>
@@ -143,7 +143,7 @@ export function FeaturesSection() {
                 </div>
 
                 <div className="bg-gray-50 rounded-xl p-8 flex items-center justify-center border border-gray-100 mb-8 cursor-text">
-                  <span className="font-serif text-xl text-gray-800 italic selection:bg-yellow-200">∫ u · dv = u · v − ∫ v · du</span>
+                  <span className="text-xl text-gray-800 italic selection:bg-yellow-200" style={{ fontFamily: "'Playfair Display', 'Merriweather', 'Times New Roman', Times, serif" }}>∫ u · dv = u · v − ∫ v · du</span>
                 </div>
 
                 <div className="space-y-3">
@@ -219,12 +219,12 @@ export function FeaturesSection() {
 
 
         {/* SECTION 2: HỌC CÙNG AI */}
-        <div className="space-y-12">
+        <div id="ai-chat" className="space-y-12">
           <div className="max-w-2xl mx-auto text-center">
             <span className="text-xs font-bold tracking-widest uppercase mb-4 block" style={{ color: "#1a3d28" }}>
               GHI CHÚ & TRỢ LÝ AI
             </span>
-            <h2 className="mb-6" style={{ color: "#0d1a14", fontWeight: 800, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1, letterSpacing: "-0.03em" }}>
+            <h2 className="mb-6" style={{ color: "#0d1a14", fontWeight: 800, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1 }}>
               Học tài liệu song song cùng AI.
             </h2>
             <p className="mb-8" style={{ color: "#4a5a52", lineHeight: 1.7, fontSize: "1.05rem" }}>
@@ -249,12 +249,12 @@ export function FeaturesSection() {
               
               {/* Dummy Document Content */}
               <div className="space-y-6 max-w-2xl">
-                 <h3 className="text-2xl font-bold font-serif text-gray-800">Tích phân từng phần</h3>
+                 <h3 className="text-2xl font-bold text-gray-800" style={{ fontFamily: "'Playfair Display', 'Merriweather', 'Times New Roman', Times, serif" }}>Tích phân từng phần</h3>
                  <p className="text-gray-600 leading-relaxed">
                    Trong vi tích phân, tích phân từng phần là một quá trình tìm tích phân của tích các hàm số dựa trên tích phân của đạo hàm và nguyên hàm của chúng. Nó thường được sử dụng để biến đổi nguyên hàm của một tích các hàm số thành một nguyên hàm dễ giải hơn.
                  </p>
                  <div className="bg-white p-6 rounded-xl border border-gray-200 text-center shadow-sm">
-                   <span className="font-serif text-xl font-medium">∫ u dv = uv - ∫ v du</span>
+                   <span className="text-xl font-medium" style={{ fontFamily: "'Playfair Display', 'Merriweather', 'Times New Roman', Times, serif" }}>∫ u dv = uv - ∫ v du</span>
                  </div>
                  <p className="text-gray-600 leading-relaxed">
                    Quy tắc có thể được suy ra bằng cách tích hợp quy tắc đạo hàm của tích số. Tích phân từng phần có thể được coi là một phiên bản liên tục của tính tổng từng phần.
@@ -314,12 +314,12 @@ export function FeaturesSection() {
 
 
         {/* SECTION 3: FLASHCARD */}
-        <div className="flex flex-col lg:flex-row items-center gap-16">
+        <div id="flashcards" className="flex flex-col lg:flex-row items-center gap-16">
           <div className="w-full lg:w-5/12">
             <span className="text-xs font-bold tracking-widest uppercase mb-4 block" style={{ color: "#1a3d28" }}>
               HỆ THỐNG FLASHCARD
             </span>
-            <h2 className="mb-6" style={{ color: "#0d1a14", fontWeight: 800, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1, letterSpacing: "-0.03em" }}>
+            <h2 className="mb-6" style={{ color: "#0d1a14", fontWeight: 800, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1 }}>
               Ghi nhớ lâu dài với<br />Spaced Repetition.
             </h2>
             <p className="mb-8" style={{ color: "#4a5a52", lineHeight: 1.7, fontSize: "1.05rem" }}>
@@ -393,7 +393,7 @@ export function FeaturesSection() {
                     <span className="bg-[#1a3d28] text-white text-[10px] font-bold tracking-widest uppercase mb-6 px-3 py-1 rounded-full shadow-sm z-10">
                       MẶT TRƯỚC · CHẠM ĐỂ LẬT
                     </span>
-                    <h3 className="text-[#0d1a14] text-2xl md:text-3xl font-bold leading-relaxed font-serif z-10 relative">
+                    <h3 className="text-[#0d1a14] text-2xl md:text-3xl font-bold leading-relaxed z-10 relative" style={{ fontFamily: "'Playfair Display', 'Merriweather', 'Times New Roman', Times, serif" }}>
                       {flashcardDeck[currentCard].front}
                     </h3>
                   </div>

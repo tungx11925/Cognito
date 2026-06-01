@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown } from "lucide-react";
+import Link from "next/link";
 
 interface NavbarProps {
   isLoggedIn: boolean;
@@ -24,7 +25,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
       initial={{ y: -80, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      className="fixed top-0 left-0 right-0 z-50 transition-all duration-300"
+      className="fixed top-0 left-0 right-0 z-[100] transition-all duration-300"
       style={{
         background: scrolled ? "rgba(245,243,238,0.97)" : "rgba(245,243,238,0.85)",
         backdropFilter: "blur(16px)",
@@ -49,33 +50,37 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-7">
-            {isLoggedIn && (
-              <span
-                onClick={onDashboardClick}
-                className="transition-colors duration-200 text-xs font-bold cursor-pointer"
-                style={{ color: "#1a3d28" }}
-              >
-                Bảng điều khiển
-              </span>
+            {isLoggedIn ? (
+              <>
+                <Link href="/dashboard" className="transition-colors duration-200 text-sm font-bold" style={{ color: "#1a3d28" }}>
+                  Bảng điều khiển
+                </Link>
+                <Link href="/library" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
+                  Tài liệu
+                </Link>
+                <Link href="/chat" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
+                  Trợ lý AI
+                </Link>
+                <Link href="/flashcards" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
+                  Flashcards
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href="#features" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
+                  Tính năng
+                </Link>
+                <Link href="#ai-chat" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
+                  Trợ lý AI
+                </Link>
+                <Link href="#flashcards" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
+                  Flashcards
+                </Link>
+                <Link href="#stats" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
+                  Thống kê
+                </Link>
+              </>
             )}
-            <a
-              href="#features"
-              className="transition-colors duration-200 text-xs font-semibold"
-              style={{ color: "#4a5a52" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#1a3d28"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#4a5a52"; }}
-            >
-              Tính năng
-            </a>
-            <a
-              href="#stats"
-              className="transition-colors duration-200 text-xs font-semibold"
-              style={{ color: "#4a5a52" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#1a3d28"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#4a5a52"; }}
-            >
-              Thống kê
-            </a>
           </nav>
 
           {/* Actions */}
@@ -128,8 +133,20 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             style={{ background: "#f5f3ee", borderTop: "1px solid rgba(26,61,40,0.1)" }}
           >
             <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-4">
-              <a href="#features" onClick={() => setMobileOpen(false)} style={{ color: "#4a5a52", fontSize: "0.95rem" }}>Features</a>
-              <a href="#stats" onClick={() => setMobileOpen(false)} style={{ color: "#4a5a52", fontSize: "0.95rem" }}>Stats</a>
+              {isLoggedIn ? (
+                <>
+                  <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Bảng điều khiển</Link>
+                  <Link href="/library" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tài liệu</Link>
+                  <Link href="/chat" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Trợ lý AI</Link>
+                  <Link href="/flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
+                </>
+              ) : (
+                <>
+                  <Link href="#features" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tính năng</Link>
+                  <Link href="#ai-chat" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Trợ lý AI</Link>
+                  <Link href="#flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
+                </>
+              )}
               {isLoggedIn ? (
                 <button 
                   onClick={() => { setMobileOpen(false); onDashboardClick(); }}

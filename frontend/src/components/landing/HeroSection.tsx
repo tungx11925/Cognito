@@ -11,11 +11,11 @@ interface HeroSectionProps {
 
 export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
   return (
-    <section className="relative pt-6 pb-[250px] lg:pb-[350px] px-4 lg:px-8 bg-white overflow-hidden">
+    <section className="relative pb-[250px] lg:pb-[350px] bg-white overflow-hidden">
       
       {/* Main Rounded Container */}
       <div 
-        className="relative rounded-[2.5rem] overflow-hidden pt-32 pb-72 px-6 text-center flex flex-col items-center border border-gray-100"
+        className="relative overflow-hidden pt-36 pb-72 px-6 text-center flex flex-col items-center border-b border-gray-100"
         style={{ background: "linear-gradient(180deg, #f5f3ee 0%, #e8e5de 100%)" }}
       >
         {/* Grid pattern background */}
@@ -101,7 +101,7 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
             transition={{ duration: 0.6, delay: 0.08 }}
             className="mb-6 max-w-4xl"
             style={{
-              fontFamily: "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif",
+              fontFamily: "'Playfair Display', 'Merriweather', 'Times New Roman', Times, serif",
               fontSize: "clamp(2.8rem, 5.5vw, 4.8rem)",
               fontWeight: 700,
               lineHeight: 1.05,
