@@ -24,7 +24,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "5001:5001"
+      - "5000:5000"
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -43,7 +43,7 @@ services:
     image: postgres:15-alpine
     container_name: myproject-postgres
     ports:
-      - "5433:5432"
+      - "5432:5432"
     env_file:
       - .env
     volumes:
