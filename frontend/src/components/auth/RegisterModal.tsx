@@ -36,16 +36,24 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
   const isLongEnough = password.length >= 10;
   const isPasswordValid = hasLetter && hasNumberOrSymbol && isLongEnough;
 
+  const hasData = name.trim() !== '' || email.trim() !== '' || phone.trim() !== '' || password.trim() !== '' || confirmPassword.trim() !== '';
+
   // Handle ESC to close
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (hasData) {
+          triggerMessage("Dữ liệu của bạn chưa được lưu. Vui lòng bấm dấu X nếu muốn thoát.", "error");
+        } else {
+          onClose();
+        }
+      }
     };
     if (isOpen) {
       window.addEventListener('keydown', handleEsc);
     }
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, hasData, triggerMessage]);
 
   // Google Sign-In Initialization
   const handleGoogleCredentialResponse = async (response: any) => {
@@ -212,7 +220,11 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
-      onClose();
+      if (hasData) {
+        triggerMessage("Bạn đang nhập dở dữ liệu. Vui lòng bấm dấu X để đóng popup.", "error");
+      } else {
+        onClose();
+      }
     }
   };
 
@@ -246,7 +258,15 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
             </button>
             
             <button 
-              onClick={onClose}
+              onClick={() => {
+                if (hasData) {
+                  if (window.confirm("Bạn có chắc chắn muốn thoát? Các thông tin bạn vừa nhập sẽ bị mất.")) {
+                    onClose();
+                  }
+                } else {
+                  onClose();
+                }
+              }}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-[#0D2B24]/40 hover:text-[#0D2B24] transition-colors rounded-full hover:bg-[#0D2B24]/5"
             >
               <X className="w-5 h-5" />
