@@ -59,8 +59,13 @@ interface StudyContextType {
   setShowLanding: (show: boolean) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  activeUser: { id: number; name: string; email: string };
-  setActiveUser: (user: { id: number; name: string; email: string }) => void;
+  activeUser: { id: number; name: string; email: string; role?: string };
+  setActiveUser: (user: { id: number; name: string; email: string; role?: string }) => void;
+  logout: () => void;
+  isProfileModalOpen: boolean;
+  setIsProfileModalOpen: (open: boolean) => void;
+  profileModalTab: 'profile' | 'settings';
+  setProfileModalTab: (tab: 'profile' | 'settings') => void;
   searchQuery: string;
 
   setSearchQuery: (query: string) => void;
@@ -304,8 +309,12 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser, setActiveUser] = useState({ id: 2, name: 'Nguyễn Văn Học', email: 'hocvien@edushare.com' });
+  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; role?: string }>(
+    { id: 0, name: '', email: '', role: 'student' }
+  );
   const [searchQuery, setSearchQuery] = useState('');
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileModalTab, setProfileModalTab] = useState<'profile' | 'settings'>('profile');
 
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: 'success' as 'success' | 'error' });
@@ -372,6 +381,14 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setTimeout(() => {
       setGlobalMessage({ text: '', type: 'success' });
     }, 4000);
+  };
+
+  // Logout: clear JWT token from localStorage and reset state
+  const logout = () => {
+    localStorage.removeItem('token');
+    setIsLoggedIn(false);
+    setActiveUser({ id: 0, name: '', email: '', role: 'student' });
+    triggerMessage('Đã đăng xuất khỏi hệ thống.', 'success');
   };
 
   // API Call: Fetch Documents
@@ -812,6 +829,11 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setShowLoginModal,
       activeUser,
       setActiveUser,
+      logout,
+      isProfileModalOpen,
+      setIsProfileModalOpen,
+      profileModalTab,
+      setProfileModalTab,
       searchQuery,
 
       setSearchQuery,

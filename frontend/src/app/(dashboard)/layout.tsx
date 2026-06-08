@@ -7,7 +7,7 @@ import { useStudy } from '../../context/StudyContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, BookOpen, FlaskConical, Timer, Settings,
-  LogOut, Zap, Search, Bell, Plus, FileText, CreditCard, StickyNote, History,
+  LogOut, Zap, Search, Bell, Plus, FileText, CreditCard, StickyNote, History, User,
 } from 'lucide-react';
 
 const navItems = [
@@ -15,14 +15,24 @@ const navItems = [
   { icon: BookOpen, label: 'My Library', path: '/library' },
   { icon: FlaskConical, label: 'AI Lab', path: '/ai-lab' },
   { icon: Timer, label: 'Study Sessions', path: '/study-sessions' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
+  { icon: Settings, label: 'Settings', path: '/profile?tab=Bảo mật' },
 ];
 
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn, setIsLoggedIn, activeUser, triggerMessage, globalMessage, setShowLanding } = useStudy();
+  const { 
+    isLoggedIn, 
+    setIsLoggedIn, 
+    activeUser, 
+    triggerMessage, 
+    globalMessage, 
+    setShowLanding,
+    setIsProfileModalOpen,
+    setProfileModalTab
+  } = useStudy();
   const pathname = usePathname();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
 
   useEffect(() => {
     if (!isLoggedIn) router.push('/');
@@ -38,7 +48,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   const isActive = (path: string) => {
     if (path === '/ai-lab') return pathname === '/ai-lab' || pathname === '/flashcards';
-    return pathname === path;
+    const basePath = path.split('?')[0];
+    return pathname === basePath;
   };
 
   return (
@@ -76,6 +87,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 px-3 space-y-0.5">
           {navItems.map(({ icon: Icon, label, path }) => {
             const active = isActive(path);
+
             return (
               <Link key={path} href={path}>
                 <motion.div
@@ -186,10 +198,78 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               style={{ fontSize: "12.5px", fontWeight: 600, background: "#1a3a2a" }}>
               <Plus size={14} /> Create New
             </motion.button>
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white cursor-pointer flex-shrink-0"
-              style={{ background: "#374151", fontSize: "11px", fontWeight: 700 }}
-              title={`${activeUser.name} (${activeUser.email})`}>
-              {activeUser.name.charAt(0)}
+            <div className="relative">
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowAvatarMenu(!showAvatarMenu)}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white cursor-pointer flex-shrink-0 select-none shadow-sm hover:shadow-md transition-all"
+                style={{ background: "#1a3a2a", fontSize: "11px", fontWeight: 700 }}
+                title={`${activeUser.name} (${activeUser.email})`}
+              >
+                {activeUser.name ? activeUser.name.charAt(0).toUpperCase() : 'U'}
+              </motion.div>
+
+              <AnimatePresence>
+                {showAvatarMenu && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowAvatarMenu(false)} 
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50 overflow-hidden"
+                      style={{ transformOrigin: "top right" }}
+                    >
+                      <div className="px-4 py-2 border-b border-gray-100">
+                        <p className="text-xs font-semibold text-gray-900 truncate">{activeUser.name || 'User'}</p>
+                        <p className="text-[10px] text-gray-500 truncate">{activeUser.email || 'user@example.com'}</p>
+                      </div>
+                      
+                      <div 
+                        onClick={() => {
+                          router.push('/profile');
+                          setShowAvatarMenu(false);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer transition-colors"
+                      >
+                        <User size={13} />
+                        <span>Trang cá nhân</span>
+                      </div>
+                      
+                      <div 
+                        onClick={() => {
+                          router.push('/profile?tab=Bảo mật');
+                          setShowAvatarMenu(false);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer transition-colors"
+                      >
+                        <Settings size={13} />
+                        <span>Cài đặt</span>
+                      </div>
+                      
+                      <div className="border-t border-gray-100 my-1" />
+                      
+                      <div 
+                        onClick={() => {
+                          setShowAvatarMenu(false);
+                          setIsLoggedIn(false);
+                          setShowLanding(true);
+                          triggerMessage("Đăng xuất thành công! Hẹn gặp lại bạn.", "success");
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors"
+                      >
+                        <LogOut size={13} />
+                        <span>Đăng xuất</span>
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
