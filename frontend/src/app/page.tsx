@@ -29,12 +29,12 @@ function LandingPageContent() {
   } = useStudy();
 
   const router = useRouter();
-  // Force login modal if not authenticated
+  // Auto-redirect to dashboard if authenticated
   useEffect(() => {
-    if (!isAuthenticated) {
-      setShowLoginModal(true);
+    if (isAuthenticated) {
+      router.push('/dashboard');
     }
-  }, [isAuthenticated, setShowLoginModal]);
+  }, [isAuthenticated, router]);
 
   const handleDemoScroll = () => {
     const element = document.getElementById('features');

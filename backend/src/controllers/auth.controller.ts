@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import { db } from '../db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phoneRegex = /^(03|05|07|08|09)\d{8}$/;
@@ -130,6 +133,60 @@ export const login = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+  }
+};
+
+export const googleLogin = async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'Thiếu token Google' });
+
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      return res.status(400).json({ error: 'Token Google không hợp lệ' });
+    }
+
+    const { email, name, sub: googleId } = payload;
+    let userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    
+    let user;
+    if (userResult.rows.length === 0) {
+      // User doesn't exist, create a new one
+      const dummyPassword = await bcrypt.hash(Math.random().toString(36).slice(-10), 10);
+      const insertResult = await db.query(
+        'INSERT INTO users (email, name, password) VALUES ($1, $2, $3) RETURNING id, email, name, created_at',
+        [email, name || 'Google User', dummyPassword]
+      );
+      user = insertResult.rows[0];
+    } else {
+      user = userResult.rows[0];
+    }
+
+    const authToken = jwt.sign(
+      { id: user.id, email: user.email }, 
+      process.env.JWT_SECRET_KEY || 'your_64_character_secret_key_here', 
+      { expiresIn: '24h' }
+    );
+
+    res.cookie('token', authToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+
+    res.status(200).json({
+      message: 'Đăng nhập Google thành công',
+      token: authToken,
+      user: { id: user.id, email: user.email, name: user.name }
+    });
+  } catch (error: any) {
+    console.error('Google login error:', error);
+    res.status(500).json({ error: 'Lỗi xác thực Google' });
   }
 };
 
