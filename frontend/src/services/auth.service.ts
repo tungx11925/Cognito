@@ -12,3 +12,9 @@ export const googleLogin = (token: string) => apiFetch('/auth/google', {
     body: JSON.stringify({ token })
 });
 
+export const register = (data: any) => apiFetch('/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+});
+

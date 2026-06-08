@@ -19,16 +19,18 @@ const navItems = [
 ];
 
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn, setIsLoggedIn, activeUser, triggerMessage, globalMessage, setShowLanding } = useStudy();
+  const { isAuthenticated, loading, logout, activeUser, triggerMessage, globalMessage, setShowLanding } = useStudy();
   const pathname = usePathname();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    if (!isLoggedIn) router.push('/');
-  }, [isLoggedIn, router]);
+    if (!loading && !isAuthenticated) {
+      router.push('/');
+    }
+  }, [isAuthenticated, loading, router]);
 
-  if (!isLoggedIn) {
+  if (loading || !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "#f3f4f6" }}>
         <div className="w-8 h-8 border-4 border-[#1a3a2a] border-t-transparent rounded-full animate-spin" />
@@ -111,9 +113,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="px-3 pb-4">
           <button
             onClick={() => {
-              setIsLoggedIn(false);
+              logout();
               setShowLanding(true);
-              triggerMessage("Đăng xuất thành công! Hẹn gặp lại bạn.", "success");
             }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150"
             style={{ color: "#9ca3af", fontSize: "13.5px" }}
@@ -188,8 +189,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             </motion.button>
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-white cursor-pointer flex-shrink-0"
               style={{ background: "#374151", fontSize: "11px", fontWeight: 700 }}
-              title={`${activeUser.name} (${activeUser.email})`}>
-              {activeUser.name.charAt(0)}
+              title={`${activeUser?.name} (${activeUser?.email})`}>
+              {activeUser?.name?.charAt(0)}
             </div>
           </div>
         </div>

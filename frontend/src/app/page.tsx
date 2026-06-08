@@ -11,90 +11,30 @@ import { FeaturesSection } from '../components/landing/FeaturesSection';
 import { CtaSection } from '../components/landing/CtaSection';
 import { Footer } from '../components/landing/Footer';
 import { googleLogin } from '../services/auth.service';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Mail, Lock, User, Eye, EyeOff, Phone, CheckCircle2, XCircle, Circle } from 'lucide-react';
+import RegisterModal from '../components/auth/RegisterModal';
 
 function LandingPageContent() {
   const {
-    isLoggedIn,
-    setIsLoggedIn,
+    isAuthenticated,
     showLoginModal,
     setShowLoginModal,
     activeUser,
     setActiveUser,
     globalMessage,
-    triggerMessage
+    triggerMessage,
+    login: contextLogin,
+    register: contextRegister
   } = useStudy();
 
   const router = useRouter();
-
-  // Load Google GSI Client Script
+  // Force login modal if not authenticated
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (document.getElementById('google-jssdk')) return;
-
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.id = 'google-jssdk';
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
-  }, []);
-
-  const handleGoogleCredentialResponse = async (response: any) => {
-    try {
-      const googleToken = response.credential;
-      const res = await googleLogin(googleToken);
-      if (res && res.user) {
-        setActiveUser(res.user);
-        setIsLoggedIn(true);
-        setShowLoginModal(false);
-        triggerMessage("Đăng nhập bằng Google thành công!", "success");
-      } else {
-        triggerMessage(res.error || "Không thể đăng nhập bằng Google", "error");
-      }
-    } catch (err: any) {
-      triggerMessage("Lỗi kết nối khi đăng nhập Google", "error");
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
     }
-  };
-
-  useEffect(() => {
-    if (showLoginModal && typeof window !== 'undefined') {
-      const initGoogle = () => {
-        // @ts-ignore
-        if (window.google) {
-          // @ts-ignore
-          window.google.accounts.id.initialize({
-            client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '972875462398-hfat49fdkf7btf309jsn7mgsvglju6nv.apps.googleusercontent.com',
-            callback: handleGoogleCredentialResponse,
-          });
-          // @ts-ignore
-          window.google.accounts.id.renderButton(
-            document.getElementById("googleSignInButton"),
-            { theme: "outline", size: "large", width: 382, text: "signin_with" }
-          );
-        } else {
-          setTimeout(initGoogle, 200);
-        }
-      };
-      
-      setTimeout(initGoogle, 100);
-    }
-  }, [showLoginModal]);
-
-
-  // If already logged in, do NOT redirect automatically to the dashboard
-  // useEffect(() => {
-  //   if (isLoggedIn) {
-  //     router.push('/dashboard');
-  //   }
-  // }, [isLoggedIn, router]);
-
-  // Login Form submit handler
-  const handleLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoggedIn(true);
-    setShowLoginModal(false);
-    triggerMessage("Đăng nhập thành công! Chào mừng quay trở lại hệ thống học tập AI.", "success");
-  };
+  }, [isAuthenticated, setShowLoginModal]);
 
   const handleDemoScroll = () => {
     const element = document.getElementById('features');
@@ -106,7 +46,7 @@ function LandingPageContent() {
       
       {/* 🔔 Toast notifications */}
       {globalMessage.text && (
-        <div className={`fixed top-6 right-6 z-50 px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 border transition-all duration-300 ${
+        <div className={`fixed top-6 right-6 z-[99999] px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 border transition-all duration-300 ${
           globalMessage.type === 'success' 
             ? 'bg-white text-emerald-700 border-emerald-200' 
             : 'bg-white text-rose-700 border-rose-200'
@@ -118,15 +58,15 @@ function LandingPageContent() {
 
       {/* RENDER NEW COMPONENTS WITH ORIGINAL PROPS */}
       <Navbar 
-        isLoggedIn={isLoggedIn}
+        isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
         onDashboardClick={() => router.push('/dashboard')}
-        activeUser={activeUser}
+        activeUser={activeUser!}
       />
 
       <HeroSection 
         onStartClick={() => {
-          if (!isLoggedIn) setShowLoginModal(true);
+          if (!isAuthenticated) setShowLoginModal(true);
           else router.push('/dashboard');
         }}
         onDemoClick={handleDemoScroll}
@@ -140,7 +80,7 @@ function LandingPageContent() {
 
       <CtaSection 
         onStartClick={() => {
-          if (!isLoggedIn) setShowLoginModal(true);
+          if (!isAuthenticated) setShowLoginModal(true);
           else router.push('/dashboard');
         }}
         onExploreClick={handleDemoScroll}
@@ -148,74 +88,15 @@ function LandingPageContent() {
 
       <Footer />
 
-      {/* LOGIN MODAL */}
-      {showLoginModal && (
-        <div className="fixed inset-0 z-50 bg-[#0D2B24]/20 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md p-8 bg-white border border-[#0D2B24]/10 rounded-3xl shadow-lg space-y-8 animate-fadeIn">
-            <div className="text-center space-y-2">
-              <div className="flex justify-between items-center">
-                <div className="inline-flex bg-[#0D2B24] p-4 rounded-2xl shadow-md">
-                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-                  </svg>
-                </div>
-                <button 
-                  onClick={() => setShowLoginModal(false)}
-                  className="text-[#0D2B24]/40 hover:text-[#0D2B24] transition p-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <h1 className="text-3xl font-black tracking-tight text-[#0D2B24] mt-4 uppercase">EduShare AI</h1>
-              <p className="text-xs text-[#0D2B24]/60 font-semibold">Đăng nhập tài khoản học viên để bắt đầu học tập</p>
-            </div>
-
-            <form onSubmit={handleLoginSubmit} className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#0D2B24]/60 uppercase tracking-wider pl-1">Email Học viên</label>
-                <input 
-                  type="email" 
-                  required
-                  defaultValue="hocvien@edushare.com"
-                  className="w-full px-4 py-3.5 bg-[#FAF8F5] border border-[#0D2B24]/10 focus:border-[#0D2B24] focus:ring-1 focus:ring-[#0D2B24] text-sm text-[#0D2B24] rounded-xl focus:outline-none transition-all placeholder:text-[#0D2B24]/30"
-                  placeholder="email@example.com"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#0D2B24]/60 uppercase tracking-wider pl-1">Mật khẩu</label>
-                <input 
-                  type="password" 
-                  required
-                  defaultValue="password123"
-                  className="w-full px-4 py-3.5 bg-[#FAF8F5] border border-[#0D2B24]/10 focus:border-[#0D2B24] focus:ring-1 focus:ring-[#0D2B24] text-sm text-[#0D2B24] rounded-xl focus:outline-none transition-all placeholder:text-[#0D2B24]/30"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <button 
-                type="submit" 
-                className="w-full py-3.5 bg-[#0D2B24] hover:bg-[#0D2B24]/90 text-white font-extrabold text-sm rounded-xl transition-all duration-300 shadow-md"
-              >
-                Đăng Nhập Hệ Thống
-              </button>
-            </form>
-
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-[#0D2B24]/10"></div>
-              <span className="flex-shrink mx-4 text-xs font-bold text-[#0D2B24]/40 uppercase tracking-wider">Hoặc</span>
-              <div className="flex-grow border-t border-[#0D2B24]/10"></div>
-            </div>
-
-            <div className="flex justify-center">
-              <div id="googleSignInButton" className="w-full flex justify-center"></div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {showLoginModal && (
+          <RegisterModal 
+            isOpen={showLoginModal} 
+            onClose={() => setShowLoginModal(false)} 
+            triggerMessage={triggerMessage} 
+          />
+        )}
+      </AnimatePresence>
 
     </div>
   );

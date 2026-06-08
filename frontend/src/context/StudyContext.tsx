@@ -53,14 +53,18 @@ export interface QuizQuestion {
 
 interface StudyContextType {
   // Authentication & Global
-  isLoggedIn: boolean;
-  setIsLoggedIn: (login: boolean) => void;
+  isAuthenticated: boolean;
+  setIsAuthenticated: (auth: boolean) => void;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (name: string, phone: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   showLanding: boolean;
   setShowLanding: (show: boolean) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  activeUser: { id: number; name: string; email: string };
-  setActiveUser: (user: { id: number; name: string; email: string }) => void;
+  activeUser: { id: number; name: string; email: string } | null;
+  setActiveUser: (user: { id: number; name: string; email: string } | null) => void;
   searchQuery: string;
 
   setSearchQuery: (query: string) => void;
@@ -301,10 +305,11 @@ const StudyContext = createContext<StudyContextType | undefined>(undefined);
 
 export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Navigation & authentication state
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser, setActiveUser] = useState({ id: 2, name: 'Nguyễn Văn Học', email: 'hocvien@edushare.com' });
+  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -373,6 +378,92 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setGlobalMessage({ text: '', type: 'success' });
     }, 4000);
   };
+
+  // Auth API Calls
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('token', data.token);
+        setActiveUser(data.user);
+        setIsAuthenticated(true);
+        triggerMessage(data.message || 'Đăng nhập thành công', 'success');
+        return true;
+      } else {
+        triggerMessage(data.error || 'Đăng nhập thất bại', 'error');
+        return false;
+      }
+    } catch (e) {
+      triggerMessage('Lỗi kết nối', 'error');
+      return false;
+    }
+  };
+
+  const register = async (name: string, phone: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, phone, email, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('token', data.token);
+        setActiveUser(data.user);
+        setIsAuthenticated(true);
+        triggerMessage(data.message || 'Đăng ký thành công', 'success');
+        return { success: true };
+      } else {
+        triggerMessage(data.error || 'Đăng ký thất bại', 'error');
+        return { success: false, error: data.error };
+      }
+    } catch (e) {
+      triggerMessage('Lỗi kết nối', 'error');
+      return { success: false, error: 'Lỗi kết nối' };
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST' });
+    } catch (e) {}
+    localStorage.removeItem('token');
+    setActiveUser(null);
+    setIsAuthenticated(false);
+    triggerMessage('Đăng xuất thành công', 'success');
+  };
+
+  useEffect(() => {
+    const fetchMe = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setActiveUser(data.user);
+          setIsAuthenticated(true);
+        } else {
+          localStorage.removeItem('token');
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMe();
+  }, []);
 
   // API Call: Fetch Documents
   const fetchDocuments = async () => {
@@ -478,7 +569,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: activeUser.id,
+          user_id: activeUser?.id,
           title: newDocTitle,
           description: newDocDesc,
           doc_url: '',
@@ -536,7 +627,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: activeUser.id,
+          user_id: activeUser?.id,
           name: newDeckName,
           description: newDeckDesc
         })
@@ -564,7 +655,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: activeUser.id,
+          user_id: activeUser?.id,
           document_id: activeDoc.id,
           title: notesTitle,
           content: notesText
@@ -716,7 +807,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            user_id: activeUser.id,
+            user_id: activeUser?.id,
             document_id: activeDoc.id,
             duration_seconds: elapsedStudyTime || (timerMaxMinutes * 60)
           })
@@ -760,7 +851,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (activeDoc) {
       fetchNotesForDoc(activeDoc.id);
       setChatMessages([
-        { sender: 'ai', text: `Xin chào ${activeUser.name}! Tôi là trợ lý học tập AI. Tôi đã đọc xong tài liệu **"${activeDoc.title}"** và đã sẵn sàng thảo luận cùng bạn. Bạn có muốn tôi tóm tắt hay giải thích phần nào không?` }
+        { sender: 'ai', text: `Xin chào ${activeUser?.name || 'bạn'}! Tôi là trợ lý học tập AI. Tôi đã đọc xong tài liệu **"${activeDoc.title}"** và đã sẵn sàng thảo luận cùng bạn. Bạn có muốn tôi tóm tắt hay giải thích phần nào không?` }
       ]);
       setQuizzes([]);
       setQuizSubmitted(false);
@@ -804,8 +895,12 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   return (
     <StudyContext.Provider value={{
-      isLoggedIn,
-      setIsLoggedIn,
+      isAuthenticated,
+      setIsAuthenticated,
+      loading,
+      login,
+      register,
+      logout,
       showLanding,
       setShowLanding,
       showLoginModal,

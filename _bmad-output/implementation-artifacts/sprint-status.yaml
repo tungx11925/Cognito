@@ -43,7 +43,7 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   epic-1: backlog
-  1-1-dang-ky-tai-khoan-moi: backlog
+  1-1-dang-ky-tai-khoan-moi: review
   1-2-dang-nhap-vao-he-thong: backlog
   epic-1-retrospective: optional
   

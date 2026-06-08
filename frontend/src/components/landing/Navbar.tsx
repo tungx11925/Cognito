@@ -99,10 +99,10 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                 <div 
                   className="w-7 h-7 rounded-full overflow-hidden bg-emerald-700 text-white flex items-center justify-center font-bold text-xs cursor-pointer select-none" 
                   style={{ border: "2px solid rgba(26,61,40,0.2)" }}
-                  title={activeUser.name}
+                  title={activeUser?.name}
                   onClick={onDashboardClick}
                 >
-                  {activeUser.name.charAt(0)}
+                  {activeUser?.name?.charAt(0) || 'U'}
                 </div>
               </>
             ) : (
