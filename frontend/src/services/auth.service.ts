@@ -5,3 +5,10 @@ export const login = (data: any) => apiFetch('/auth/login', {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
 });
+
+export const googleLogin = (token: string) => apiFetch('/auth/google', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token })
+});
+

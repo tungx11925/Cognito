@@ -60,7 +60,9 @@ interface StudyContextType {
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
   activeUser: { id: number; name: string; email: string };
+  setActiveUser: (user: { id: number; name: string; email: string }) => void;
   searchQuery: string;
+
   setSearchQuery: (query: string) => void;
   categoryFilter: string;
   setCategoryFilter: (filter: string) => void;
@@ -302,8 +304,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser] = useState({ id: 2, name: 'Nguyễn Văn Học', email: 'hocvien@edushare.com' });
+  const [activeUser, setActiveUser] = useState({ id: 2, name: 'Nguyễn Văn Học', email: 'hocvien@edushare.com' });
   const [searchQuery, setSearchQuery] = useState('');
+
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: 'success' as 'success' | 'error' });
 
@@ -808,7 +811,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       showLoginModal,
       setShowLoginModal,
       activeUser,
+      setActiveUser,
       searchQuery,
+
       setSearchQuery,
       categoryFilter,
       setCategoryFilter,

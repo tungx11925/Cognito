@@ -10,6 +10,7 @@ import { StatsSection } from '../components/landing/StatsSection';
 import { FeaturesSection } from '../components/landing/FeaturesSection';
 import { CtaSection } from '../components/landing/CtaSection';
 import { Footer } from '../components/landing/Footer';
+import { googleLogin } from '../services/auth.service';
 
 function LandingPageContent() {
   const {
@@ -18,11 +19,67 @@ function LandingPageContent() {
     showLoginModal,
     setShowLoginModal,
     activeUser,
+    setActiveUser,
     globalMessage,
     triggerMessage
   } = useStudy();
 
   const router = useRouter();
+
+  // Load Google GSI Client Script
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (document.getElementById('google-jssdk')) return;
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.id = 'google-jssdk';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+  }, []);
+
+  const handleGoogleCredentialResponse = async (response: any) => {
+    try {
+      const googleToken = response.credential;
+      const res = await googleLogin(googleToken);
+      if (res && res.user) {
+        setActiveUser(res.user);
+        setIsLoggedIn(true);
+        setShowLoginModal(false);
+        triggerMessage("Đăng nhập bằng Google thành công!", "success");
+      } else {
+        triggerMessage(res.error || "Không thể đăng nhập bằng Google", "error");
+      }
+    } catch (err: any) {
+      triggerMessage("Lỗi kết nối khi đăng nhập Google", "error");
+    }
+  };
+
+  useEffect(() => {
+    if (showLoginModal && typeof window !== 'undefined') {
+      const initGoogle = () => {
+        // @ts-ignore
+        if (window.google) {
+          // @ts-ignore
+          window.google.accounts.id.initialize({
+            client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '972875462398-hfat49fdkf7btf309jsn7mgsvglju6nv.apps.googleusercontent.com',
+            callback: handleGoogleCredentialResponse,
+          });
+          // @ts-ignore
+          window.google.accounts.id.renderButton(
+            document.getElementById("googleSignInButton"),
+            { theme: "outline", size: "large", width: 382, text: "signin_with" }
+          );
+        } else {
+          setTimeout(initGoogle, 200);
+        }
+      };
+      
+      setTimeout(initGoogle, 100);
+    }
+  }, [showLoginModal]);
+
 
   // If already logged in, do NOT redirect automatically to the dashboard
   // useEffect(() => {
@@ -146,9 +203,20 @@ function LandingPageContent() {
                 Đăng Nhập Hệ Thống
               </button>
             </form>
+
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-[#0D2B24]/10"></div>
+              <span className="flex-shrink mx-4 text-xs font-bold text-[#0D2B24]/40 uppercase tracking-wider">Hoặc</span>
+              <div className="flex-grow border-t border-[#0D2B24]/10"></div>
+            </div>
+
+            <div className="flex justify-center">
+              <div id="googleSignInButton" className="w-full flex justify-center"></div>
+            </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }
