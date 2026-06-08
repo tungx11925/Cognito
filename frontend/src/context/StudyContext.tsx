@@ -63,8 +63,10 @@ interface StudyContextType {
   setShowLanding: (show: boolean) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  activeUser: { id: number; name: string; email: string } | null;
-  setActiveUser: (user: { id: number; name: string; email: string } | null) => void;
+  activeUser: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string } | null;
+  setActiveUser: (user: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string } | null) => void;
+  updateAvatar: (file: File) => Promise<boolean>;
+  updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string }) => Promise<boolean>;
   searchQuery: string;
 
   setSearchQuery: (query: string) => void;
@@ -309,7 +311,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string } | null>(null);
+  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; avatar_url?: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -436,6 +438,72 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setActiveUser(null);
     setIsAuthenticated(false);
     triggerMessage('Đăng xuất thành công', 'success');
+  };
+
+  const updateAvatar = async (file: File): Promise<boolean> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      triggerMessage("Bạn chưa đăng nhập", "error");
+      return false;
+    }
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/avatar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setActiveUser(prev => prev ? { ...prev, avatar_url: data.avatarUrl } : null);
+        triggerMessage(data.message || "Tải ảnh đại diện thành công", "success");
+        return true;
+      } else {
+        triggerMessage(data.error || "Tải ảnh đại diện thất bại", "error");
+        return false;
+      }
+    } catch (e) {
+      triggerMessage("Lỗi kết nối máy chủ", "error");
+      return false;
+    }
+  };
+
+  const updateProfile = async (fields: { name: string; phone?: string; education?: string; address?: string }): Promise<boolean> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      triggerMessage("Bạn chưa đăng nhập", "error");
+      return false;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(fields)
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setActiveUser(data.user);
+        triggerMessage(data.message || "Cập nhật thông tin thành công", "success");
+        return true;
+      } else {
+        triggerMessage(data.error || "Cập nhật thông tin thất bại", "error");
+        return false;
+      }
+    } catch (e) {
+      triggerMessage("Lỗi kết nối máy chủ", "error");
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -907,6 +975,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       login,
       register,
       logout,
+      updateAvatar,
+      updateProfile,
       showLanding,
       setShowLanding,
       showLoginModal,

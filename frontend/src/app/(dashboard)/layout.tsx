@@ -26,7 +26,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      router.push('/');
+      router.push('/home');
     }
   }, [isAuthenticated, loading, router]);
 

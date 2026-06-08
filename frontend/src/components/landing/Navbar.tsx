@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown, User, Settings, LogOut, Layout } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useStudy } from "@/context/StudyContext";
 
 interface NavbarProps {
   isLoggedIn: boolean;
@@ -13,12 +15,26 @@ interface NavbarProps {
 export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const router = useRouter();
+  const { logout } = useStudy();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (dropdownOpen && !target.closest(".profile-dropdown-container")) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownOpen]);
 
   return (
     <motion.header
@@ -96,13 +112,101 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                 >
                   Vào bảng điều khiển
                 </button>
-                <div 
-                  className="w-7 h-7 rounded-full overflow-hidden bg-emerald-700 text-white flex items-center justify-center font-bold text-xs cursor-pointer select-none" 
-                  style={{ border: "2px solid rgba(26,61,40,0.2)" }}
-                  title={activeUser?.name}
-                  onClick={onDashboardClick}
-                >
-                  {activeUser?.name?.charAt(0) || 'U'}
+                
+                {/* Profile Dropdown Container */}
+                <div className="relative profile-dropdown-container">
+                  <div 
+                    className="w-7 h-7 rounded-full overflow-hidden bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center font-bold text-xs cursor-pointer select-none transition-colors duration-150" 
+                    style={{ border: "2px solid rgba(26,61,40,0.2)" }}
+                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                  >
+                    {activeUser?.avatar_url ? (
+                      <img 
+                        src={activeUser.avatar_url} 
+                        alt={activeUser.name} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      activeUser?.name?.charAt(0) || 'U'
+                    )}
+                  </div>
+
+                  <AnimatePresence>
+                    {dropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-56 rounded-xl bg-white border border-gray-100 shadow-xl py-1 z-[110] text-gray-700"
+                        style={{ boxShadow: "0 10px 25px -5px rgba(26,61,40,0.15)" }}
+                      >
+                        {/* User Header */}
+                        <div className="px-4 py-2.5 border-b border-gray-50 flex flex-col">
+                          <span className="text-xs font-bold text-gray-900 truncate">
+                            {activeUser?.name || 'Người dùng'}
+                          </span>
+                          <span className="text-[10px] text-gray-400 truncate mt-0.5">
+                            {activeUser?.email || ''}
+                          </span>
+                        </div>
+
+                        {/* Menu Options */}
+                        <div className="p-1">
+                          <button
+                            onClick={() => {
+                              setDropdownOpen(false);
+                              router.push('/dashboard');
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                          >
+                            <Layout size={14} className="text-gray-400" />
+                            Bảng điều khiển
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setDropdownOpen(false);
+                              router.push('/profile');
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                          >
+                            <User size={14} className="text-gray-400" />
+                            Hồ sơ cá nhân
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setDropdownOpen(false);
+                              router.push('/settings');
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                          >
+                            <Settings size={14} className="text-gray-400" />
+                            Cài đặt hệ thống
+                          </button>
+                        </div>
+
+                        {/* Logout Divider */}
+                        <div className="border-t border-gray-50 my-1"></div>
+
+                        {/* Logout Option */}
+                        <div className="p-1">
+                          <button
+                            onClick={async () => {
+                              setDropdownOpen(false);
+                              await logout();
+                              router.push('/');
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors text-left"
+                          >
+                            <LogOut size={14} />
+                            Đăng xuất
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </>
             ) : (
