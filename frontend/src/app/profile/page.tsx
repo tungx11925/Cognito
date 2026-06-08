@@ -214,6 +214,7 @@ export default function UserProfile() {
     triggerMessage,
     updateAvatar,
     updateProfile,
+    toggleVerification,
   } = useStudy();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -800,7 +801,7 @@ export default function UserProfile() {
                         { label: "Ngày tham gia", value: "Tháng 1, 2024", icon: Calendar, readOnly: true },
                         { label: "Email liên hệ", value: activeUser?.email || "vuhailam05@gmail.com", icon: Mail, readOnly: true },
                         { label: "Số điện thoại", value: activeUser?.phone || "+84 912 345 678", icon: Phone },
-                        { label: "Xác thực tài khoản", value: "Đã liên kết Google & Email", icon: CheckCircle2, readOnly: true }
+                        { label: "Xác thực tài khoản", value: activeUser?.is_verified ? "Đã bật bảo mật 2FA" : "Chưa kích hoạt bảo mật 2FA", icon: CheckCircle2, readOnly: true }
                       ].map((item, index) => {
                         const isEditMode = isEditing && !item.readOnly;
                         
@@ -967,11 +968,35 @@ export default function UserProfile() {
                                 )}
                               </div>
                             ) : item.label === "Xác thực tài khoản" ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-bold text-gray-600">Đã liên kết</span>
-                                <Badge className="bg-green-50 hover:bg-green-50 text-green-700 border border-green-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
-                                  Đã xác thực
-                                </Badge>
+                              <div className="flex items-center gap-3">
+                                {activeUser?.is_verified ? (
+                                  <>
+                                    <Badge className="bg-green-50 hover:bg-green-50 text-green-700 border border-green-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
+                                      Đã bật 2FA
+                                    </Badge>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      onClick={() => toggleVerification(false)}
+                                      className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 text-xs py-1 h-8"
+                                    >
+                                      Tắt bảo mật
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Badge className="bg-gray-50 hover:bg-gray-50 text-gray-500 border border-gray-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
+                                      Chưa kích hoạt
+                                    </Badge>
+                                    <Button 
+                                      size="sm" 
+                                      onClick={() => toggleVerification(true)}
+                                      className="bg-[#2d5a3d] hover:bg-[#1f3f2a] text-white text-xs py-1 h-8"
+                                    >
+                                      Kích hoạt 2FA
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             ) : (
                               <span className="text-sm font-bold text-gray-800 truncate max-w-[220px] sm:max-w-[420px] text-right">{item.value}</span>
