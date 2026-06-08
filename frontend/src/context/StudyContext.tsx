@@ -445,6 +445,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setLoading(false);
         return;
       }
+      // Optimistically assume authenticated if token exists to prevent layout shifting
+      // or kicking user out during dev server restarts
+      setIsAuthenticated(true);
+
       try {
         const res = await fetch(`${API_BASE_URL}/auth/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -453,8 +457,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
           const data = await res.json();
           setActiveUser(data.user);
           setIsAuthenticated(true);
-        } else {
+        } else if (res.status === 401 || res.status === 403) {
           localStorage.removeItem('token');
+          setActiveUser(null);
+          setIsAuthenticated(false);
         }
       } catch (e) {
         console.error(e);
