@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Phone, Mail, Lock, Eye, EyeOff, CheckCircle2, XCircle, Circle, X, GraduationCap, Hourglass } from 'lucide-react';
 import { useStudy } from '@/context/StudyContext';
 import { useRouter } from 'next/navigation';
 import { googleLogin } from '../../services/auth.service';
+import Lottie from 'lottie-react';
+import loginAnimation from './login-animation.json';
+import registerAnimation from './register-animation.json';
 
 interface RegisterModalProps {
   isOpen: boolean;
@@ -48,6 +51,7 @@ function FloatingInput({
               ? 'top-0 -translate-y-1/2 bg-white px-1.5 text-xs text-[#00c495] font-semibold z-10'
               : 'top-1/2 -translate-y-1/2 text-gray-400 text-sm'
           }`}
+          style={{ fontFamily: "'Outfit', sans-serif" }}
         >
           {placeholder}
         </span>
@@ -78,6 +82,7 @@ function FloatingInput({
               ? 'border-[#00c495] ring-1 ring-[#00c495]'
               : 'border-gray-200 hover:border-gray-300'
           } rounded-xl text-sm text-gray-800 focus:outline-none transition-all placeholder:text-transparent`}
+          style={{ fontFamily: "'Outfit', sans-serif" }}
         />
 
         {/* Right Element */}
@@ -95,6 +100,11 @@ function FloatingInput({
 export default function RegisterModal({ isOpen, onClose, triggerMessage }: RegisterModalProps) {
   const router = useRouter();
   const { login: contextLogin, register: contextRegister, setActiveUser, setIsAuthenticated, verify2FA } = useStudy();
+
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false);
@@ -143,7 +153,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
   }, [isOpen, onClose, hasData, triggerMessage]);
 
   // Google Sign-In Initialization
-  const handleGoogleCredentialResponse = async (response: any) => {
+  const handleGoogleCredentialResponse = useCallback(async (response: any) => {
     try {
       const googleToken = response.credential;
       const res = await googleLogin(googleToken);
@@ -153,38 +163,37 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         setIsAuthenticated(true);
         onClose();
         triggerMessage("Đăng nhập bằng Google thành công!", "success");
-        router.push('/dashboard');
+        router.push('/home');
       } else {
         triggerMessage(res.error || "Không thể đăng nhập bằng Google", "error");
       }
     } catch (err: any) {
       triggerMessage("Lỗi kết nối khi đăng nhập Google", "error");
     }
-  };
+  }, [setActiveUser, setIsAuthenticated, onClose, triggerMessage, router]);
 
-  useEffect(() => {
-    if (isOpen && typeof window !== 'undefined') {
-      const initGoogle = () => {
-        if ((window as any).google && (window as any).google.accounts && (window as any).google.accounts.id) {
-          (window as any).google.accounts.id.initialize({
-            client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
-            callback: handleGoogleCredentialResponse,
-          });
-          
-          const btnContainer = document.getElementById("googleSignInButton");
-          if (btnContainer) {
-            (window as any).google.accounts.id.renderButton(
-              btnContainer,
-              { theme: "outline", size: "large", width: "100%", shape: "rectangular" }
-            );
-          }
-        } else {
-          setTimeout(initGoogle, 100);
-        }
-      };
-      initGoogle();
-    }
-  }, [isOpen]);
+  // Google Sign-In Callback Ref
+  const googleButtonRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    
+    const initGoogleButton = () => {
+      if ((window as any).google && (window as any).google.accounts && (window as any).google.accounts.id) {
+        (window as any).google.accounts.id.initialize({
+          client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+          callback: handleGoogleCredentialResponse,
+        });
+        
+        (window as any).google.accounts.id.renderButton(
+          node,
+          { theme: "outline", size: "large", width: "100%", shape: "rectangular" }
+        );
+      } else {
+        setTimeout(initGoogleButton, 100);
+      }
+    };
+    
+    initGoogleButton();
+  }, [handleGoogleCredentialResponse]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -320,7 +329,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
           setIsTwoFAMode(true);
         } else {
           onClose();
-          router.push('/dashboard');
+          router.push('/home');
         }
       }
     }
@@ -335,7 +344,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     const success = await verify2FA(twoFAEmail, twoFACode);
     if (success) {
       onClose();
-      router.push('/dashboard');
+      router.push('/home');
     } else {
       setTwoFAError("Mã xác thực không chính xác hoặc đã hết hạn");
     }
@@ -379,62 +388,26 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
           {/* Grid pattern background (craft aesthetic on dark green) */}
           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.15) 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
 
-          {/* Layered Paper Elements */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            {/* Yellow Lined Paper tilted in the bottom-right corner */}
-            <div 
-              className="absolute right-6 bottom-6 w-60 h-64 transform rotate-[8deg] shadow-lg z-0" 
-              style={{
-                background: "#fef9c3",
-                backgroundImage: "repeating-linear-gradient(transparent, transparent 24px, rgba(26,61,40,0.08) 24px, rgba(26,61,40,0.08) 25px)",
-                borderRadius: "16px",
-                borderLeft: "2px solid rgba(239, 68, 68, 0.15)"
-              }}
-            />
-            {/* Secondary dark background shape to add depth */}
-            <div 
-              className="absolute left-6 bottom-6 w-64 h-56 transform -rotate-[4deg] shadow-xl z-10"
-              style={{ background: "#112a1c", borderRadius: "24px" }}
-            />
-            {/* White notebook sheet on top - bottom-left */}
-            <div 
-              className="absolute left-6 bottom-6 w-[85%] h-52 transform -rotate-[2deg] bg-white border border-gray-100 shadow-md rounded-xl z-20 p-4 flex flex-col justify-between"
-            >
-              {/* Binder holes at the top of the paper */}
-              <div className="absolute top-2 left-0 right-0 flex justify-around px-4 opacity-40">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="w-2 h-2 rounded-full bg-gray-200" />
-                ))}
-              </div>
-              
-              {/* Content inside the mock paper */}
-              <div className="pt-4 flex-grow flex flex-col justify-between">
-                <div>
-                  <div className="w-6 h-6 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 mb-3">
-                    <Hourglass className="w-3.5 h-3.5" />
-                  </div>
-                  <h4 className="font-bold text-gray-800 text-xs mb-1 font-serif">Kế hoạch học tập</h4>
-                  <p className="text-[9px] text-gray-400 leading-normal">
-                    {isRegisterMode 
-                      ? "Đăng ký tài khoản để bắt đầu theo dõi thời gian học tập."
-                      : "Tiếp tục tích lũy thời gian học tập cùng Trợ lý."}
-                  </p>
-                </div>
-                
-                <div className="pt-2 border-t border-dashed border-gray-100">
-                  <div className="flex justify-between text-[8px] text-[#1a3d28] font-bold mb-1">
-                    <span>Tiến trình</span>
-                    <span>100%</span>
-                  </div>
-                  <div className="h-1 w-full bg-emerald-100 rounded-full overflow-hidden mb-2">
-                    <div className="h-full bg-emerald-500 rounded-full w-full"></div>
-                  </div>
-                  <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-100 rounded-full text-[8px] text-emerald-700 font-bold uppercase tracking-wider">
-                    <span className="text-yellow-500">★</span> Workspace
-                  </div>
-                </div>
-              </div>
-            </div>
+          {/* Lottie Animation replacing Layered Paper Elements */}
+          <div className="absolute inset-x-0 bottom-0 top-[200px] flex items-center justify-center pointer-events-none overflow-hidden p-6 z-10">
+            <AnimatePresence mode="wait">
+              {isMounted && (
+                <motion.div
+                  key={isRegisterMode ? 'register' : 'login'}
+                  initial={{ opacity: 0, scale: 0.9, x: isRegisterMode ? 15 : -15 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, x: isRegisterMode ? -15 : 15 }}
+                  transition={{ duration: 0.25, ease: "easeInOut" }}
+                  className="w-full h-full flex items-center justify-center"
+                >
+                  <Lottie 
+                    animationData={isRegisterMode ? registerAnimation : loginAnimation} 
+                    loop={true} 
+                    className="w-full h-full max-w-[320px] max-h-[320px] object-contain"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Branding Content */}
@@ -443,16 +416,28 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
               <GraduationCap className="w-6 h-6 text-[#00c495]" />
             </div>
             <h2 
-              className="text-2xl font-black text-white mb-3 leading-none"
-              style={{ fontFamily: "'Playfair Display', 'Merriweather', serif" }}
+              className="text-3xl font-extrabold text-white mb-3 leading-none tracking-tight"
+              style={{ fontFamily: "'Playfair Display', 'Cormorant Garamond', serif" }}
             >
-              EduShare AI
+              EduShare <span className="text-[#00c495] font-sans font-black tracking-widest text-2xl relative -top-0.5 ml-1">AI</span>
             </h2>
-            <p className="text-xs text-gray-300 leading-relaxed max-w-[85%]">
-              {isRegisterMode 
-                ? "Đăng ký để mở khóa các bài ôn tập thông minh bằng Flashcards và chat cùng trợ lý tài liệu AI."
-                : "Chào mừng quay trở lại. Hãy tiếp tục tiến trình nghiên cứu học thuật của bạn cùng Trợ lý."}
-            </p>
+            <div className="h-[48px] relative w-full">
+              <AnimatePresence mode="wait">
+                <motion.p 
+                  key={isRegisterMode ? 'register-desc' : 'login-desc'}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute inset-0 text-xs text-gray-300/95 leading-relaxed max-w-[85%] font-light" 
+                  style={{ fontFamily: "'Outfit', sans-serif" }}
+                >
+                  {isRegisterMode 
+                    ? "Đăng ký để mở khóa các bài ôn tập thông minh bằng Flashcards và chat cùng trợ lý tài liệu AI."
+                    : "Chào mừng quay trở lại. Hãy tiếp tục tiến trình nghiên cứu học thuật của bạn cùng Trợ lý."}
+                </motion.p>
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Empty div for bottom space layout */}
@@ -476,6 +461,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                 type="button"
                 onClick={() => { setIsRegisterMode(false); setIsForgotPasswordMode(false); setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''}); }}
                 className={`pb-3 text-sm font-bold transition-all relative focus:outline-none ${!isRegisterMode ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                style={{ fontFamily: "'Outfit', sans-serif" }}
               >
                 Đăng Nhập
                 {!isRegisterMode && (
@@ -486,6 +472,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                 type="button"
                 onClick={() => { setIsRegisterMode(true); setIsForgotPasswordMode(false); setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''}); }}
                 className={`pb-3 text-sm font-bold transition-all relative focus:outline-none ${isRegisterMode ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                style={{ fontFamily: "'Outfit', sans-serif" }}
               >
                 Đăng Ký
                 {isRegisterMode && (
@@ -497,16 +484,19 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
 
           {/* Form Header */}
           <div className="mb-6 flex-shrink-0">
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+            <h1 
+              className="text-2xl font-extrabold text-gray-900 tracking-tight"
+              style={{ fontFamily: "'Playfair Display', serif" }}
+            >
               {isForgotPasswordMode 
                 ? "Khôi phục mật khẩu" 
                 : isTwoFAMode
                   ? "Xác thực hai lớp (2FA)"
                   : isRegisterMode 
-                    ? "Đăng Ký Tài Khoản" 
-                    : "Chào Mừng Quay Trở Lại"}
+                    ? "Đăng ký tài khoản" 
+                    : "Chào mừng quay trở lại"}
             </h1>
-            <p className="text-xs text-gray-500 mt-1 font-medium">
+            <p className="text-xs text-gray-400 mt-1 font-medium" style={{ fontFamily: "'Outfit', sans-serif" }}>
               {isForgotPasswordMode 
                 ? "Nhập email của bạn để nhận liên kết đặt lại mật khẩu" 
                 : isTwoFAMode
@@ -551,12 +541,18 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                     type="submit" 
                     disabled={!emailRegex.test(email)}
                     className={`w-full py-3.5 mt-2 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md ${!emailRegex.test(email) ? 'bg-[#0D2B24]/40 cursor-not-allowed' : 'bg-[#00c495] hover:bg-[#00b085] active:scale-[0.98]'}`}
+                    style={{ fontFamily: "'Outfit', sans-serif" }}
                   >
                     Gửi yêu cầu khôi phục
                   </button>
                   
                   <div className="text-center pt-2">
-                    <button type="button" onClick={() => setIsForgotPasswordMode(false)} className="text-xs font-bold text-[#00c495] hover:underline transition-colors focus:outline-none">
+                    <button 
+                      type="button" 
+                      onClick={() => setIsForgotPasswordMode(false)} 
+                      className="text-xs font-bold text-[#00c495] hover:underline transition-colors focus:outline-none"
+                      style={{ fontFamily: "'Outfit', sans-serif" }}
+                    >
                       Quay lại Đăng nhập
                     </button>
                   </div>
@@ -598,6 +594,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                     type="submit" 
                     disabled={twoFACode.length !== 6}
                     className={`w-full py-3.5 mt-2 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md ${twoFACode.length !== 6 ? 'bg-[#0D2B24]/40 cursor-not-allowed' : 'bg-[#00c495] hover:bg-[#00b085] active:scale-[0.98]'}`}
+                    style={{ fontFamily: "'Outfit', sans-serif" }}
                   >
                     Xác thực & Đăng nhập
                   </button>
@@ -611,13 +608,20 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                         setTwoFAError('');
                       }} 
                       className="text-xs font-bold text-[#00c495] hover:underline transition-colors focus:outline-none"
+                      style={{ fontFamily: "'Outfit', sans-serif" }}
                     >
                       Quay lại Đăng nhập
                     </button>
                   </div>
                 </motion.form>
               ) : (
-                <motion.div key="auth-container" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+                <motion.div 
+                  key={isRegisterMode ? "register-container" : "login-container"} 
+                  initial={{ opacity: 0, x: isRegisterMode ? 15 : -15 }} 
+                  animate={{ opacity: 1, x: 0 }} 
+                  exit={{ opacity: 0, x: isRegisterMode ? -15 : 15 }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                >
                   <form onSubmit={handleAuthSubmit} className="space-y-4">
                     {isRegisterMode && (
                       <div className="space-y-4">
@@ -691,13 +695,14 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                       }
                     />
 
-                    {/* Forgot password placement */}
+                     {/* Forgot password placement */}
                     {!isRegisterMode && (
                       <div className="flex justify-end pt-1">
                         <button 
                           type="button" 
                           onClick={() => setIsForgotPasswordMode(true)} 
                           className="text-xs font-semibold text-[#00c495] hover:underline transition-colors focus:outline-none"
+                          style={{ fontFamily: "'Outfit', sans-serif" }}
                         >
                           Quên mật khẩu?
                         </button>
@@ -708,7 +713,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                     {isRegisterMode && (
                       <div className="space-y-4 pt-1">
                         {/* Password Requirements Indicator */}
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 pl-1 mt-1">
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 pl-1 mt-1" style={{ fontFamily: "'Outfit', sans-serif" }}>
                           <div className="flex items-center gap-1.5 w-[45%]">
                             {password ? (
                               hasLetter ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <XCircle className="w-3.5 h-3.5 text-rose-500" />
@@ -758,7 +763,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                         />
 
                         {/* Recaptcha Mock Widget */}
-                        <div className="flex items-center justify-between p-3.5 bg-gray-50 border border-gray-100 rounded-xl mt-4">
+                        <div className="flex items-center justify-between p-3.5 bg-gray-50 border border-gray-100 rounded-xl mt-4" style={{ fontFamily: "'Outfit', sans-serif" }}>
                           <div className="flex items-center gap-3">
                             <input 
                               type="checkbox" 
@@ -786,7 +791,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                             checked={agreeToTerms}
                             onChange={(e) => setAgreeToTerms(e.target.checked)}
                           />
-                          <label htmlFor="terms-checkbox" className="text-[11px] text-gray-500 leading-tight select-none cursor-pointer">
+                          <label htmlFor="terms-checkbox" className="text-[11px] text-gray-500 leading-tight select-none cursor-pointer" style={{ fontFamily: "'Outfit', sans-serif" }}>
                             Tôi đồng ý với <span className="text-[#00c495] hover:underline font-medium cursor-pointer">Điều khoản dịch vụ</span> & <span className="text-[#00c495] hover:underline font-medium cursor-pointer">Chính sách bảo mật</span>
                           </label>
                         </div>
@@ -797,6 +802,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                     <button 
                       type="submit" 
                       className="w-full py-3.5 mt-2 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md bg-[#00c495] hover:bg-[#00b085] active:scale-[0.98] focus:outline-none"
+                      style={{ fontFamily: "'Outfit', sans-serif" }}
                     >
                       {isRegisterMode ? "Tạo Tài Khoản" : "Đăng Nhập"}
                     </button>
@@ -809,8 +815,24 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                       <span className="flex-shrink mx-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hoặc tiếp tục với</span>
                       <div className="flex-grow border-t border-gray-100"></div>
                     </div>
-                    <div className="flex justify-center w-full">
-                      <div id="googleSignInButton" className="w-full flex justify-center [&>div]:w-full overflow-hidden rounded-xl"></div>
+                    <div className="flex gap-3 w-full justify-between">
+                      {/* Google Sign-In Container */}
+                      <div className="w-1/2 flex justify-center [&>div]:w-full overflow-hidden rounded-xl">
+                        <div ref={googleButtonRef} className="w-full"></div>
+                      </div>
+                      
+                      {/* Roblox Decorative Button */}
+                      <button
+                        type="button"
+                        onClick={() => triggerMessage("Đăng nhập bằng Roblox thành công (chỉ mang tính trang trí)!", "success")}
+                        className="w-1/2 h-[40px] flex items-center justify-center gap-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 active:scale-[0.98] transition-all duration-300 font-bold text-xs text-gray-700 shadow-sm"
+                        style={{ fontFamily: "'Outfit', sans-serif" }}
+                      >
+                        <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current text-[#E1251B]" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M4.865 2.115L21.885 5.135L19.135 21.885L2.115 18.865L4.865 2.115ZM10.59 9.175L9.175 14.865L14.865 16.28L16.28 10.59L10.59 9.175Z" />
+                        </svg>
+                        <span>Roblox</span>
+                      </button>
                     </div>
                   </div>
                 </motion.div>

@@ -69,6 +69,7 @@ interface StudyContextType {
   updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string }) => Promise<boolean>;
   toggleVerification: (enable: boolean) => Promise<boolean>;
   verify2FA: (email: string, code: string) => Promise<boolean>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   searchQuery: string;
 
   setSearchQuery: (query: string) => void;
@@ -541,6 +542,37 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } catch (e) {
       triggerMessage("Lỗi kết nối máy chủ", "error");
       return false;
+    }
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      triggerMessage("Bạn chưa đăng nhập", "error");
+      return { success: false, error: "Bạn chưa đăng nhập" };
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/change-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        triggerMessage(data.message || "Thay đổi mật khẩu thành công!", "success");
+        return { success: true };
+      } else {
+        triggerMessage(data.error || "Đổi mật khẩu thất bại", "error");
+        return { success: false, error: data.error };
+      }
+    } catch (e) {
+      triggerMessage("Lỗi kết nối máy chủ", "error");
+      return { success: false, error: "Lỗi kết nối máy chủ" };
     }
   };
 
@@ -1041,6 +1073,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       updateProfile,
       toggleVerification,
       verify2FA,
+      changePassword,
       showLanding,
       setShowLanding,
       showLoginModal,

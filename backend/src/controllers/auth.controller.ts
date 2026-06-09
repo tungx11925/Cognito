@@ -470,3 +470,50 @@ export const updateProfile = async (req: any, res: Response) => {
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
 };
+
+export const changePassword = async (req: any, res: Response) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Vui lòng điền đầy đủ mật khẩu hiện tại và mật khẩu mới' });
+    }
+
+    // Retrieve user and their hashed password
+    const userResult = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = userResult.rows[0];
+
+    if (!user) {
+      return res.status(404).json({ error: 'Người dùng không tồn tại' });
+    }
+
+    // Verify current password
+    const isValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Mật khẩu hiện tại không chính xác' });
+    }
+
+    // Password validation logic matching register
+    if (newPassword.length < 10) {
+      return res.status(400).json({ error: 'Mật khẩu mới tối thiểu 10 ký tự' });
+    }
+    if (!/(?=.*[a-zA-Z])/.test(newPassword)) {
+      return res.status(400).json({ error: 'Mật khẩu mới phải chứa ít nhất 1 chữ cái' });
+    }
+    if (!/(?=.*[\d#?!&@$%*])/.test(newPassword)) {
+      return res.status(400).json({ error: 'Mật khẩu mới phải chứa ít nhất 1 chữ số hoặc ký tự đặc biệt' });
+    }
+
+    // Hash new password
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    // Update password in DB
+    await db.query('UPDATE users SET password = $1 WHERE id = $2', [hashed, userId]);
+
+    res.status(200).json({ message: 'Thay đổi mật khẩu thành công!' });
+  } catch (error: any) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+  }
+};

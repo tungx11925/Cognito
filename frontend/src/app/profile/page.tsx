@@ -215,6 +215,7 @@ export default function UserProfile() {
     updateAvatar,
     updateProfile,
     toggleVerification,
+    globalMessage
   } = useStudy();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -332,6 +333,18 @@ export default function UserProfile() {
 
   return (
     <div className="min-h-screen bg-[#ebe8e0] grid-bg pb-10">
+
+      {/* Toast Alert */}
+      {globalMessage && globalMessage.text && (
+        <div className={`fixed top-5 right-5 z-[9999] px-5 py-3 rounded-xl shadow-lg flex items-center gap-3 border ${
+          globalMessage.type === 'success' 
+            ? 'bg-white text-emerald-700 border-emerald-200' 
+            : 'bg-white text-rose-700 border-rose-200'
+        }`}>
+          <div className={`w-2 h-2 rounded-full animate-ping ${globalMessage.type === 'success' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+          <span className="font-semibold text-sm">{globalMessage.text}</span>
+        </div>
+      )}
 
       {/* ── Synchronized Landing Navbar ── */}
       <Navbar 
@@ -481,14 +494,14 @@ export default function UserProfile() {
         {/* Stats strip (Placed below, in its own clean layout) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: "Bộ Flashcard", value: "24", icon: Layers, sub: "+3 tháng này", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
-            { label: "Thẻ đã học", value: "1,840", icon: Brain, sub: "tổng cộng", bg: "bg-[#edf4fc]", border: "border-blue-200" },
-            { label: "Streak hiện tại", value: "32 ngày", icon: Flame, sub: "Kỷ lục: 45 ngày", bg: "bg-[#fcf3eb]", border: "border-orange-200" },
-            { label: "Độ chính xác", value: "94%", icon: Target, sub: "Tháng này", bg: "bg-[#f5ecfc]", border: "border-purple-200" },
+            { label: "Bộ Flashcard", value: "24", icon: Layers, sub: "+3 tháng này", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25", iconBg: "bg-blue-50 text-blue-500" },
+            { label: "Thẻ đã học", value: "1,840", icon: Brain, sub: "tổng cộng", bg: "bg-[#edf4fc]", border: "border-blue-200", iconBg: "bg-pink-50 text-pink-500" },
+            { label: "Streak hiện tại", value: "32 ngày", icon: Flame, sub: "Kỷ lục: 45 ngày", bg: "bg-[#fcf3eb]", border: "border-orange-200", iconBg: "bg-red-50 text-red-500" },
+            { label: "Độ chính xác", value: "94%", icon: Target, sub: "Tháng này", bg: "bg-[#f5ecfc]", border: "border-purple-200", iconBg: "bg-emerald-50 text-emerald-600" },
           ].map((s) => (
             <div key={s.label} className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-[#1a2e1c]/18 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.07)] hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.12)] hover:border-[#1a2e1c]/30 transition-all duration-300">
-              <div className="w-9 h-9 rounded-xl bg-[#1a2e1c]/5 flex items-center justify-center shrink-0">
-                <s.icon className="w-4.5 h-4.5 text-[#2d5a3d]" />
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${s.iconBg}`}>
+                <s.icon className="w-4.5 h-4.5" />
               </div>
               <div>
                 <p className="text-gray-900 font-bold leading-tight">{s.value}</p>
@@ -800,8 +813,7 @@ export default function UserProfile() {
                         { label: "Địa chỉ", value: activeUser?.address || "Hà Nội, Việt Nam", icon: MapPin },
                         { label: "Ngày tham gia", value: "Tháng 1, 2024", icon: Calendar, readOnly: true },
                         { label: "Email liên hệ", value: activeUser?.email || "vuhailam05@gmail.com", icon: Mail, readOnly: true },
-                        { label: "Số điện thoại", value: activeUser?.phone || "+84 912 345 678", icon: Phone },
-                        { label: "Xác thực tài khoản", value: activeUser?.is_verified ? "Đã bật bảo mật 2FA" : "Chưa kích hoạt bảo mật 2FA", icon: CheckCircle2, readOnly: true }
+                        { label: "Số điện thoại", value: activeUser?.phone || "+84 912 345 678", icon: Phone }
                       ].map((item, index) => {
                         const isEditMode = isEditing && !item.readOnly;
                         
