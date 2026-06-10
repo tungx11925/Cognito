@@ -182,6 +182,20 @@ router.get('/flashcards/decks', async (req: Request, res: Response) => {
   }
 });
 
+// Get a single deck by ID
+router.get('/flashcards/decks/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query('SELECT * FROM flashcard_decks WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bộ bài' });
+    }
+    res.status(200).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get flashcards in a deck
 router.get('/flashcards/decks/:deckId/cards', async (req: Request, res: Response) => {
   try {
@@ -213,12 +227,56 @@ router.get('/flashcards/decks/:deckId/review', async (req: Request, res: Respons
 // Create a deck
 router.post('/flashcards/decks', async (req: Request, res: Response) => {
   try {
-    const { user_id, name, description } = req.body;
+    const { user_id, name, description, is_public } = req.body;
     const result = await db.query(
-      'INSERT INTO flashcard_decks (user_id, name, description) VALUES ($1, $2, $3) RETURNING *',
-      [user_id || 2, name, description || '']
+      'INSERT INTO flashcard_decks (user_id, name, description, is_public) VALUES ($1, $2, $3, $4) RETURNING *',
+      [user_id || 2, name, description || '', is_public || false]
     );
     res.status(201).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update a deck (Rename, Update description, or set Public/Private)
+router.put('/flashcards/decks/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, description, is_public } = req.body;
+
+    const deckCheck = await db.query('SELECT * FROM flashcard_decks WHERE id = $1', [id]);
+    if (deckCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bộ bài' });
+    }
+
+    const currentDeck = deckCheck.rows[0];
+    const newName = name !== undefined ? name : currentDeck.name;
+    const newDesc = description !== undefined ? description : currentDeck.description;
+    const newIsPublic = is_public !== undefined ? is_public : currentDeck.is_public;
+
+    const result = await db.query(
+      'UPDATE flashcard_decks SET name = $1, description = $2, is_public = $3 WHERE id = $4 RETURNING *',
+      [newName, newDesc, newIsPublic, id]
+    );
+    
+    res.status(200).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a deck
+router.delete('/flashcards/decks/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query(
+      'DELETE FROM flashcard_decks WHERE id = $1 RETURNING *',
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bộ bài để xóa' });
+    }
+    res.status(200).json({ message: 'Đã xóa bộ bài thành công' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -228,11 +286,55 @@ router.post('/flashcards/decks', async (req: Request, res: Response) => {
 router.post('/flashcards', async (req: Request, res: Response) => {
   try {
     const { deck_id, document_id, front, back } = req.body;
+    if (!front || !back || front.trim() === '' || back.trim() === '') {
+      return res.status(400).json({ error: 'Nội dung Front và Back không được để trống' });
+    }
     const result = await db.query(
       'INSERT INTO flashcards (deck_id, document_id, front, back) VALUES ($1, $2, $3, $4) RETURNING *',
       [deck_id, document_id || null, front, back]
     );
     res.status(201).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update a flashcard
+router.put('/flashcards/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { front, back } = req.body;
+    
+    if (!front || !back || front.trim() === '' || back.trim() === '') {
+      return res.status(400).json({ error: 'Nội dung Front và Back không được để trống' });
+    }
+
+    const result = await db.query(
+      'UPDATE flashcards SET front = $1, back = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *',
+      [front, back, id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+    }
+    
+    res.status(200).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a flashcard
+router.delete('/flashcards/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query('DELETE FROM flashcards WHERE id = $1 RETURNING id', [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+    }
+    
+    res.status(200).json({ message: 'Đã xóa thẻ thành công' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -649,6 +751,109 @@ router.post('/ai/generate-flashcards', async (req: Request, res: Response) => {
     
     res.status(201).json({
       message: deck_id ? 'Flashcards generated and added to deck!' : 'Flashcards generated successfully!',
+      cards: deck_id ? insertedCards : cards
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI automatically generates flashcards from note content
+router.post('/ai/generate-flashcards-from-note', async (req: Request, res: Response) => {
+  try {
+    const { note_content, deck_id, document_id } = req.body;
+    
+    if (!note_content || note_content.trim() === '') {
+      return res.status(400).json({ error: 'Nội dung ghi chú không được để trống.' });
+    }
+
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const groqApiKey = process.env.GROQ_API_KEY;
+    let cards: {front: string, back: string}[] = [];
+
+    // Prompt for generating flashcards with Universal Standardization
+    const prompt = `Bạn là một chuyên gia giáo dục thiết kế thẻ ghi nhớ (Flashcards). Nhiệm vụ của bạn là đọc đoạn văn bản dưới đây và trích xuất ra các cặp thông tin quan trọng nhất để làm Flashcard.
+
+QUY TẮC CHUẨN HOÁ (Áp dụng cho TẤT CẢ các môn học và ngành nghề):
+Cho dù đoạn văn bản có lộn xộn hay không rõ ràng, hãy cố gắng bóc tách các ý chính thành dạng Thẻ (Front - Back).
+- "front": [Từ khóa / Khái niệm / Câu hỏi ngắn / Tên riêng / Công thức]
+- "back": [Định nghĩa / Giải thích súc tích / Ý nghĩa] + [Ví dụ thực tế / Ứng dụng nếu có].
+
+MỘT SỐ VÍ DỤ CHUẨN:
+- {"front": "Học máy (Machine Learning)", "back": "Là lĩnh vực AI cho phép hệ thống tự học từ dữ liệu. VD: Phân loại email rác."}
+- {"front": "Đạo hàm của sin(x)", "back": "Là cos(x). VD: Tính vận tốc từ phương trình ly độ."}
+- {"front": "Lạm phát (Inflation)", "back": "Sự tăng mức giá chung của hàng hóa/dịch vụ theo thời gian."}
+
+YÊU CẦU BẮT BUỘC:
+- Nếu văn bản quá ngắn, hãy suy luận để tạo ra ít nhất 1-2 thẻ hợp lý nhất có thể.
+- Chỉ trả về ĐÚNG MỘT MẢNG JSON thuần túy (không chứa markdown, không có \`\`\`json).
+- Object bên trong mảng chỉ được phép có 2 trường "front" và "back".
+
+Văn bản cần xử lý:
+"""
+${note_content}
+"""`;
+
+    if (groqApiKey && !groqApiKey.includes('your_')) {
+      const groq = new Groq({ apiKey: groqApiKey });
+      const completion = await groq.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: "llama-3.1-8b-instant",
+        temperature: 0.5,
+      });
+      const responseText = completion.choices[0]?.message?.content || "[]";
+      try {
+        let cleaned = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const startIdx = cleaned.indexOf('[');
+        const endIdx = cleaned.lastIndexOf(']');
+        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          cleaned = cleaned.substring(startIdx, endIdx + 1);
+        } else if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+          cleaned = `[${cleaned}]`; // Wrap single object
+        }
+        cards = JSON.parse(cleaned);
+      } catch (e) {
+        console.error("Groq JSON Parse Error:", e, responseText);
+      }
+    } else if (geminiApiKey && !geminiApiKey.includes('your_')) {
+      const genAI = new GoogleGenerativeAI(geminiApiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      try {
+        let cleaned = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const startIdx = cleaned.indexOf('[');
+        const endIdx = cleaned.lastIndexOf(']');
+        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          cleaned = cleaned.substring(startIdx, endIdx + 1);
+        } else if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+          cleaned = `[${cleaned}]`; // Wrap single object
+        }
+        cards = JSON.parse(cleaned);
+      } catch (e) {
+        console.error("Gemini JSON Parse Error:", e, responseText);
+      }
+    } else {
+      // Fallback if no API key
+      cards = [
+        { front: "Làm thế nào để tạo flashcard thực sự từ ghi chú?", back: "Bạn cần cung cấp GROQ_API_KEY hoặc GEMINI_API_KEY trong file .env" },
+        { front: "Mẫu câu hỏi (Mock)", back: "Đây là câu trả lời mẫu do hệ thống không có AI Key." }
+      ];
+    }
+    
+    const insertedCards = [];
+    if (deck_id && cards.length > 0) {
+      for (const card of cards) {
+        const insertRes = await db.query(
+          'INSERT INTO flashcards (deck_id, document_id, front, back) VALUES ($1, $2, $3, $4) RETURNING *',
+          [deck_id, document_id || null, card.front, card.back]
+        );
+        insertedCards.push(insertRes.rows[0]);
+      }
+    }
+    
+    res.status(201).json({
+      message: deck_id ? `Đã tạo và thêm ${cards.length} thẻ vào bộ bài!` : 'Tạo thẻ thành công!',
       cards: deck_id ? insertedCards : cards
     });
   } catch (error: any) {

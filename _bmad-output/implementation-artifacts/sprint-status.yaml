@@ -72,7 +72,10 @@ development_status:
   5-3-thuat-toan-spaced-repetition: done
   epic-5-retrospective: optional
   
-  epic-6: backlog
-  6-1-thiet-lap-quyen-rieng-tu: backlog
-  6-2-kham-pha-va-luu-tru-tu-cong-dong: backlog
+  epic-6: in-progress  # Chuyển thành in-progress để bổ sung các tính năng ràng buộc cốt lõi này
+  6-1-luu-tru-va-tai-hien-toa-do-highlight: ready-for-dev  # Lưu rects/bounding box của PDF vào DB
+  6-2-dong-bo-nghi-dung-on-tap-inline: ready-for-dev      # Hover/Click vào vệt vàng trên PDF hiện tooltip nghĩa
+  6-3-quan-ly-han-muc-token-va-rate-limit-user: ready-for-dev # Bảo mật, chặn spam API ở Backend
+  6-4-thiet-lap-quyen-rieng-tu: backlog # (Tính năng cũ đẩy xuống)
+  6-5-kham-pha-va-luu-tru-tu-cong-dong: backlog # (Tính năng cũ đẩy xuống)
   epic-6-retrospective: optional
