@@ -56,15 +56,19 @@ interface StudyContextType {
   isAuthenticated: boolean;
   setIsAuthenticated: (auth: boolean) => void;
   loading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; requires2FA?: boolean; email?: string }>;
   register: (name: string, phone: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   showLanding: boolean;
   setShowLanding: (show: boolean) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  activeUser: { id: number; name: string; email: string } | null;
-  setActiveUser: (user: { id: number; name: string; email: string } | null) => void;
+  activeUser: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean } | null;
+  setActiveUser: (user: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean } | null) => void;
+  updateAvatar: (file: File) => Promise<boolean>;
+  updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string }) => Promise<boolean>;
+  toggleVerification: (enable: boolean) => Promise<boolean>;
+  verify2FA: (email: string, code: string) => Promise<boolean>;
   searchQuery: string;
 
   setSearchQuery: (query: string) => void;
@@ -309,7 +313,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string } | null>(null);
+  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -380,7 +384,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   // Auth API Calls
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; requires2FA?: boolean; email?: string }> => {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
@@ -389,18 +393,22 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       const data = await res.json();
       if (res.ok) {
+        if (data.requires2FA) {
+          triggerMessage(data.message || 'Vui lòng nhập mã xác thực từ email', 'success');
+          return { success: true, requires2FA: true, email: data.email };
+        }
         localStorage.setItem('token', data.token);
         setActiveUser(data.user);
         setIsAuthenticated(true);
         triggerMessage(data.message || 'Đăng nhập thành công', 'success');
-        return true;
+        return { success: true };
       } else {
         triggerMessage(data.error || 'Đăng nhập thất bại', 'error');
-        return false;
+        return { success: false };
       }
     } catch (e) {
       triggerMessage('Lỗi kết nối', 'error');
-      return false;
+      return { success: false };
     }
   };
 
@@ -436,6 +444,128 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setActiveUser(null);
     setIsAuthenticated(false);
     triggerMessage('Đăng xuất thành công', 'success');
+  };
+
+  const updateAvatar = async (file: File): Promise<boolean> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      triggerMessage("Bạn chưa đăng nhập", "error");
+      return false;
+    }
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/avatar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setActiveUser(prev => prev ? { ...prev, avatar_url: data.avatarUrl } : null);
+        triggerMessage(data.message || "Tải ảnh đại diện thành công", "success");
+        return true;
+      } else {
+        triggerMessage(data.error || "Tải ảnh đại diện thất bại", "error");
+        return false;
+      }
+    } catch (e) {
+      triggerMessage("Lỗi kết nối máy chủ", "error");
+      return false;
+    }
+  };
+
+  const updateProfile = async (fields: { name: string; phone?: string; education?: string; address?: string }): Promise<boolean> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      triggerMessage("Bạn chưa đăng nhập", "error");
+      return false;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(fields)
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setActiveUser(data.user);
+        triggerMessage(data.message || "Cập nhật thông tin thành công", "success");
+        return true;
+      } else {
+        triggerMessage(data.error || "Cập nhật thông tin thất bại", "error");
+        return false;
+      }
+    } catch (e) {
+      triggerMessage("Lỗi kết nối máy chủ", "error");
+      return false;
+    }
+  };
+
+  const toggleVerification = async (enable: boolean): Promise<boolean> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      triggerMessage("Bạn chưa đăng nhập", "error");
+      return false;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/toggle-verification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ enable })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setActiveUser(data.user);
+        triggerMessage(data.message || "Cập nhật xác thực thành công", "success");
+        return true;
+      } else {
+        triggerMessage(data.error || "Cập nhật xác thực thất bại", "error");
+        return false;
+      }
+    } catch (e) {
+      triggerMessage("Lỗi kết nối máy chủ", "error");
+      return false;
+    }
+  };
+
+  const verify2FA = async (email: string, code: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/verify-2fa`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('token', data.token);
+        setActiveUser(data.user);
+        setIsAuthenticated(true);
+        triggerMessage(data.message || 'Đăng nhập thành công', 'success');
+        return true;
+      } else {
+        triggerMessage(data.error || 'Mã xác thực không chính xác', 'error');
+        return false;
+      }
+    } catch (e) {
+      triggerMessage('Lỗi kết nối', 'error');
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -907,6 +1037,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       login,
       register,
       logout,
+      updateAvatar,
+      updateProfile,
+      toggleVerification,
+      verify2FA,
       showLanding,
       setShowLanding,
       showLoginModal,
