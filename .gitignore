@@ -33,3 +33,7 @@ Thumbs.db
 # Database files & migrations local temp
 backend/prisma/*.db
 *.sqlite
+
+# TypeScript build cache (auto-generated, should not be committed)
+**/*.tsbuildinfo
+*.tsbuildinfo
