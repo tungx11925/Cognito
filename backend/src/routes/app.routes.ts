@@ -1,5 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import axios from 'axios';
+import Groq from 'groq-sdk';
+// @ts-ignore
+import mammoth from 'mammoth';
 
 const router = Router();
 
@@ -177,6 +182,20 @@ router.get('/flashcards/decks', async (req: Request, res: Response) => {
   }
 });
 
+// Get a single deck by ID
+router.get('/flashcards/decks/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query('SELECT * FROM flashcard_decks WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bộ bài' });
+    }
+    res.status(200).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get flashcards in a deck
 router.get('/flashcards/decks/:deckId/cards', async (req: Request, res: Response) => {
   try {
@@ -191,15 +210,73 @@ router.get('/flashcards/decks/:deckId/cards', async (req: Request, res: Response
   }
 });
 
+// Get due flashcards for study/review in a deck
+router.get('/flashcards/decks/:deckId/review', async (req: Request, res: Response) => {
+  try {
+    const { deckId } = req.params;
+    const result = await db.query(
+      'SELECT * FROM flashcards WHERE deck_id = $1 AND (next_review_at IS NULL OR next_review_at <= CURRENT_TIMESTAMP) ORDER BY next_review_at ASC',
+      [deckId]
+    );
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Create a deck
 router.post('/flashcards/decks', async (req: Request, res: Response) => {
   try {
-    const { user_id, name, description } = req.body;
+    const { user_id, name, description, is_public } = req.body;
     const result = await db.query(
-      'INSERT INTO flashcard_decks (user_id, name, description) VALUES ($1, $2, $3) RETURNING *',
-      [user_id || 2, name, description || '']
+      'INSERT INTO flashcard_decks (user_id, name, description, is_public) VALUES ($1, $2, $3, $4) RETURNING *',
+      [user_id || 2, name, description || '', is_public || false]
     );
     res.status(201).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update a deck (Rename, Update description, or set Public/Private)
+router.put('/flashcards/decks/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, description, is_public } = req.body;
+
+    const deckCheck = await db.query('SELECT * FROM flashcard_decks WHERE id = $1', [id]);
+    if (deckCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bộ bài' });
+    }
+
+    const currentDeck = deckCheck.rows[0];
+    const newName = name !== undefined ? name : currentDeck.name;
+    const newDesc = description !== undefined ? description : currentDeck.description;
+    const newIsPublic = is_public !== undefined ? is_public : currentDeck.is_public;
+
+    const result = await db.query(
+      'UPDATE flashcard_decks SET name = $1, description = $2, is_public = $3 WHERE id = $4 RETURNING *',
+      [newName, newDesc, newIsPublic, id]
+    );
+    
+    res.status(200).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a deck
+router.delete('/flashcards/decks/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query(
+      'DELETE FROM flashcard_decks WHERE id = $1 RETURNING *',
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bộ bài để xóa' });
+    }
+    res.status(200).json({ message: 'Đã xóa bộ bài thành công' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -209,11 +286,55 @@ router.post('/flashcards/decks', async (req: Request, res: Response) => {
 router.post('/flashcards', async (req: Request, res: Response) => {
   try {
     const { deck_id, document_id, front, back } = req.body;
+    if (!front || !back || front.trim() === '' || back.trim() === '') {
+      return res.status(400).json({ error: 'Nội dung Front và Back không được để trống' });
+    }
     const result = await db.query(
       'INSERT INTO flashcards (deck_id, document_id, front, back) VALUES ($1, $2, $3, $4) RETURNING *',
       [deck_id, document_id || null, front, back]
     );
     res.status(201).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update a flashcard
+router.put('/flashcards/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { front, back } = req.body;
+    
+    if (!front || !back || front.trim() === '' || back.trim() === '') {
+      return res.status(400).json({ error: 'Nội dung Front và Back không được để trống' });
+    }
+
+    const result = await db.query(
+      'UPDATE flashcards SET front = $1, back = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *',
+      [front, back, id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+    }
+    
+    res.status(200).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a flashcard
+router.delete('/flashcards/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query('DELETE FROM flashcards WHERE id = $1 RETURNING id', [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+    }
+    
+    res.status(200).json({ message: 'Đã xóa thẻ thành công' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -286,7 +407,7 @@ router.post('/flashcards/review/:id', async (req: Request, res: Response) => {
 // Chat with AI about document
 router.post('/ai/chat', async (req: Request, res: Response) => {
   try {
-    const { document_id, message } = req.body;
+    const { document_id, message, history } = req.body;
     
     // Fetch document to extract context
     const docResult = await db.query('SELECT * FROM documents WHERE id = $1', [document_id]);
@@ -295,27 +416,159 @@ router.post('/ai/chat', async (req: Request, res: Response) => {
     const docDesc = document ? document.description : '';
     const docSolution = document ? document.solution_text : '';
     
-    // In a production setup with API keys, we would call Google Gemini API here.
-    // For extreme reliability, speed, and premium user experience, we will use a highly sophisticated, 
-    // context-aware NLP responder that matches keywords from the document to provide customized responses.
-    
-    const messageLower = message.toLowerCase();
     let reply = '';
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const groqApiKey = process.env.GROQ_API_KEY;
+
+    // IF GROQ API KEY IS PROVIDED, USE GROQ AI
+    if (groqApiKey && !groqApiKey.includes('your_')) {
+      try {
+        let documentText = '';
+        
+        // 1. Try to read the actual document text using mammoth
+        if (document && document.doc_url && document.doc_url.endsWith('.docx')) {
+          const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
+          const textResult = await mammoth.extractRawText({ buffer: response.data });
+          documentText = textResult.value;
+        }
+
+        // 2. Setup Groq AI
+        const groq = new Groq({ apiKey: groqApiKey });
+        
+        // 3. Construct prompt
+        const systemPrompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy và hỗ trợ học tập toàn diện như ChatGPT.
+Tên tài liệu người dùng đang xem: ${docTitle}
+Mô tả: ${docDesc}
+Nội dung tài liệu (Trích xuất trực tiếp từ file):\n\n${documentText ? documentText.substring(0, 3000) : '(Người dùng chưa tải lên file có nội dung văn bản, hãy hỗ trợ dựa trên câu hỏi của họ)'}\n\n
+${docSolution ? 'Lời giải đính kèm: ' + docSolution : ''}
+
+YÊU CẦU ĐỐI VỚI BẠN (AI):
+1. Bạn không bị giới hạn chỉ trong nội dung tài liệu. Hãy dùng kiến thức sâu rộng của mình để giải đáp!
+2. Nếu người dùng hỏi Toán/Logic: Hãy phân tích đề bài, giải quyết từng bước một cách logic và đưa ra đáp án chính xác.
+3. Nếu người dùng hỏi Tiếng Anh: Hãy giải thích ngữ pháp, từ vựng, cấu trúc câu hoặc dịch thuật một cách tự nhiên, kèm ví dụ.
+4. Nếu người dùng hỏi các môn khác: Hãy đóng vai một gia sư tận tâm, giải thích dễ hiểu, súc tích.
+5. Trình bày nội dung đẹp mắt bằng Markdown (in đậm, danh sách, blockquote, hoặc MathJax/LaTeX nếu là công thức toán).`;
+
+        let apiMessages: any[] = [{ role: "system", content: systemPrompt }];
+        
+        if (history && Array.isArray(history)) {
+          // Truncate history to save tokens: only keep the last 4 turns
+          const recentHistory = history.slice(-4);
+          apiMessages = apiMessages.concat(recentHistory);
+        }
+        
+        apiMessages.push({ role: "user", content: message });
+
+        const completion = await groq.chat.completions.create({
+          messages: apiMessages,
+          model: "llama-3.1-8b-instant",
+          temperature: 0.7,
+          max_tokens: 1024,
+        });
+
+        reply = completion.choices[0]?.message?.content || "Không có phản hồi từ AI.";
+
+        return res.status(200).json({ reply });
+      } catch (aiError) {
+        console.error("Groq AI Error:", aiError);
+        reply = "Hệ thống AI (Groq) hiện đang bận hoặc cấu hình API Key có vấn đề. Chuyển sang chế độ dự phòng...\n\n";
+      }
+    }
+    // IF GEMINI API KEY IS PROVIDED, USE GEMINI AI
+    else if (geminiApiKey && !geminiApiKey.includes('your_')) {
+      try {
+        let documentText = '';
+        
+        // 1. Try to read the actual document text using mammoth
+        if (document && document.doc_url && document.doc_url.endsWith('.docx')) {
+          const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
+          const textResult = await mammoth.extractRawText({ buffer: response.data });
+          documentText = textResult.value;
+        }
+
+        // 2. Setup Gemini AI
+        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        
+        // 3. Construct prompt
+        const prompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy và hỗ trợ học tập toàn diện như ChatGPT.
+Tên tài liệu người dùng đang xem: ${docTitle}
+Mô tả: ${docDesc}
+Nội dung tài liệu (Trích xuất trực tiếp từ file):\n\n${documentText ? documentText.substring(0, 15000) : '(Người dùng chưa tải lên file có nội dung văn bản, hãy hỗ trợ dựa trên câu hỏi của họ)'}\n\n
+${docSolution ? 'Lời giải đính kèm: ' + docSolution : ''}
+
+YÊU CẦU ĐỐI VỚI BẠN (AI):
+1. Bạn không bị giới hạn chỉ trong nội dung tài liệu. Hãy dùng kiến thức sâu rộng của mình để giải đáp!
+2. Nếu người dùng hỏi Toán/Logic: Hãy phân tích đề bài, giải quyết từng bước một cách logic và đưa ra đáp án chính xác.
+3. Nếu người dùng hỏi Tiếng Anh: Hãy giải thích ngữ pháp, từ vựng, cấu trúc câu hoặc dịch thuật một cách tự nhiên, kèm ví dụ.
+4. Nếu người dùng hỏi các môn khác: Hãy đóng vai một gia sư tận tâm, giải thích dễ hiểu, súc tích.
+5. Trình bày nội dung đẹp mắt bằng Markdown (in đậm, danh sách, blockquote, hoặc MathJax/LaTeX nếu là công thức toán).
+
+Câu hỏi của người dùng: "${message}"`;
+
+        const result = await model.generateContent(prompt);
+        reply = result.response.text();
+
+        return res.status(200).json({ reply });
+      } catch (aiError) {
+        console.error("Gemini AI Error:", aiError);
+        reply = "Hệ thống AI hiện đang bận hoặc cấu hình API Key có vấn đề. Chuyển sang chế độ dự phòng...\n\n";
+      }
+    }
+
+    // FALLBACK: PREMIUM SIMULATION (If no API Key or AI failed)
+    const messageLower = message.toLowerCase();
     
-    if (messageLower.includes('tóm tắt') || messageLower.includes('summary') || messageLower.includes('khái quát')) {
-      reply = `### 📝 Tóm tắt tài liệu: "${docTitle}"
+    // Simulate Math Problem Solving
+    if (messageLower.includes('giải') && (messageLower.includes('toán') || messageLower.includes('phương trình') || messageLower.includes('tích phân') || message.includes('x') || message.includes('+') || message.includes('='))) {
+      reply += `### 🧮 Giải bài toán:
+Dưới đây là các bước phân tích và giải chi tiết cho câu hỏi của bạn:
+
+**Bước 1: Phân tích đề bài**
+Dựa vào dữ kiện, chúng ta cần tìm giá trị thỏa mãn phương trình/điều kiện đã cho.
+
+**Bước 2: Giải chi tiết**
+- Ta áp dụng công thức tương ứng của dạng toán này.
+- Biến đổi tương đương các vế.
+- Giải ra kết quả cuối cùng: \`x = ...\` (hoặc kết quả tương đương).
+
+**Bước 3: Kết luận**
+Đây là một dạng toán khá phổ biến. Bạn nên lưu ý cách đặt điều kiện trước khi giải nhé.
+*(Lưu ý: Để giải chính xác 100% bài toán thực tế của bạn, hãy nhập GROQ_API_KEY hoặc GEMINI_API_KEY vào .env để tôi sử dụng AI thật nhé!)*`;
+    } 
+    // Simulate English Structure Support
+    else if (messageLower.includes('tiếng anh') || messageLower.includes('cấu trúc') || messageLower.includes('ngữ pháp') || messageLower.includes('dịch') || messageLower.includes('english')) {
+      reply += `### 🇬🇧 Phân tích Tiếng Anh:
+Dưới đây là giải thích về cấu trúc ngữ pháp / từ vựng cho bạn:
+
+**1. Cấu trúc ngữ pháp trọng tâm:**
+- Câu này sử dụng thì **Hiện tại hoàn thành (Present Perfect)** hoặc cấu trúc câu điều kiện.
+- Công thức chung: \`S + have/has + V3/ed\` hoặc cấu trúc tương ứng với câu hỏi của bạn.
+
+**2. Từ vựng cần lưu ý (Vocabulary):**
+- **Word 1 (Loại từ):** Định nghĩa và cách dùng.
+- **Word 2 (Loại từ):** Định nghĩa và cách dùng.
+
+**3. Ví dụ áp dụng:**
+- *If you study hard, you will pass the exam.* (Nếu bạn học chăm, bạn sẽ qua bài thi).
+
+*(Lưu ý: Để tôi có thể dịch và phân tích câu Tiếng Anh cụ thể của bạn bằng AI thực, hãy cấu hình GROQ_API_KEY hoặc GEMINI_API_KEY nhé!)*`;
+    }
+    // General Tóm tắt
+    else if (messageLower.includes('tóm tắt') || messageLower.includes('summary') || messageLower.includes('khái quát')) {
+      reply += `### 📝 Tóm tắt tài liệu: "${docTitle}"
 Dưới đây là tóm tắt nội dung chính do trợ lý AI tổng hợp:
 1. **Nội dung chính:** ${docDesc || 'Tài liệu học tập trung cập nhật các kiến thức trọng tâm.'}
 2. **Chi tiết lời giải:** ${docSolution ? docSolution.substring(0, 150) + '...' : 'Lời giải chi tiết đính kèm đầy đủ.'}
 3. **Đánh giá cấp độ:** Đây là tài liệu thuộc danh mục **${document?.category || 'Khác'}**, rất phù hợp cho ôn tập thi học kỳ và củng cố kiến thức nâng cao.`;
     } else if (messageLower.includes('đáp án') || messageLower.includes('lời giải') || messageLower.includes('solution') || messageLower.includes('giải')) {
-      reply = `### 🔑 Lời giải & Đáp án cho tài liệu: "${docTitle}"
+      reply += `### 🔑 Lời giải & Đáp án cho tài liệu: "${docTitle}"
 Dưới đây là phần phân tích và hướng dẫn giải từ hệ thống:
 ${docSolution || 'Tài liệu này chưa có phần lời giải chi tiết bằng văn bản. Bạn có thể tham khảo tệp đính kèm hoặc tải lên lời giải của riêng mình để tôi phân tích nhé!'}
 \n\n*Nếu bạn có câu hỏi cụ thể về từng bước giải trên, hãy gõ câu hỏi xuống dưới, tôi sẽ hỗ trợ giải thích cặn kẽ!*`;
     } else if (messageLower.includes('xin chào') || messageLower.includes('hello') || messageLower.includes('hi')) {
-      reply = `Xin chào! Tôi là **Trợ lý AI học tập thông minh (EduShare AI)**. 🧠✨
-Tôi đã đọc và ghi nhớ toàn bộ nội dung của tài liệu **"${docTitle}"**.
+      reply += `Xin chào! Tôi là **Trợ lý AI học tập thông minh (EduShare AI)**. 🧠✨
+Tôi đã kết nối trực tiếp vào file tài liệu **"${docTitle}"** của bạn. (Vui lòng cấu hình GEMINI_API_KEY trong .env để tôi có thể đọc toàn bộ file bằng AI thật).
 
 Bạn cần tôi giúp gì?
 - 📝 **Tóm tắt nội dung** chính của tài liệu.
@@ -323,8 +576,7 @@ Bạn cần tôi giúp gì?
 - 🎴 **Tạo bộ thẻ ghi nhớ (Flashcards)** từ tài liệu.
 - ✏️ **Tạo bài trắc nghiệm nhanh (Quiz)** để tự ôn luyện.`;
     } else {
-      // General contextual response
-      reply = `### 🧠 Phân tích của Trợ lý AI về: "${docTitle}"
+      reply += `### 🧠 Phân tích của Trợ lý AI về: "${docTitle}"
 Dựa trên kiến thức của tài liệu này, câu hỏi của bạn: *"${message}"* có thể được giải thích như sau:
 
 - **Bối cảnh:** Tài liệu này thảo luận về **${document?.category || 'Chủ đề học tập'}**, với nội dung chính là *"${docTitle}"*.
@@ -333,7 +585,7 @@ Dựa trên kiến thức của tài liệu này, câu hỏi của bạn: *"${me
   2. Bạn nên kết hợp tạo **Flashcards** để ghi nhớ lâu hơn thuật ngữ này hoặc làm bài kiểm tra **Quiz** mà tôi tự động biên soạn từ tài liệu.
   3. Để giải quyết câu hỏi này một cách tối ưu, hãy tập trung vào các ý chính đã được nêu trong tài liệu ${docSolution ? 'và phần lời giải đính kèm' : ''}.
 
-Bạn có muốn tôi làm rõ hơn phần kiến thức nào khác trong tài liệu không?`;
+*(Lưu ý: Đây là câu trả lời mô phỏng. Để Trợ lý AI có thể trả lời thật sự như ChatGPT dựa trên file tải về, hãy nhập biến GROQ_API_KEY hoặc GEMINI_API_KEY vào tệp .env của hệ thống Backend).*`;
     }
     
     res.status(200).json({ reply });
@@ -499,6 +751,109 @@ router.post('/ai/generate-flashcards', async (req: Request, res: Response) => {
     
     res.status(201).json({
       message: deck_id ? 'Flashcards generated and added to deck!' : 'Flashcards generated successfully!',
+      cards: deck_id ? insertedCards : cards
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI automatically generates flashcards from note content
+router.post('/ai/generate-flashcards-from-note', async (req: Request, res: Response) => {
+  try {
+    const { note_content, deck_id, document_id } = req.body;
+    
+    if (!note_content || note_content.trim() === '') {
+      return res.status(400).json({ error: 'Nội dung ghi chú không được để trống.' });
+    }
+
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const groqApiKey = process.env.GROQ_API_KEY;
+    let cards: {front: string, back: string}[] = [];
+
+    // Prompt for generating flashcards with Universal Standardization
+    const prompt = `Bạn là một chuyên gia giáo dục thiết kế thẻ ghi nhớ (Flashcards). Nhiệm vụ của bạn là đọc đoạn văn bản dưới đây và trích xuất ra các cặp thông tin quan trọng nhất để làm Flashcard.
+
+QUY TẮC CHUẨN HOÁ (Áp dụng cho TẤT CẢ các môn học và ngành nghề):
+Cho dù đoạn văn bản có lộn xộn hay không rõ ràng, hãy cố gắng bóc tách các ý chính thành dạng Thẻ (Front - Back).
+- "front": [Từ khóa / Khái niệm / Câu hỏi ngắn / Tên riêng / Công thức]
+- "back": [Định nghĩa / Giải thích súc tích / Ý nghĩa] + [Ví dụ thực tế / Ứng dụng nếu có].
+
+MỘT SỐ VÍ DỤ CHUẨN:
+- {"front": "Học máy (Machine Learning)", "back": "Là lĩnh vực AI cho phép hệ thống tự học từ dữ liệu. VD: Phân loại email rác."}
+- {"front": "Đạo hàm của sin(x)", "back": "Là cos(x). VD: Tính vận tốc từ phương trình ly độ."}
+- {"front": "Lạm phát (Inflation)", "back": "Sự tăng mức giá chung của hàng hóa/dịch vụ theo thời gian."}
+
+YÊU CẦU BẮT BUỘC:
+- Nếu văn bản quá ngắn, hãy suy luận để tạo ra ít nhất 1-2 thẻ hợp lý nhất có thể.
+- Chỉ trả về ĐÚNG MỘT MẢNG JSON thuần túy (không chứa markdown, không có \`\`\`json).
+- Object bên trong mảng chỉ được phép có 2 trường "front" và "back".
+
+Văn bản cần xử lý:
+"""
+${note_content}
+"""`;
+
+    if (groqApiKey && !groqApiKey.includes('your_')) {
+      const groq = new Groq({ apiKey: groqApiKey });
+      const completion = await groq.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: "llama-3.1-8b-instant",
+        temperature: 0.5,
+      });
+      const responseText = completion.choices[0]?.message?.content || "[]";
+      try {
+        let cleaned = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const startIdx = cleaned.indexOf('[');
+        const endIdx = cleaned.lastIndexOf(']');
+        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          cleaned = cleaned.substring(startIdx, endIdx + 1);
+        } else if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+          cleaned = `[${cleaned}]`; // Wrap single object
+        }
+        cards = JSON.parse(cleaned);
+      } catch (e) {
+        console.error("Groq JSON Parse Error:", e, responseText);
+      }
+    } else if (geminiApiKey && !geminiApiKey.includes('your_')) {
+      const genAI = new GoogleGenerativeAI(geminiApiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      try {
+        let cleaned = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const startIdx = cleaned.indexOf('[');
+        const endIdx = cleaned.lastIndexOf(']');
+        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          cleaned = cleaned.substring(startIdx, endIdx + 1);
+        } else if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+          cleaned = `[${cleaned}]`; // Wrap single object
+        }
+        cards = JSON.parse(cleaned);
+      } catch (e) {
+        console.error("Gemini JSON Parse Error:", e, responseText);
+      }
+    } else {
+      // Fallback if no API key
+      cards = [
+        { front: "Làm thế nào để tạo flashcard thực sự từ ghi chú?", back: "Bạn cần cung cấp GROQ_API_KEY hoặc GEMINI_API_KEY trong file .env" },
+        { front: "Mẫu câu hỏi (Mock)", back: "Đây là câu trả lời mẫu do hệ thống không có AI Key." }
+      ];
+    }
+    
+    const insertedCards = [];
+    if (deck_id && cards.length > 0) {
+      for (const card of cards) {
+        const insertRes = await db.query(
+          'INSERT INTO flashcards (deck_id, document_id, front, back) VALUES ($1, $2, $3, $4) RETURNING *',
+          [deck_id, document_id || null, card.front, card.back]
+        );
+        insertedCards.push(insertRes.rows[0]);
+      }
+    }
+    
+    res.status(201).json({
+      message: deck_id ? `Đã tạo và thêm ${cards.length} thẻ vào bộ bài!` : 'Tạo thẻ thành công!',
       cards: deck_id ? insertedCards : cards
     });
   } catch (error: any) {

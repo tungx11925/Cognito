@@ -20,8 +20,10 @@ const navItems = [
 
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const { 
-    isLoggedIn, 
-    setIsLoggedIn, 
+    isAuthenticated,
+    loading,
+    logout,
+    setIsAuthenticated,
     activeUser, 
     triggerMessage, 
     globalMessage, 
@@ -35,10 +37,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
 
   useEffect(() => {
-    if (!isLoggedIn) router.push('/');
-  }, [isLoggedIn, router]);
+    if (!loading && !isAuthenticated) {
+      router.push('/home');
+    }
+  }, [isAuthenticated, loading, router]);
 
-  if (!isLoggedIn) {
+  if (loading || !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "#f3f4f6" }}>
         <div className="w-8 h-8 border-4 border-[#1a3a2a] border-t-transparent rounded-full animate-spin" />
@@ -123,9 +127,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="px-3 pb-4">
           <button
             onClick={() => {
-              setIsLoggedIn(false);
+              logout();
               setShowLanding(true);
-              triggerMessage("Đăng xuất thành công! Hẹn gặp lại bạn.", "success");
             }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150"
             style={{ color: "#9ca3af", fontSize: "13.5px" }}
@@ -205,9 +208,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 onClick={() => setShowAvatarMenu(!showAvatarMenu)}
                 className="w-7 h-7 rounded-full flex items-center justify-center text-white cursor-pointer flex-shrink-0 select-none shadow-sm hover:shadow-md transition-all"
                 style={{ background: "#1a3a2a", fontSize: "11px", fontWeight: 700 }}
-                title={`${activeUser.name} (${activeUser.email})`}
+                title={`${activeUser?.name} (${activeUser?.email})`}
               >
-                {activeUser.name ? activeUser.name.charAt(0).toUpperCase() : 'U'}
+                {activeUser?.name ? activeUser.name.charAt(0).toUpperCase() : 'U'}
               </motion.div>
 
               <AnimatePresence>
@@ -226,8 +229,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                       style={{ transformOrigin: "top right" }}
                     >
                       <div className="px-4 py-2 border-b border-gray-100">
-                        <p className="text-xs font-semibold text-gray-900 truncate">{activeUser.name || 'User'}</p>
-                        <p className="text-[10px] text-gray-500 truncate">{activeUser.email || 'user@example.com'}</p>
+                        <p className="text-xs font-semibold text-gray-900 truncate">{activeUser?.name || 'User'}</p>
+                        <p className="text-[10px] text-gray-500 truncate">{activeUser?.email || 'user@example.com'}</p>
                       </div>
                       
                       <div 
@@ -257,7 +260,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                       <div 
                         onClick={() => {
                           setShowAvatarMenu(false);
-                          setIsLoggedIn(false);
+                          if (logout) logout();
+                          else setIsAuthenticated(false);
                           setShowLanding(true);
                           triggerMessage("Đăng xuất thành công! Hẹn gặp lại bạn.", "success");
                         }}

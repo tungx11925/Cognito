@@ -1,621 +1,1249 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useStudy } from "../../context/StudyContext";
+import React, { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
-  Camera,
-  Mail,
-  Phone,
-  MapPin,
-  Calendar,
-  Edit3,
-  Shield,
-  Bell,
-  Key,
-  Globe,
-  BookOpen,
-  Award,
-  TrendingUp,
-  Clock,
-  CheckCircle2,
-  ChevronRight,
-  Save,
-  X,
-  Star,
-  Activity,
-  Users,
-  Zap,
-  ArrowLeft,
+  BookOpen, Brain, Calendar, Clock, Edit3, Flame, MapPin,
+  Medal, Settings, Share2, Star, Target, TrendingUp, Trophy,
+  Zap, GraduationCap, Globe, Mail, Phone, Users, MessageSquare,
+  Award, ChevronRight, Layers, FileText, Bell, Camera,
+  CheckCircle2, BarChart2, BookMarked, Lightbulb, ArrowLeft, User
 } from "lucide-react";
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
+  ResponsiveContainer,
+} from "recharts";
+import { useStudy } from "@/context/StudyContext";
+import { Navbar } from "@/components/landing/Navbar";
+import RegisterModal from "@/components/auth/RegisterModal";
+import { AnimatePresence } from "framer-motion";
+import { VIETNAM_DATA } from "@/utils/vietnamData";
 
-const TABS = ["Thông tin", "Bảo mật", "Thông báo", "Hoạt động"];
+/* ── UI Components ───────────────────────────────────────── */
+const Card = ({ children, className = "" }: any) => {
+  // Strip off overriding tailwind classes to ensure our custom border & shadow are applied
+  const cleanedClassName = className
+    .replace(/\bborder-0\b/g, "")
+    .replace(/\bshadow-sm\b/g, "")
+    .replace(/\bshadow-md\b/g, "")
+    .replace(/\bshadow-lg\b/g, "")
+    .replace(/\bborder\b/g, "")
+    .trim();
 
-const SKILLS = [
-  { name: "React & TypeScript", level: 88 },
-  { name: "UI/UX Design", level: 72 },
-  { name: "Node.js", level: 65 },
-  { name: "Data Analysis", level: 54 },
-];
-
-const RECENT_ACTIVITIES = [
-  { icon: <BookOpen size={14} />, text: "Hoàn thành khóa học React Advanced", time: "2 giờ trước", color: "text-emerald-600 bg-emerald-50" },
-  { icon: <Award size={14} />, text: "Đạt huy hiệu \"Top Learner\"", time: "1 ngày trước", color: "text-amber-600 bg-amber-50" },
-  { icon: <Users size={14} />, text: "Tham gia nhóm học AI/ML", time: "3 ngày trước", color: "text-blue-600 bg-blue-50" },
-  { icon: <CheckCircle2 size={14} />, text: "Nộp bài tập Flashcard #14", time: "5 ngày trước", color: "text-purple-600 bg-purple-50" },
-  { icon: <Star size={14} />, text: "Đánh giá 5 sao khóa học Python", time: "1 tuần trước", color: "text-orange-600 bg-orange-50" },
-];
-
-const NOTIFICATION_SETTINGS = [
-  { label: "Nhắc nhở học tập hàng ngày", desc: "Gửi thông báo vào 8:00 sáng mỗi ngày", enabled: true },
-  { label: "Cập nhật khóa học mới", desc: "Khi có nội dung mới từ khóa học đã đăng ký", enabled: true },
-  { label: "Tin nhắn từ cộng đồng", desc: "Thông báo khi có người nhắn tin hoặc trả lời", enabled: false },
-  { label: "Báo cáo tiến độ tuần", desc: "Tổng kết học tập gửi mỗi Chủ nhật", enabled: true },
-  { label: "Thông báo khuyến mãi", desc: "Ưu đãi và chương trình đặc biệt", enabled: false },
-];
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
-function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onChange}
-      className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${enabled ? "bg-[#2a4a38]" : "bg-gray-200"}`}
-    >
-      <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ${enabled ? "translate-x-6" : "translate-x-1"}`} />
-    </button>
-  );
-}
-
-function SkillBar({ name, level }: { name: string; level: number }) {
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-1.5">
-        <span className="text-[13px] text-[#1a2e23]">{name}</span>
-        <span className="text-[12px] text-[#5a7a66] font-medium">{level}%</span>
-      </div>
-      <div className="h-1.5 bg-[#e8f0ec] rounded-full overflow-hidden">
-        <div
-          className="h-full bg-gradient-to-r from-[#2a4a38] to-[#3d6b52] rounded-full transition-all duration-700"
-          style={{ width: `${level}%` }}
-        />
-      </div>
+    <div className={`bg-white rounded-2xl border-2 border-[#1a2e1c]/45 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.16)] overflow-hidden transition-all duration-300 hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.24)] hover:border-[#1a2e1c]/65 ${cleanedClassName}`}>
+      {children}
     </div>
   );
+};
+const CardHeader = ({ children, className = "" }: any) => <div className={`px-6 pt-5 pb-4 ${className}`}>{children}</div>;
+const CardTitle = ({ children, className = "" }: any) => <h3 className={`font-semibold text-gray-900 ${className}`}>{children}</h3>;
+const CardContent = ({ children, className = "" }: any) => <div className={`px-6 pb-6 ${className}`}>{children}</div>;
+const Badge = ({ children, className = "", variant = "default" }: any) => {
+  const base = "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold";
+  const variants: any = { default: "bg-gray-100 text-gray-800", outline: "border border-gray-200 text-gray-800" };
+  return <span className={`${base} ${variants[variant] || ""} ${className}`}>{children}</span>;
+};
+const Button = ({ children, className = "", size = "default", variant = "default", ...props }: any) => {
+  const base = "inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none";
+  const sizes: any = { default: "h-10 px-4 py-2", sm: "h-8 px-3 text-xs" };
+  const variants: any = { default: "bg-[#1a2e1c] text-white hover:bg-[#2d5a3d]", outline: "border border-gray-200 bg-transparent hover:bg-gray-50 text-gray-900" };
+  return <button className={`${base} ${sizes[size] || sizes.default} ${variants[variant] || variants.default} ${className}`} {...props}>{children}</button>;
+};
+const Progress = ({ value, className = "", children }: any) => (
+  <div className={`relative w-full overflow-hidden rounded-full ${className}`}>
+    {children ? children : <div className="h-full bg-primary transition-all" style={{ width: `${value || 0}%` }} />}
+  </div>
+);
+const Separator = ({ className = "" }: any) => <div className={`shrink-0 bg-gray-200 h-[1px] w-full ${className}`} />;
+
+/* ── Data ──────────────────────────────────────────── */
+const weekData = [
+  { day: "T2", minutes: 45, cards: 60 },
+  { day: "T3", minutes: 80, cards: 110 },
+  { day: "T4", minutes: 30, cards: 40 },
+  { day: "T5", minutes: 120, cards: 180 },
+  { day: "T6", minutes: 60, cards: 90 },
+  { day: "T7", minutes: 90, cards: 130 },
+  { day: "CN", minutes: 50, cards: 70 },
+];
+const subjects = [
+  { name: "Tiếng Anh", level: 82, color: "#2d5a3d", xp: "4,200 XP" },
+  { name: "Toán học", level: 68, color: "#4a7c59", xp: "2,800 XP" },
+  { name: "Hóa học", level: 55, color: "#6aad81", xp: "1,900 XP" },
+  { name: "Lịch sử", level: 74, color: "#1a2e1c", xp: "3,100 XP" },
+  { name: "Vật lý", level: 43, color: "#8ec4a0", xp: "1,200 XP" },
+];
+const flashcardSets = [
+  { title: "Từ vựng IELTS Band 7+", cards: 240, mastered: 180, category: "Tiếng Anh", lastStudied: "2 giờ trước", difficulty: "Nâng cao" },
+  { title: "Toán Cao cấp — Giải tích", cards: 120, mastered: 95, category: "Toán học", lastStudied: "Hôm qua", difficulty: "Trung bình" },
+  { title: "Lịch sử Việt Nam", cards: 85, mastered: 72, category: "Lịch sử", lastStudied: "2 ngày trước", difficulty: "Cơ bản" },
+  { title: "Hóa học Hữu cơ", cards: 160, mastered: 88, category: "Hóa học", lastStudied: "3 ngày trước", difficulty: "Nâng cao" },
+  { title: "Grammar IELTS Writing", cards: 95, mastered: 60, category: "Tiếng Anh", lastStudied: "4 ngày trước", difficulty: "Trung bình" },
+  { title: "Vật lý lượng tử cơ bản", cards: 70, mastered: 28, category: "Vật lý", lastStudied: "1 tuần trước", difficulty: "Nâng cao" },
+];
+const achievements = [
+  { icon: Flame, label: "Streak 30 ngày", desc: "Học liên tục 30 ngày", color: "text-orange-500", bg: "bg-orange-50", earned: true, date: "05/2026" },
+  { icon: Trophy, label: "Top học sinh", desc: "Xếp hạng top 5%", color: "text-yellow-500", bg: "bg-yellow-50", earned: true, date: "04/2026" },
+  { icon: Brain, label: "Trí tuệ xuất sắc", desc: "1000 thẻ trong 1 ngày", color: "text-purple-500", bg: "bg-purple-50", earned: true, date: "03/2026" },
+  { icon: Star, label: "100% chính xác", desc: "Hoàn hảo 1 bài kiểm tra", color: "text-blue-500", bg: "bg-blue-50", earned: true, date: "02/2026" },
+  { icon: Zap, label: "Học siêu tốc", desc: "500 thẻ trong 1 giờ", color: "text-green-500", bg: "bg-green-50", earned: false, date: null },
+  { icon: Medal, label: "Chuyên gia AI", desc: "100 phiên với Trợ lý AI", color: "text-gray-400", bg: "bg-gray-50", earned: false, date: null },
+];
+const friends = [
+  { name: "Trần Minh Khoa", avatar: "Khoa", streak: 45, subject: "Vật lý" },
+  { name: "Lê Thị Hoa", avatar: "Hoa", streak: 28, subject: "Tiếng Anh" },
+  { name: "Phạm Quốc Bảo", avatar: "Bảo", streak: 15, subject: "Toán học" },
+  { name: "Ngô Thị Lan", avatar: "Lan", streak: 62, subject: "Hóa học" },
+];
+const recentDocs = [
+  { title: "Giáo trình IELTS Academic Reading", pages: 124, read: 89, type: "PDF" },
+  { title: "Bộ đề thi thử Đại học Quốc gia", pages: 48, read: 48, type: "Đề thi" },
+  { title: "Cambridge Grammar in Use", pages: 320, read: 210, type: "Sách" },
+];
+const diffColor: Record<string, string> = {
+  "Nâng cao": "bg-red-50 text-red-600 border-red-200",
+  "Trung bình": "bg-yellow-50 text-yellow-700 border-yellow-200",
+  "Cơ bản": "bg-green-50 text-green-700 border-green-200",
+};
+
+const currentStreak = 32;
+const longestStreak = 45;
+const streakTarget = 100;
+const streakDays = Array.from({ length: 42 }, (_, i) => {
+  const daysAgo = 41 - i;
+  if (daysAgo < 32) return true;
+  if (daysAgo < 38) return [33, 34, 36].includes(daysAgo) ? false : true;
+  return Math.random() > 0.4;
+}).map((active, i) => ({ active, day: i }));
+
+function StreakCard() {
+  const progressPct = Math.min((currentStreak / streakTarget) * 100, 100);
+
+  return (
+    <Card className="border-0 shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
+            <Flame className="w-4.5 h-4.5 text-orange-500" />
+            Streak ngày học
+          </CardTitle>
+          <Badge className="bg-orange-50 text-orange-600 border border-orange-200 text-xs px-2">
+            🔥 {currentStreak} ngày
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-4">
+        <div className="flex items-end justify-between">
+          <div>
+            <div className="flex items-end gap-2">
+              <span className="text-5xl font-bold text-[#1a2e1c]">{currentStreak}</span>
+              <span className="text-gray-400 mb-2 text-sm">/ {streakTarget} ngày mục tiêu</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">Kỷ lục cá nhân: <span className="font-semibold text-[#2d5a3d]">{longestStreak} ngày</span></p>
+          </div>
+          <div className="text-right text-xs text-gray-400">
+            <p>Hôm nay</p>
+            <p className="text-[#2d5a3d] font-semibold mt-0.5">✓ Đã học</p>
+          </div>
+        </div>
+
+        <div>
+          <div className="flex justify-between text-xs text-gray-400 mb-1.5">
+            <span>Tiến độ đến mục tiêu {streakTarget} ngày</span>
+            <span className="text-[#2d5a3d] font-medium">{progressPct.toFixed(0)}%</span>
+          </div>
+          <Progress value={progressPct} className="h-2.5 bg-gray-100 [&>div]:bg-gradient-to-r [&>div]:from-orange-400 [&>div]:to-[#2d5a3d]">
+             <div className="h-full bg-gradient-to-r from-orange-400 to-[#2d5a3d] rounded-full transition-all" style={{ width: `${progressPct}%` }} />
+          </Progress>
+        </div>
+
+        <div>
+          <p className="text-xs text-gray-400 mb-2">6 tuần gần đây</p>
+          <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
+            {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map(d => (
+              <div key={d} className="text-center text-[10px] text-gray-300 font-medium pb-0.5">{d}</div>
+            ))}
+            {streakDays.map((d, i) => (
+              <div
+                key={i}
+                title={d.active ? "Đã học" : "Chưa học"}
+                className={`aspect-square rounded-md transition-all ${
+                  d.active
+                    ? i >= 42 - currentStreak
+                      ? "bg-[#1a2e1c]"
+                      : "bg-[#6aad81]"
+                    : "bg-gray-100"
+                }`}
+              />
+            ))}
+          </div>
+          <div className="flex items-center justify-end gap-3 mt-2 text-[10px] text-gray-400">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-gray-100 inline-block" />Chưa học</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-[#6aad81] inline-block" />Đã học</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-[#1a2e1c] inline-block" />Streak hiện tại</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 pt-1">
+          {[
+            { label: "Tuần này", value: "7/7", icon: "✅", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
+            { label: "Tháng này", value: "32/32", icon: "📅", bg: "bg-[#edf4fc]", border: "border-blue-200" },
+            { label: "Cần duy trì", value: `${streakTarget - currentStreak} ngày`, icon: "🎯", bg: "bg-[#fcf8ec]", border: "border-amber-200" },
+          ].map(s => (
+            <div key={s.label} className={`p-2.5 rounded-xl ${s.bg} border ${s.border} text-center shadow-2xs`}>
+              <p className="text-base">{s.icon}</p>
+              <p className="text-sm font-semibold text-gray-800 mt-0.5">{s.value}</p>
+              <p className="text-[10px] text-gray-400 font-medium">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
-function ProfileContent() {
-  const { isLoggedIn, activeUser, setActiveUser, triggerMessage, analyticsData } = useStudy();
-  const searchParams = useSearchParams();
+export default function UserProfile() {
   const router = useRouter();
-  const tabParam = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState("overview");
+  const {
+    isAuthenticated,
+    showLoginModal,
+    setShowLoginModal,
+    activeUser,
+    triggerMessage,
+    updateAvatar,
+    updateProfile,
+    toggleVerification,
+  } = useStudy();
 
-  const [activeTab, setActiveTab] = useState("Thông tin");
-  const [editing, setEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [notifications, setNotifications] = useState(NOTIFICATION_SETTINGS);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  // Profile Edit Fields
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEducation, setEditEducation] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [selectedProvince, setSelectedProvince] = useState<string>("");
+  const [selectedDistrict, setSelectedDistrict] = useState<string>("");
+  const [provinceQuery, setProvinceQuery] = useState("");
+  const [districtQuery, setDistrictQuery] = useState("");
+  const [isProvinceDropdownOpen, setIsProvinceDropdownOpen] = useState(false);
+  const [isDistrictDropdownOpen, setIsDistrictDropdownOpen] = useState(false);
 
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    location: "",
-    website: "",
-    bio: "",
-    dob: "",
+  // Filtered lists for search combobox
+  const filteredProvinces = VIETNAM_DATA.filter(p => {
+    const query = provinceQuery.trim();
+    // If query is empty or is exactly the name of selected province, show all
+    const isSelectedName = selectedProvince && VIETNAM_DATA.find(x => x.id === selectedProvince)?.name === provinceQuery;
+    if (!query || isSelectedName) {
+      return true;
+    }
+    return p.name.toLowerCase().includes(query.toLowerCase());
   });
-  const [tempForm, setTempForm] = useState(form);
 
-  // Authentication check: redirect to home if not logged in
-  useEffect(() => {
-    if (!isLoggedIn) {
-      router.push('/');
-    }
-  }, [isLoggedIn, router]);
-
-  // Sync tab with URL parameter if exists
-  useEffect(() => {
-    if (tabParam) {
-      const p = tabParam.toLowerCase();
-      if (p === "security" || p === "settings" || p === "bảo mật" || p === "baomat") {
-        setActiveTab("Bảo mật");
-      } else if (p === "notifications" || p === "thông báo" || p === "thongbao") {
-        setActiveTab("Thông báo");
-      } else if (p === "activity" || p === "hoạt động" || p === "hoatdong") {
-        setActiveTab("Hoạt động");
-      } else {
-        setActiveTab("Thông tin");
-      }
-    }
-  }, [tabParam]);
-
-  // Load profile from API and localStorage
-  useEffect(() => {
-    if (activeUser && activeUser.id) {
-      const fetchProfile = async () => {
-        try {
-          const token = localStorage.getItem('token');
-          const res = await fetch(`${API_BASE_URL}/users/profile`, {
-            headers: {
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            }
-          });
-          
-          let dbData = { name: activeUser.name, email: activeUser.email };
-          if (res.ok) {
-            dbData = await res.json();
-          }
-
-          // Fetch extra fields from local storage
-          let meta = {
-            phone: "0901 234 567",
-            location: "Hồ Chí Minh, Việt Nam",
-            website: "minhphuc.dev",
-            bio: "Kỹ sư phần mềm với 4 năm kinh nghiệm. Đam mê học hỏi công nghệ mới và chia sẻ kiến thức với cộng đồng.",
-            dob: "1998-05-15",
-          };
-
-          const stored = localStorage.getItem(`profile_metadata_${activeUser.id}`);
-          if (stored) {
-            try {
-              meta = { ...meta, ...JSON.parse(stored) };
-            } catch (e) {
-              console.error(e);
-            }
-          }
-
-          const initialForm = {
-            name: dbData.name || activeUser.name || "",
-            email: dbData.email || activeUser.email || "",
-            phone: meta.phone || "",
-            location: meta.location || "",
-            website: meta.website || "",
-            bio: meta.bio || "",
-            dob: meta.dob || "",
-          };
-
-          setForm(initialForm);
-          setTempForm(initialForm);
-        } catch (e) {
-          console.error("Failed to load profile:", e);
+  const selectedProvObj = VIETNAM_DATA.find(p => p.id === selectedProvince);
+  const filteredDistricts = selectedProvObj 
+    ? selectedProvObj.districts.filter(d => {
+        const query = districtQuery.trim();
+        // If query is empty or is exactly the name of selected district, show all
+        if (!query || query === selectedDistrict) {
+          return true;
         }
-      };
-      
-      fetchProfile();
-    }
-  }, [activeUser]);
+        return d.name.toLowerCase().includes(query.toLowerCase());
+      })
+    : [];
 
-  if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f3f4f6]">
-        <div className="w-8 h-8 border-4 border-[#2a4a38] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  const handleEdit = () => {
-    setTempForm(form);
-    setEditing(true);
-  };
-
-  const handleSave = async () => {
-    if (!tempForm.name.trim() || !tempForm.email.trim()) {
-      triggerMessage("Vui lòng điền đầy đủ họ tên và email", "error");
+  const handleSaveProfile = async () => {
+    if (!editName || editName.trim().length < 2) {
+      triggerMessage("Tên người dùng phải có ít nhất 2 ký tự", "error");
       return;
     }
 
-    setIsSaving(true);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/users/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ name: tempForm.name, email: tempForm.email })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        // Update global context user state
-        setActiveUser({
-          id: data.id,
-          name: data.name,
-          email: data.email,
-          role: data.role
-        });
-
-        // Save local metadata
-        localStorage.setItem(`profile_metadata_${activeUser.id}`, JSON.stringify({
-          phone: tempForm.phone,
-          location: tempForm.location,
-          website: tempForm.website,
-          bio: tempForm.bio,
-          dob: tempForm.dob
-        }));
-
-        setForm(tempForm);
-        setEditing(false);
-        triggerMessage("Cập nhật thông tin tài khoản thành công!", "success");
+    let finalAddress = "";
+    if (selectedProvince === "custom") {
+      finalAddress = editAddress.trim() || provinceQuery.trim();
+    } else {
+      const provObj = VIETNAM_DATA.find(p => p.id === selectedProvince);
+      if (provObj) {
+        finalAddress = selectedDistrict ? `${selectedDistrict}, ${provObj.name}` : provObj.name;
       } else {
-        const errData = await res.json();
-        triggerMessage(errData.error || "Không thể cập nhật hồ sơ", "error");
+        // Fallback to text input values directly
+        const pQuery = provinceQuery.trim();
+        const dQuery = districtQuery.trim();
+        if (pQuery && dQuery) {
+          finalAddress = `${dQuery}, ${pQuery}`;
+        } else if (pQuery) {
+          finalAddress = pQuery;
+        } else {
+          finalAddress = editAddress.trim();
+        }
       }
-    } catch (e) {
-      triggerMessage("Lỗi kết nối máy chủ", "error");
+    }
+
+    setSavingProfile(true);
+    try {
+      const success = await updateProfile({
+        name: editName,
+        phone: editPhone,
+        education: editEducation,
+        address: finalAddress
+      });
+      if (success) {
+        setIsEditing(false);
+      }
+    } catch (error) {
+      console.error(error);
+      triggerMessage("Lỗi khi cập nhật hồ sơ", "error");
     } finally {
-      setIsSaving(false);
+      setSavingProfile(false);
+    }
+  };
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      triggerMessage("Vui lòng chọn file ảnh hợp lệ", "error");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      triggerMessage("Kích thước ảnh tối đa là 5MB", "error");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      await updateAvatar(file);
+    } catch (error) {
+      console.error(error);
+      triggerMessage("Lỗi khi tải ảnh lên", "error");
+    } finally {
+      setUploading(false);
     }
   };
 
-  const handleCancel = () => {
-    setEditing(false);
-  };
-
-  const toggleNotif = (idx: number) => {
-    setNotifications((prev) =>
-      prev.map((n, i) => (i === idx ? { ...n, enabled: !n.enabled } : n))
-    );
-  };
-
-  // Convert raw study minutes, decks, flashcards into dynamic UI Achievements
-  const achievements = [
-    { label: "Tài liệu học tập", value: (analyticsData?.total_documents || 0).toString(), icon: <BookOpen size={16} />, color: "bg-emerald-50 text-emerald-700" },
-    { label: "Thẻ nhớ (Flashcards)", value: (analyticsData?.total_flashcards || 0).toString(), icon: <Zap size={16} />, color: "bg-amber-50 text-amber-700" },
-    { label: "Giờ học tích lũy", value: `${Math.round((analyticsData?.total_study_minutes || 0) / 60)}h`, icon: <Clock size={16} />, color: "bg-blue-50 text-blue-700" },
-    { label: "Phiên học hoàn thành", value: (analyticsData?.total_sessions || 0).toString(), icon: <Star size={16} />, color: "bg-purple-50 text-purple-700" },
-  ];
+  const userInitials = activeUser?.name
+    ? activeUser.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
+    : "NA";
 
   return (
-    <div className="min-h-screen bg-[#f3f4f6] py-10 px-4">
-      <div className="max-w-5xl mx-auto space-y-6">
-        {/* Profile Hero Card */}
-        <div className="bg-white rounded-2xl border border-[rgba(0,0,0,0.08)] overflow-hidden shadow-sm">
-          {/* Banner */}
-          <div className="h-36 bg-gradient-to-br from-[#1a3328] via-[#2a4a38] to-[#3d6b52] relative">
-            <div className="absolute inset-0 opacity-20"
-              style={{ backgroundImage: "radial-gradient(circle at 20% 50%, #6aaf89 0%, transparent 50%), radial-gradient(circle at 80% 20%, #4d8a68 0%, transparent 40%)" }}
-            />
-            {/* Back to dashboard button */}
-            <button 
-              onClick={() => router.push('/dashboard')}
-              title="Quay lại Bảng điều khiển"
-              className="absolute top-4 left-4 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md text-white text-[12px] font-bold border border-white/10 transition-all shadow-sm"
-            >
-              <ArrowLeft size={13} /> Quay lại
-            </button>
-            {/* Decorative circles */}
-            <div className="absolute top-4 right-6 w-20 h-20 rounded-full border border-white/10" />
-            <div className="absolute top-8 right-14 w-10 h-10 rounded-full border border-white/10" />
+    <div className="min-h-screen bg-[#ebe8e0] grid-bg pb-10">
+
+      {/* ── Synchronized Landing Navbar ── */}
+      <Navbar 
+        isLoggedIn={isAuthenticated}
+        onSignInClick={() => setShowLoginModal(true)}
+        onDashboardClick={() => router.push('/dashboard')}
+        activeUser={activeUser!}
+      />
+
+      <div className="max-w-6xl mx-auto px-4 pt-20 pb-7 space-y-6">
+        {/* Profile Card */}
+        <Card className="border-0 shadow-md overflow-hidden bg-white">
+          {/* Cover */}
+          <div className="h-36 relative bg-[#1a2e1c]" style={{
+            backgroundImage: "radial-gradient(circle at 15% 60%, rgba(74,124,89,0.6) 0%, transparent 50%), radial-gradient(circle at 85% 30%, rgba(106,173,129,0.4) 0%, transparent 50%)",
+          }}>
           </div>
 
           <div className="px-6 pb-6">
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 -mt-10 mb-4">
-              {/* Avatar */}
-              <div className="relative flex-shrink-0">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#2a4a38] to-[#4d8a68] flex items-center justify-center text-white text-2xl font-bold border-4 border-white shadow-md">
-                  {form.name ? form.name.charAt(0).toUpperCase() : 'U'}
+            {/* Avatar + name & actions in a responsive row */}
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+                <div className="relative shrink-0 -mt-12 z-10">
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleAvatarChange} 
+                    accept="image/*" 
+                    className="hidden" 
+                  />
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-24 h-24 bg-[#2d5a3d] border-4 border-white shadow-lg rounded-full flex items-center justify-center overflow-hidden cursor-pointer group relative"
+                  >
+                    {activeUser?.avatar_url ? (
+                      <img 
+                        src={activeUser.avatar_url} 
+                        alt={activeUser.name} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      />
+                    ) : (
+                      <span className="text-3xl font-bold text-white">{userInitials}</span>
+                    )}
+                    {uploading && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-200">
+                      <Camera className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute bottom-1 right-1 w-6 h-6 bg-[#1a2e1c] hover:bg-[#2d5a3d] rounded-full flex items-center justify-center transition-colors shadow"
+                  >
+                    <Camera className="w-3 h-3 text-white" />
+                  </button>
+                  <span className="absolute top-2 right-2 w-3 h-3 bg-green-400 border-2 border-white rounded-full animate-pulse" />
                 </div>
-                <button className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#2a4a38] border-2 border-white flex items-center justify-center text-white hover:bg-[#1a3328] transition-colors">
-                  <Camera size={12} />
-                </button>
+                <div className="pb-1 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-gray-900 text-2xl font-bold">{activeUser?.name || "Nguyễn Văn An"}</h2>
+                    <Badge className="bg-[#1a2e1c] text-white text-xs px-2 py-0 hover:bg-[#2d5a3d]">⭐ Pro</Badge>
+                    <Badge className="bg-amber-100 text-amber-700 text-xs px-2 py-0 border border-amber-200">Cấp 14</Badge>
+                  </div>
+                  <p className="text-sm text-gray-400 mt-0.5">@{(activeUser as any)?.username || activeUser?.name?.toLowerCase().replace(/\s+/g, '') || "nguyenvanan"}</p>
+                  
+                  {/* XP Progress Bar */}
+                  <div className="mt-3 max-w-xs">
+                    <div className="flex justify-between text-[10px] text-gray-500 mb-1">
+                      <span className="font-semibold text-[#2d5a3d]">Tiến trình Cấp 14</span>
+                      <span className="font-medium text-gray-600">3,400 / 5,000 XP (68%)</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200/50">
+                      <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: "68%" }} />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2 sm:mb-0">
-                {editing ? (
-                  <>
-                    <button onClick={handleCancel} disabled={isSaving} className="flex items-center gap-1.5 px-4 py-2 text-[13px] text-[#5a7a66] bg-[#f0f5f2] rounded-xl hover:bg-[#e4ede8] transition-colors">
-                      <X size={14} /> Hủy
-                    </button>
-                    <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-1.5 px-4 py-2 text-[13px] text-white bg-[#2a4a38] rounded-xl hover:bg-[#1a3328] transition-colors shadow-sm">
-                      <Save size={14} /> {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
-                    </button>
-                  </>
-                ) : (
-                  <button onClick={handleEdit} className="flex items-center gap-1.5 px-4 py-2 text-[13px] text-white bg-[#2a4a38] rounded-xl hover:bg-[#1a3328] transition-colors shadow-sm">
-                    <Edit3 size={14} /> Chỉnh sửa hồ sơ
-                  </button>
-                )}
-              </div>
-            </div>
+              <div className="flex gap-2 pb-1 shrink-0">
+                <Button size="sm" variant="outline" className="gap-1.5 border-[#1a2e1c]/30 text-[#1a2e1c] hover:bg-[#1a2e1c]/5">
+                  <Share2 className="w-3.5 h-3.5" />
+                  Chia sẻ
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={() => {
+                    setActiveTab("profile");
+                    setEditName(activeUser?.name || "Nguyễn Văn An");
+                    setEditPhone(activeUser?.phone || "");
+                    
+                    // Parse address
+                    const savedAddress = activeUser?.address || "Quận Cầu Giấy, Hà Nội";
+                    const addressParts = savedAddress.split(", ");
+                    let foundProvince = null;
+                    let foundDistrict = "";
+                    let districtObj = null;
+                    
+                    if (addressParts.length >= 2) {
+                      const dist = addressParts[0].trim();
+                      const prov = addressParts[1].trim();
+                      foundProvince = VIETNAM_DATA.find(p => p.name.toLowerCase() === prov.toLowerCase());
+                      if (foundProvince) {
+                        districtObj = foundProvince.districts.find(d => d.name.toLowerCase() === dist.toLowerCase()) || null;
+                        foundDistrict = districtObj ? districtObj.name : "";
+                      }
+                    } else if (addressParts.length === 1 && addressParts[0]) {
+                      const prov = addressParts[0].trim();
+                      foundProvince = VIETNAM_DATA.find(p => p.name.toLowerCase() === prov.toLowerCase());
+                    }
 
-            {/* Name & meta */}
-            <div className="space-y-2">
-              <div>
-                <h2 className="text-xl font-bold text-[#1a2e23]">{form.name || "Học viên"}</h2>
-                <p className="text-[13px] text-[#5a7a66] mt-0.5">Học viên · Scholar Edition</p>
+                    if (foundProvince) {
+                      setSelectedProvince(foundProvince.id);
+                      setProvinceQuery(foundProvince.name);
+                      
+                      const defaultDistrict = foundProvince.districts[0]?.name || "";
+                      const currentDistrict = foundDistrict || defaultDistrict;
+                      setSelectedDistrict(currentDistrict);
+                      setDistrictQuery(currentDistrict);
+                    } else {
+                      setSelectedProvince("custom");
+                      setProvinceQuery(savedAddress);
+                      setEditAddress(savedAddress);
+                      setSelectedDistrict("");
+                      setDistrictQuery("");
+                    }
+                    
+                    // Parse education
+                    const savedEducation = activeUser?.education || "";
+                    setEditEducation(savedEducation);
+                    
+                    setIsEditing(true);
+                  }}
+                  className="bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white gap-1.5"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  Chỉnh sửa
+                </Button>
               </div>
-              <p className="text-[13px] text-[#4a6b58] leading-relaxed max-w-xl">{form.bio || "Chưa có thông tin giới thiệu."}</p>
-              <div className="flex flex-wrap items-center gap-4 text-[12px] text-[#5a7a66] pt-1">
-                {form.location && <span className="flex items-center gap-1.5"><MapPin size={12} />{form.location}</span>}
-                {form.website && <span className="flex items-center gap-1.5"><Globe size={12} /><a href={`https://${form.website}`} target="_blank" rel="noopener noreferrer" className="hover:underline">{form.website}</a></span>}
-                {form.email && <span className="flex items-center gap-1.5"><Mail size={12} />{form.email}</span>}
-              </div>
-            </div>
-
-            {/* Achievement stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-[rgba(0,0,0,0.06)]">
-              {achievements.map((a) => (
-                <div key={a.label} className={`rounded-xl p-3 flex items-center gap-3 ${a.color.split(" ")[0]}`}>
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${a.color}`}>
-                    {a.icon}
-                  </div>
-                  <div>
-                    <p className="text-[15px] font-semibold text-[#1a2e23]">{a.value}</p>
-                    <p className="text-[11px] text-[#5a7a66] leading-tight">{a.label}</p>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
+        </Card>
+
+        {/* Stats strip (Placed below, in its own clean layout) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: "Bộ Flashcard", value: "24", icon: Layers, sub: "+3 tháng này", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
+            { label: "Thẻ đã học", value: "1,840", icon: Brain, sub: "tổng cộng", bg: "bg-[#edf4fc]", border: "border-blue-200" },
+            { label: "Streak hiện tại", value: "32 ngày", icon: Flame, sub: "Kỷ lục: 45 ngày", bg: "bg-[#fcf3eb]", border: "border-orange-200" },
+            { label: "Độ chính xác", value: "94%", icon: Target, sub: "Tháng này", bg: "bg-[#f5ecfc]", border: "border-purple-200" },
+          ].map((s) => (
+            <div key={s.label} className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-[#1a2e1c]/18 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.07)] hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.12)] hover:border-[#1a2e1c]/30 transition-all duration-300">
+              <div className="w-9 h-9 rounded-xl bg-[#1a2e1c]/5 flex items-center justify-center shrink-0">
+                <s.icon className="w-4.5 h-4.5 text-[#2d5a3d]" />
+              </div>
+              <div>
+                <p className="text-gray-900 font-bold leading-tight">{s.value}</p>
+                <p className="text-[11px] text-gray-500 font-semibold leading-tight mt-0.5">{s.label}</p>
+                <p className="text-[10px] text-[#4a7c59] font-semibold leading-tight mt-0.5">{s.sub}</p>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Tabs */}
-        <div className="bg-white rounded-2xl border border-[rgba(0,0,0,0.08)] overflow-hidden shadow-sm">
-          <div className="flex border-b border-[rgba(0,0,0,0.06)] px-2">
-            {TABS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-5 py-4 text-[13px] border-b-2 transition-colors -mb-px ${
-                  activeTab === tab
-                    ? "border-[#2a4a38] text-[#2a4a38] font-medium"
-                    : "border-transparent text-[#5a7a66] hover:text-[#2a4a38]"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+        {/* ── Main Grid ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* LEFT SIDEBAR */}
+          <div className="space-y-5">
+            <StreakCard />
+
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
+                  <BarChart2 className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                  Thống kê học tập
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { label: "Tổng thời gian học", value: "248 giờ", color: "text-emerald-700", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
+                    { label: "Phiên Pomodoro", value: "620 phiên", color: "text-blue-700", bg: "bg-[#edf4fc]", border: "border-blue-200" },
+                    { label: "Câu hỏi đã trả lời", value: "12,400", color: "text-purple-700", bg: "bg-[#f5ecfc]", border: "border-purple-200" },
+                    { label: "Tài liệu đã đọc", value: "38 tài liệu", color: "text-amber-700", bg: "bg-[#fcf8ec]", border: "border-amber-200" },
+                    { label: "Phiên với AI", value: "184 phiên", color: "text-indigo-700", bg: "bg-[#eceffc]", border: "border-indigo-200" },
+                    { label: "Flashcard đã tạo", value: "1,840 thẻ", color: "text-rose-700", bg: "bg-[#fcecef]", border: "border-rose-200" },
+                  ].map((item) => (
+                    <div key={item.label} className={`flex justify-between items-center p-2.5 rounded-xl ${item.bg} border ${item.border} shadow-2xs`}>
+                      <span className="text-xs font-semibold text-gray-600">{item.label}</span>
+                      <span className={`text-xs font-bold ${item.color}`}>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
+                    <Users className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                    Bạn bè học cùng
+                  </CardTitle>
+                  <Badge variant="outline" className="text-xs border-[#2d5a3d]/30 text-[#2d5a3d]">12 bạn</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-1 gap-2.5">
+                  {friends.map((f) => (
+                    <div key={f.name} className="flex items-center gap-3 p-3 bg-[#f4f7f4] border border-[#2d5a3d]/20 rounded-xl transition-all duration-200 hover:bg-emerald-50/30 hover:border-[#2d5a3d]/35 group cursor-pointer shadow-2xs">
+                      <div className="w-9 h-9 rounded-xl bg-[#2d5a3d]/15 text-[#2d5a3d] text-xs font-bold flex items-center justify-center shrink-0">
+                        {f.avatar.slice(0, 2)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-gray-800 truncate group-hover:text-[#1a2e1c]">{f.name}</p>
+                        <p className="text-[10px] text-gray-400 font-medium mt-0.5">{f.subject} · {f.streak} ngày streak</p>
+                      </div>
+                      <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-white shadow-2xs hover:bg-[#eaf0eb] border border-gray-100">
+                        <MessageSquare className="w-3.5 h-3.5 text-[#4a7c59]" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <Button variant="outline" size="sm" className="w-full mt-3 border-2 border-dashed border-[#2d5a3d]/20 text-[#2d5a3d] hover:bg-[#2d5a3d]/5 hover:border-[#2d5a3d]/40 rounded-xl py-2 font-semibold text-xs">
+                  Xem tất cả bạn bè →
+                </Button>
+              </CardContent>
+            </Card>
           </div>
 
-          <div className="p-6">
-            {/* TAB: Thông tin */}
-            {activeTab === "Thông tin" && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left: form */}
-                <div className="lg:col-span-2 space-y-5">
-                  <div>
-                    <h3 className="text-base font-bold text-[#1a2e23] mb-4">Thông tin cá nhân</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* RIGHT MAIN CONTENT */}
+          <div className="lg:col-span-2 space-y-5">
+
+            {/* Tabs */}
+            <div className="space-y-4">
+              <div className="bg-white border border-gray-200 p-1 rounded-xl shadow-sm grid grid-cols-5">
+                {[
+                  { val: "overview", label: "Tổng quan" },
+                  { val: "profile", label: "Hồ sơ" },
+                  { val: "flashcards", label: "Flashcards" },
+                  { val: "achievements", label: "Thành tích" },
+                  { val: "documents", label: "Tài liệu" },
+                ].map(t => (
+                  <button 
+                    key={t.val} 
+                    onClick={() => setActiveTab(t.val)}
+                    className={`rounded-lg py-1.5 text-xs sm:text-sm font-medium transition-colors ${activeTab === t.val ? "bg-[#1a2e1c] text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── OVERVIEW ── */}
+              {activeTab === "overview" && (
+                <div className="space-y-4">
+                  {/* Weekly chart */}
+                  <Card className="border-0 shadow-sm">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
+                          <TrendingUp className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                          Hoạt động 7 ngày qua
+                        </CardTitle>
+                        <div className="flex items-center gap-3 text-xs text-gray-400">
+                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#2d5a3d] inline-block" />Phút học</span>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={170}>
+                        <AreaChart data={weekData}>
+                          <defs>
+                            <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#2d5a3d" stopOpacity={0.25} />
+                              <stop offset="95%" stopColor="#2d5a3d" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} unit=" ph" />
+                          <Tooltip formatter={(v: any) => [`${v} phút`, ""]} contentStyle={{ borderRadius: 10, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", fontSize: 12 }} />
+                          <Area type="monotone" dataKey="minutes" stroke="#2d5a3d" strokeWidth={2.5} fill="url(#grad1)" dot={{ fill: "#2d5a3d", r: 3.5 }} activeDot={{ r: 5 }} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                      <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
+                        {[
+                          { label: "Tổng tuần này", value: "475 phút", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/20" },
+                          { label: "Trung bình / ngày", value: "68 phút", bg: "bg-[#edf4fc]", border: "border-blue-200" },
+                          { label: "Nhiều nhất", value: "Thứ 5", bg: "bg-[#fcf3eb]", border: "border-orange-200" },
+                        ].map(s => (
+                          <div key={s.label} className={`text-center p-2 rounded-xl ${s.bg} border ${s.border} shadow-2xs`}>
+                            <p className="text-xs font-bold text-gray-800">{s.value}</p>
+                            <p className="text-[10px] text-gray-400 font-medium mt-0.5">{s.label}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Skill levels */}
+                  <Card className="border-0 shadow-sm">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
+                        <Award className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                        Trình độ môn học
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {subjects.map((s) => (
+                          <div key={s.name} className="p-3.5 bg-[#f4f7f4] border border-[#2d5a3d]/20 rounded-xl hover:border-[#2d5a3d]/40 transition-all shadow-2xs">
+                            <div className="flex justify-between items-center text-xs font-bold text-gray-700 mb-1.5">
+                              <span>{s.name}</span>
+                              <span className="text-[#2d5a3d]">{s.xp}</span>
+                            </div>
+                            <div className="h-2 bg-gray-200/80 rounded-full overflow-hidden border border-gray-200/40">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${s.level}%`, backgroundColor: s.color }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Mục tiêu hôm nay */}
+                  <Card className="border-0 shadow-sm">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
+                          <Lightbulb className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                          Nhiệm vụ hôm nay
+                        </CardTitle>
+                        <span className="text-xs text-gray-400">3/5 hoàn thành</span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0 space-y-2.5">
                       {[
-                        { label: "Họ và tên", key: "name", icon: null, type: "text" },
-                        { label: "Ngày sinh", key: "dob", icon: null, type: "date" },
-                        { label: "Email", key: "email", icon: <Mail size={14} />, type: "email" },
-                        { label: "Số điện thoại", key: "phone", icon: <Phone size={14} />, type: "tel" },
-                        { label: "Vị trí", key: "location", icon: <MapPin size={14} />, type: "text" },
-                        { label: "Website", key: "website", icon: <Globe size={14} />, type: "text" },
-                      ].map(({ label, key, icon, type }) => (
-                        <div key={key}>
-                          <label className="block text-[12px] text-[#5a7a66] mb-1.5">{label}</label>
-                          {editing ? (
-                            <div className="relative">
-                              {icon && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5a7a66]">{icon}</span>}
-                              <input
-                                type={type}
-                                value={tempForm[key as keyof typeof tempForm]}
-                                onChange={(e) => setTempForm({ ...tempForm, [key]: e.target.value })}
-                                className={`w-full py-2.5 text-[13px] text-[#1a2e23] bg-[#f0f5f2] rounded-xl border border-transparent focus:outline-none focus:border-[#2a4a38]/30 focus:bg-white transition-all ${icon ? "pl-9 pr-3.5" : "px-3.5"}`}
-                              />
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 py-2.5 px-3.5 bg-[#f9faf9] rounded-xl min-h-[42px]">
-                              {icon && <span className="text-[#5a7a66]">{icon}</span>}
-                              <span className="text-[13px] text-[#1a2e23]">
-                                {key === "dob" && form.dob ? new Date(form.dob).toLocaleDateString("vi-VN") : form[key as keyof typeof form]}
-                              </span>
-                            </div>
-                          )}
+                        { task: "Ôn tập 50 thẻ Flashcard IELTS", done: true, bg: "bg-[#eaf8f0] border-[#2d5a3d]/20 text-[#2d5a3d]" },
+                        { task: "Học 30 phút với Trợ lý AI", done: true, bg: "bg-[#eaf8f0] border-[#2d5a3d]/20 text-[#2d5a3d]" },
+                        { task: "Hoàn thành 2 phiên Pomodoro", done: true, bg: "bg-[#eaf8f0] border-[#2d5a3d]/20 text-[#2d5a3d]" },
+                        { task: "Làm bài kiểm tra Grammar", done: false, bg: "bg-[#fafaf9] border-gray-300 text-gray-700" },
+                        { task: "Đọc 10 trang tài liệu Cambridge", done: false, bg: "bg-[#fafaf9] border-gray-300 text-gray-700" },
+                      ].map((t, i) => (
+                        <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border shadow-2xs ${t.bg} transition-all duration-200 hover:translate-x-0.5`}>
+                          <CheckCircle2 className={`w-5 h-5 shrink-0 ${t.done ? "text-[#2d5a3d]" : "text-gray-300"}`} />
+                          <span className={`text-sm font-semibold ${t.done ? "line-through opacity-75" : ""}`}>{t.task}</span>
                         </div>
                       ))}
-                    </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
-                    <div className="mt-4">
-                      <label className="block text-[12px] text-[#5a7a66] mb-1.5">Giới thiệu bản thân</label>
-                      {editing ? (
-                        <textarea
-                          rows={3}
-                          value={tempForm.bio}
-                          onChange={(e) => setTempForm({ ...tempForm, bio: e.target.value })}
-                          className="w-full px-3.5 py-2.5 text-[13px] text-[#1a2e23] bg-[#f0f5f2] rounded-xl border border-transparent focus:outline-none focus:border-[#2a4a38]/30 focus:bg-white transition-all resize-none"
-                        />
-                      ) : (
-                        <div className="py-2.5 px-3.5 bg-[#f9faf9] rounded-xl min-h-[80px]">
-                          <p className="text-[13px] text-[#1a2e23] leading-relaxed">{form.bio || "Chưa có thông tin giới thiệu."}</p>
+              {/* ── PROFILE ── */}
+              {activeTab === "profile" && (
+                <div className="space-y-6">
+                  {/* Card 1: Thông tin cá nhân */}
+                  <Card className="bg-white border-0 shadow-sm rounded-2xl">
+                    <CardHeader className="pb-4 border-b border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-[#2d5a3d]">
+                            <User className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-gray-900 text-base font-bold">Thông tin cá nhân</CardTitle>
+                            <p className="text-xs text-gray-400">Chi tiết thông tin tài khoản của bạn</p>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                        <div className="flex items-center gap-2">
+                          {isEditing && (
+                            <Button 
+                              onClick={() => setIsEditing(false)}
+                              disabled={savingProfile}
+                              size="sm" 
+                              variant="ghost"
+                              className="text-gray-500 hover:bg-gray-100"
+                            >
+                              Hủy
+                            </Button>
+                          )}
+                          <Button 
+                            onClick={() => {
+                              if (isEditing) {
+                                handleSaveProfile();
+                              } else {
+                                setEditName(activeUser?.name || "Nguyễn Văn An");
+                                setEditPhone(activeUser?.phone || "");
+                                
+                                // Parse address
+                                const savedAddress = activeUser?.address || "Quận Cầu Giấy, Hà Nội";
+                                const addressParts = savedAddress.split(", ");
+                                let foundProvince = null;
+                                let foundDistrict = "";
+                                let districtObj = null;
+                                
+                                if (addressParts.length >= 2) {
+                                  const dist = addressParts[0].trim();
+                                  const prov = addressParts[1].trim();
+                                  foundProvince = VIETNAM_DATA.find(p => p.name.toLowerCase() === prov.toLowerCase());
+                                  if (foundProvince) {
+                                    districtObj = foundProvince.districts.find(d => d.name.toLowerCase() === dist.toLowerCase()) || null;
+                                    foundDistrict = districtObj ? districtObj.name : "";
+                                  }
+                                } else if (addressParts.length === 1 && addressParts[0]) {
+                                  const prov = addressParts[0].trim();
+                                  foundProvince = VIETNAM_DATA.find(p => p.name.toLowerCase() === prov.toLowerCase());
+                                }
 
-                {/* Right: skills + progress */}
-                <div className="space-y-5">
-                  <div className="bg-[#f9faf9] rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-sm font-bold text-[#1a2e23]">Kỹ năng</h4>
-                      <TrendingUp size={14} className="text-[#5a7a66]" />
-                    </div>
-                    <div className="space-y-3.5">
-                      {SKILLS.map((s) => <SkillBar key={s.name} {...s} />)}
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-br from-[#1a3328] to-[#2a4a38] rounded-xl p-4 text-white">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-white/90 text-[14px]">Mức độ học tập</h4>
-                      <Activity size={14} className="text-white/60" />
-                    </div>
-                    <div className="flex items-end gap-3 mb-3">
-                      <span className="text-3xl font-bold">98%</span>
-                      <span className="text-[12px] text-white/60 mb-1">tỉ lệ hoàn thành</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div className="h-full bg-white/80 rounded-full" style={{ width: "98%" }} />
-                    </div>
-                    <p className="text-[11px] text-white/50 mt-2">Top 3% toàn nền tảng</p>
-                  </div>
-
-                  <div className="border border-[rgba(0,0,0,0.07)] rounded-xl divide-y divide-[rgba(0,0,0,0.05)]">
-                    {[
-                      { label: "Chuỗi học liên tiếp", value: "12 ngày 🔥" },
-                      { label: "Khóa học đang học", value: `${analyticsData?.total_documents || 0} chủ đề` },
-                      { label: "Bạn học", value: "127 người" },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="flex items-center justify-between px-4 py-3">
-                        <span className="text-[13px] text-[#5a7a66]">{label}</span>
-                        <span className="text-[13px] font-medium text-[#1a2e23]">{value}</span>
+                                if (foundProvince) {
+                                  setSelectedProvince(foundProvince.id);
+                                  setProvinceQuery(foundProvince.name);
+                                  
+                                  const defaultDistrict = foundProvince.districts[0]?.name || "";
+                                  const currentDistrict = foundDistrict || defaultDistrict;
+                                  setSelectedDistrict(currentDistrict);
+                                  setDistrictQuery(currentDistrict);
+                                } else {
+                                  setSelectedProvince("custom");
+                                  setProvinceQuery(savedAddress);
+                                  setEditAddress(savedAddress);
+                                  setSelectedDistrict("");
+                                  setDistrictQuery("");
+                                }
+                                
+                                // Parse education
+                                const savedEducation = activeUser?.education || "";
+                                setEditEducation(savedEducation);
+                                
+                                setIsEditing(true);
+                              }
+                            }}
+                            disabled={savingProfile}
+                            size="sm" 
+                            variant={isEditing ? "default" : "outline"}
+                            className={isEditing ? "bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5" : "border-[#1a2e1c]/30 text-[#1a2e1c] hover:bg-[#1a2e1c]/5 gap-1.5"}
+                          >
+                            {isEditing ? (
+                              <>
+                                {savingProfile ? (
+                                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                )}
+                                <span>Lưu</span>
+                              </>
+                            ) : (
+                              <>
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>Chỉnh sửa</span>
+                              </>
+                            )}
+                          </Button>
+                        </div>
                       </div>
+                    </CardHeader>
+                    <CardContent className="pt-4 divide-y divide-gray-100/70">
+                      {[
+                        { label: "Họ và tên", value: activeUser?.name || "Nguyễn Văn An", icon: User },
+                        { label: "Học vấn", value: activeUser?.education || "Đại học Quốc gia Hà Nội", icon: GraduationCap },
+                        { label: "Địa chỉ", value: activeUser?.address || "Hà Nội, Việt Nam", icon: MapPin },
+                        { label: "Ngày tham gia", value: "Tháng 1, 2024", icon: Calendar, readOnly: true },
+                        { label: "Email liên hệ", value: activeUser?.email || "vuhailam05@gmail.com", icon: Mail, readOnly: true },
+                        { label: "Số điện thoại", value: activeUser?.phone || "+84 912 345 678", icon: Phone },
+                        { label: "Xác thực tài khoản", value: activeUser?.is_verified ? "Đã bật bảo mật 2FA" : "Chưa kích hoạt bảo mật 2FA", icon: CheckCircle2, readOnly: true }
+                      ].map((item, index) => {
+                        const isEditMode = isEditing && !item.readOnly;
+                        
+                        return (
+                          <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-2 first:pt-2 last:pb-2">
+                            <span className="text-sm font-semibold text-gray-500 flex items-center gap-3">
+                              <item.icon className="w-4.5 h-4.5 text-gray-400 shrink-0" />
+                              {item.label}
+                            </span>
+                            
+                            {isEditMode ? (
+                              <div className="w-full max-w-[280px] sm:max-w-[360px] flex flex-col gap-2">
+                                {item.label === "Họ và tên" && (
+                                  <input 
+                                    type="text"
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] focus:border-[#2d5a3d] w-full text-right"
+                                  />
+                                )}
+                                
+                                {item.label === "Số điện thoại" && (
+                                  <input 
+                                    type="text"
+                                    value={editPhone}
+                                    onChange={(e) => setEditPhone(e.target.value)}
+                                    className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] focus:border-[#2d5a3d] w-full text-right"
+                                  />
+                                )}
+                                
+                                {item.label === "Địa chỉ" && (
+                                  <div className="flex flex-col gap-2.5 w-full text-left max-w-sm sm:max-w-md ml-auto">
+                                    {/* Province Selection */}
+                                    <div className="relative w-full">
+                                      <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">Tỉnh / Thành phố</div>
+                                      <input
+                                        type="text"
+                                        placeholder="Nhập & tìm kiếm Tỉnh/Thành..."
+                                        value={provinceQuery}
+                                        onFocus={() => setIsProvinceDropdownOpen(true)}
+                                        onChange={(e) => {
+                                          setProvinceQuery(e.target.value);
+                                          setSelectedProvince("");
+                                          setSelectedDistrict("");
+                                          setDistrictQuery("");
+                                        }}
+                                        onBlur={() => setTimeout(() => setIsProvinceDropdownOpen(false), 200)}
+                                        className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full transition-all text-left"
+                                      />
+                                      {isProvinceDropdownOpen && (
+                                        <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-gray-100 rounded-xl shadow-lg py-1 text-sm scrollbar-thin scrollbar-thumb-gray-200">
+                                          {filteredProvinces.length > 0 ? (
+                                            filteredProvinces.map(p => (
+                                              <button
+                                                key={p.id}
+                                                type="button"
+                                                onClick={() => {
+                                                  setSelectedProvince(p.id);
+                                                  setProvinceQuery(p.name);
+                                                  setIsProvinceDropdownOpen(false);
+                                                  
+                                                  setSelectedDistrict("");
+                                                  setDistrictQuery("");
+                                                }}
+                                                className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] hover:text-[#2d5a3d] text-gray-700 font-medium cursor-pointer transition-colors"
+                                              >
+                                                {p.name}
+                                              </button>
+                                            ))
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setSelectedProvince("custom");
+                                                setEditAddress(provinceQuery);
+                                                setIsProvinceDropdownOpen(false);
+                                              }}
+                                              className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] text-gray-700 font-medium cursor-pointer text-[#2d5a3d]"
+                                            >
+                                              Sử dụng: "{provinceQuery}"
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* District Selection */}
+                                    {selectedProvince && selectedProvince !== "custom" && (
+                                      <div className="relative w-full">
+                                        <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">Quận / Huyện</div>
+                                        <input
+                                          type="text"
+                                          placeholder="Nhập & tìm kiếm Quận/Huyện..."
+                                          value={districtQuery}
+                                          onFocus={() => setIsDistrictDropdownOpen(true)}
+                                          onChange={(e) => {
+                                            setDistrictQuery(e.target.value);
+                                            setSelectedDistrict("");
+                                          }}
+                                          onBlur={() => setTimeout(() => setIsDistrictDropdownOpen(false), 200)}
+                                          className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full transition-all text-left"
+                                        />
+                                        {isDistrictDropdownOpen && (
+                                          <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-gray-100 rounded-xl shadow-lg py-1 text-sm scrollbar-thin scrollbar-thumb-gray-200">
+                                            {filteredDistricts.length > 0 ? (
+                                              filteredDistricts.map(d => (
+                                                <button
+                                                  key={d.name}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setSelectedDistrict(d.name);
+                                                    setDistrictQuery(d.name);
+                                                    setIsDistrictDropdownOpen(false);
+                                                  }}
+                                                  className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] hover:text-[#2d5a3d] text-gray-700 font-medium cursor-pointer transition-colors"
+                                                >
+                                                  {d.name}
+                                                </button>
+                                              ))
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setSelectedDistrict(districtQuery);
+                                                  setIsDistrictDropdownOpen(false);
+                                                }}
+                                                className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] text-gray-700 font-medium cursor-pointer text-[#2d5a3d]"
+                                              >
+                                                Sử dụng: "{districtQuery}"
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Custom Address Input */}
+                                    {selectedProvince === "custom" && (
+                                      <div className="relative w-full">
+                                        <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">Địa chỉ chi tiết</div>
+                                        <input
+                                          type="text"
+                                          placeholder="Nhập địa chỉ của bạn..."
+                                          value={editAddress}
+                                          onChange={(e) => setEditAddress(e.target.value)}
+                                          className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full text-left transition-all"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                
+                                {item.label === "Học vấn" && (
+                                  <div className="flex flex-col gap-1 w-full text-left max-w-sm sm:max-w-md ml-auto">
+                                    <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">Trường học</div>
+                                    <input 
+                                      type="text"
+                                      placeholder="Nhập tên trường học của bạn..."
+                                      value={editEducation}
+                                      onChange={(e) => setEditEducation(e.target.value)}
+                                      className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full text-left transition-all"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            ) : item.label === "Xác thực tài khoản" ? (
+                              <div className="flex items-center gap-3">
+                                {activeUser?.is_verified ? (
+                                  <>
+                                    <Badge className="bg-green-50 hover:bg-green-50 text-green-700 border border-green-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
+                                      Đã bật 2FA
+                                    </Badge>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      onClick={() => toggleVerification(false)}
+                                      className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 text-xs py-1 h-8"
+                                    >
+                                      Tắt bảo mật
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Badge className="bg-gray-50 hover:bg-gray-50 text-gray-500 border border-gray-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
+                                      Chưa kích hoạt
+                                    </Badge>
+                                    <Button 
+                                      size="sm" 
+                                      onClick={() => toggleVerification(true)}
+                                      className="bg-[#2d5a3d] hover:bg-[#1f3f2a] text-white text-xs py-1 h-8"
+                                    >
+                                      Kích hoạt 2FA
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-sm font-bold text-gray-800 truncate max-w-[220px] sm:max-w-[420px] text-right">{item.value}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </CardContent>
+                  </Card>
+
+                  {/* Card 2: Premium Account Status Card (Positioned below Card 1) */}
+                  <Card className="border-0 shadow-sm overflow-hidden bg-white rounded-2xl flex flex-col md:flex-row">
+                  {/* Premium Gradient Header (Left block on md screens, top on small screens) */}
+                  <div className="relative p-8 text-white bg-gradient-to-br from-[#7C3AED] via-[#6D28D9] to-[#4C1D95] overflow-hidden md:w-80 shrink-0 flex flex-col justify-between">
+                    {/* Circle background decorations */}
+                    <div className="absolute right-[-10%] top-[-20%] w-32 h-32 rounded-full bg-white/10 blur-xl pointer-events-none" />
+                    <div className="absolute left-[-20%] bottom-[-20%] w-32 h-32 rounded-full bg-white/10 blur-lg pointer-events-none" />
+                    
+                    <div className="flex items-center gap-2 mb-8 md:mb-0">
+                      <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center backdrop-blur-md">
+                        <span className="text-lg">🛡️</span>
+                      </div>
+                      <span className="text-sm font-bold tracking-wide text-white/90">Trạng thái tài khoản</span>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs text-purple-200 font-medium">Gói hiện tại</p>
+                      <div className="flex items-center gap-2.5 mt-1">
+                        <h3 className="text-3xl font-extrabold tracking-tight">Miễn phí</h3>
+                        <span className="px-2.5 py-0.5 text-[10px] font-bold bg-white/20 border border-white/20 rounded-full backdrop-blur-sm">
+                          Cơ bản
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card Body (Right block) */}
+                  <CardContent className="p-8 flex-1 flex flex-col justify-between gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-5">
+                        {/* Recommended Upgrade Label */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-[#D97706]">
+                            <span className="text-base">✨</span>
+                            <span className="text-sm font-bold text-gray-800">Nâng cấp PRO</span>
+                          </div>
+                          <span className="px-2 py-0.5 text-[10px] font-bold text-[#D97706] bg-[#FEF3C7] rounded-md border border-[#FDE68A]">
+                            Đề xuất
+                          </span>
+                        </div>
+
+                          {/* Feature List */}
+                          <ul className="grid grid-cols-1 gap-3">
+                            {[
+                              "Không giới hạn bộ thẻ flashcard",
+                              "Phân tích học tập nâng cao",
+                              "Tải xuống nội dung offline",
+                              "Ưu tiên hỗ trợ 24/7"
+                            ].map((feat, idx) => (
+                              <li key={idx} className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0 mt-0.5">
+                                  <span className="text-emerald-600 text-xs font-bold">✓</span>
+                                </div>
+                                <span className="text-sm font-medium text-gray-600 leading-tight">{feat}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {/* Price Tag Box and Actions */}
+                        <div className="flex flex-col justify-between gap-4">
+                          {/* Price Tag Box */}
+                          <div className="p-4 rounded-xl bg-[#F5F3FF] border border-[#DDD6FE]/40 flex items-center justify-between">
+                            <div>
+                              <p className="text-[10px] text-purple-400 line-through font-semibold">Giá đề xuất: 99K</p>
+                              <div className="flex items-baseline gap-1 mt-0.5">
+                                <span className="text-xl font-extrabold text-[#6D28D9]">69K</span>
+                                <span className="text-xs font-bold text-[#6D28D9]/70">/tháng</span>
+                              </div>
+                            </div>
+                            <span className="px-2 py-0.5 text-xs font-extrabold text-emerald-600 bg-emerald-50 rounded-md border border-emerald-100">
+                              -30%
+                            </span>
+                          </div>
+
+                          {/* CTA button and timer */}
+                          <div className="space-y-2.5">
+                            <Button className="w-full py-5 bg-gradient-to-r from-[#7C3AED] to-[#6D28D9] hover:from-[#6D28D9] hover:to-[#5B21B6] text-white font-bold rounded-xl shadow-md shadow-purple-500/10 hover:shadow-lg transition-all flex items-center justify-center gap-2 border-0">
+                              <span>👑</span>
+                              <span>Nâng cấp ngay</span>
+                            </Button>
+                            <div className="flex items-center justify-center gap-1.5 text-[10px] font-semibold text-gray-400">
+                              <span className="text-xs">🕒</span>
+                              <span>Ưu đãi kết thúc sau 2 ngày</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* ── FLASHCARDS ── */}
+              {activeTab === "flashcards" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-700 font-medium">24 bộ · 1,840 thẻ tổng</p>
+                      <p className="text-xs text-gray-400">1,240 thẻ đã thành thạo (67%)</p>
+                    </div>
+                    <Button size="sm" className="bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white gap-1.5">
+                      <Zap className="w-3.5 h-3.5" />
+                      Tạo bộ mới
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {flashcardSets.map((set, i) => (
+                      <Card key={i} className="border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group border-l-4"
+                        style={{ borderLeftColor: subjects.find(s => s.name.includes(set.category.split(" ")[0]))?.color || "#2d5a3d" }}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1 min-w-0 pr-2">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <Badge variant="outline" className="text-xs border-[#2d5a3d]/30 text-[#2d5a3d] shrink-0">{set.category}</Badge>
+                                <Badge variant="outline" className={`text-xs shrink-0 ${diffColor[set.difficulty]}`}>{set.difficulty}</Badge>
+                              </div>
+                              <h3 className="text-sm text-gray-900 group-hover:text-[#1a2e1c] transition-colors leading-snug">{set.title}</h3>
+                            </div>
+                            <BookMarked className="w-4.5 h-4.5 text-gray-300 group-hover:text-[#2d5a3d] transition-colors shrink-0" />
+                          </div>
+                          <Progress value={(set.mastered / set.cards) * 100} className="h-1.5 bg-gray-100 mb-2">
+                             <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: `${(set.mastered / set.cards) * 100}%` }} />
+                          </Progress>
+                          <div className="flex items-center justify-between text-xs text-gray-400">
+                            <span>{set.mastered}/{set.cards} thẻ thành thạo</span>
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{set.lastStudied}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* TAB: Bảo mật */}
-            {activeTab === "Bảo mật" && (
-              <div className="max-w-xl space-y-5">
-                <h3 className="text-base font-bold text-[#1a2e23]">Bảo mật tài khoản</h3>
-
-                {[
-                  {
-                    icon: <Key size={18} className="text-[#2a4a38]" />,
-                    title: "Đổi mật khẩu",
-                    desc: "Cập nhật lần cuối 3 tháng trước",
-                    action: "Đổi ngay",
-                  },
-                  {
-                    icon: <Shield size={18} className="text-[#2a4a38]" />,
-                    title: "Xác thực 2 yếu tố (2FA)",
-                    desc: "Chưa được kích hoạt — bảo vệ tài khoản của bạn",
-                    action: "Kích hoạt",
-                    badge: "Khuyến nghị",
-                  },
-                  {
-                    icon: <Activity size={18} className="text-[#2a4a38]" />,
-                    title: "Phiên đăng nhập",
-                    desc: "1 thiết bị đang hoạt động",
-                    action: "Xem tất cả",
-                  },
-                ].map((item) => (
-                  <div key={item.title} className="flex items-center gap-4 p-4 bg-[#f9faf9] rounded-xl hover:bg-[#f0f5f2] transition-colors group">
-                    <div className="w-10 h-10 rounded-xl bg-[#e8f0ec] flex items-center justify-center flex-shrink-0">
-                      {item.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[13px] font-medium text-[#1a2e23]">{item.title}</p>
-                        {item.badge && (
-                          <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">{item.badge}</span>
-                        )}
-                      </div>
-                      <p className="text-[12px] text-[#5a7a66] mt-0.5">{item.desc}</p>
-                    </div>
-                    <button className="flex items-center gap-1 text-[12px] text-[#2a4a38] font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                      {item.action} <ChevronRight size={13} />
-                    </button>
-                  </div>
-                ))}
-
-                <div className="mt-6 p-4 border border-red-100 bg-red-50/50 rounded-xl">
-                  <p className="text-[13px] font-medium text-red-700 mb-0.5">Vùng nguy hiểm</p>
-                  <p className="text-[12px] text-red-500 mb-3">Xóa tài khoản sẽ không thể khôi phục. Mọi dữ liệu học tập sẽ bị mất.</p>
-                  <button className="text-[13px] text-red-600 hover:text-red-700 font-medium transition-colors">
-                    Yêu cầu xóa tài khoản →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: Thông báo */}
-            {activeTab === "Thông báo" && (
-              <div className="max-w-xl">
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="text-base font-bold text-[#1a2e23]">Tùy chọn thông báo</h3>
-                  <span className="text-[12px] text-[#5a7a66]">{notifications.filter((n) => n.enabled).length}/{notifications.length} đang bật</span>
-                </div>
-                <div className="space-y-2">
-                  {notifications.map((notif, idx) => (
-                    <div key={notif.label} className="flex items-center gap-4 p-4 bg-[#f9faf9] rounded-xl hover:bg-[#f0f5f2] transition-colors">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium text-[#1a2e23]">{notif.label}</p>
-                        <p className="text-[12px] text-[#5a7a66] mt-0.5">{notif.desc}</p>
-                      </div>
-                      <Toggle enabled={notif.enabled} onChange={() => toggleNotif(idx)} />
-                    </div>
-                  ))}
-                </div>
-                <button 
-                  type="button"
-                  onClick={() => triggerMessage("Đã lưu tùy chọn thông báo thành công!", "success")}
-                  className="mt-4 w-full py-3 text-[13px] text-white bg-[#2a4a38] rounded-xl hover:bg-[#1a3328] transition-colors"
-                >
-                  Lưu cài đặt thông báo
-                </button>
-              </div>
-            )}
-
-            {/* TAB: Hoạt động */}
-            {activeTab === "Hoạt động" && (
-              <div>
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="text-base font-bold text-[#1a2e23]">Lịch sử hoạt động</h3>
-                  <button className="text-[12px] text-[#5a7a66] hover:text-[#2a4a38] transition-colors">Xem tất cả</button>
-                </div>
-
-                {/* Heatmap mini */}
-                <div className="mb-6 p-4 bg-[#f9faf9] rounded-xl">
-                  <p className="text-[12px] text-[#5a7a66] mb-3">Biểu đồ học tập — 4 tuần gần nhất</p>
-                  <div className="flex gap-1">
-                    {Array.from({ length: 28 }, (_, i) => {
-                      const level = Math.floor(Math.random() * 5);
-                      const bg = ["bg-[#e8f0ec]", "bg-[#b8d4c3]", "bg-[#88b89a]", "bg-[#4d8a68]", "bg-[#2a4a38]"][level];
-                      return <div key={i} className={`flex-1 h-8 rounded-sm ${bg}`} title={`${level * 25}% hoạt động`} />;
-                    })}
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <span className="text-[11px] text-[#5a7a66]">Ít</span>
-                    {["bg-[#e8f0ec]", "bg-[#b8d4c3]", "bg-[#88b89a]", "bg-[#4d8a68]", "bg-[#2a4a38]"].map((bg) => (
-                      <div key={bg} className={`w-3 h-3 rounded-sm ${bg}`} />
+              {/* ── ACHIEVEMENTS ── */}
+              {activeTab === "achievements" && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {achievements.map((a, i) => (
+                      <Card key={i} className={`border-0 shadow-sm transition-all ${a.earned ? "hover:shadow-md" : "opacity-50"}`}>
+                        <CardContent className="p-4 flex flex-col items-center gap-3 text-center">
+                          <div className={`w-14 h-14 rounded-2xl ${a.earned ? a.bg : "bg-gray-100"} flex items-center justify-center`}>
+                            <a.icon className={`w-7 h-7 ${a.earned ? a.color : "text-gray-300"}`} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800">{a.label}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{a.desc}</p>
+                            {a.earned && a.date && (
+                              <p className="text-xs text-[#4a7c59] mt-1 font-medium">Đạt được {a.date}</p>
+                            )}
+                            {!a.earned && (
+                              <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 mt-1">Chưa đạt</Badge>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
                     ))}
-                    <span className="text-[11px] text-[#5a7a66]">Nhiều</span>
                   </div>
-                </div>
 
-                {/* Activity feed */}
-                <div className="space-y-2">
-                  {RECENT_ACTIVITIES.map((a, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3.5 bg-[#f9faf9] rounded-xl hover:bg-[#f0f5f2] transition-colors">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${a.color}`}>
-                        {a.icon}
+                  {/* Xếp hạng */}
+                  <Card className="border-0 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
+                        <Trophy className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                        Xếp hạng toàn cầu
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { label: "Tuần này", rank: "#42", total: "8,400", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/20" },
+                          { label: "Tháng này", rank: "#156", total: "24,000", bg: "bg-[#edf4fc]", border: "border-blue-200" },
+                          { label: "Mọi thời đại", rank: "#892", total: "120,000", bg: "bg-[#fcf3eb]", border: "border-orange-200" },
+                        ].map(r => (
+                          <div key={r.label} className={`p-3 rounded-xl ${r.bg} border ${r.border} text-center shadow-2xs`}>
+                            <p className="text-xl font-bold text-[#1a2e1c]">{r.rank}</p>
+                            <p className="text-[10px] text-gray-400 font-medium mt-0.5">{r.label}</p>
+                            <p className="text-[10px] text-[#4a7c59] font-medium mt-1">/ {r.total} người</p>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] text-[#1a2e23]">{a.text}</p>
-                      </div>
-                      <span className="text-[11px] text-[#5a7a66] flex-shrink-0 flex items-center gap-1">
-                        <Clock size={11} /> {a.time}
-                      </span>
-                    </div>
-                  ))}
+                    </CardContent>
+                  </Card>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* ── DOCUMENTS ── */}
+              {activeTab === "documents" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-700 font-medium">38 tài liệu · 4,200 trang đã đọc</p>
+                    <Button size="sm" className="bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white gap-1.5">
+                      <FileText className="w-3.5 h-3.5" />
+                      Tải lên
+                    </Button>
+                  </div>
+                  {recentDocs.map((doc, i) => (
+                    <Card key={i} className="border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group">
+                      <CardContent className="p-4 flex items-center gap-4">
+                        <div className="w-10 h-12 rounded-lg bg-[#1a2e1c]/8 flex items-center justify-center shrink-0">
+                          <FileText className="w-5 h-5 text-[#2d5a3d]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-sm font-medium text-gray-800 truncate group-hover:text-[#1a2e1c]">{doc.title}</p>
+                            <Badge variant="outline" className="text-xs border-gray-200 text-gray-500 shrink-0">{doc.type}</Badge>
+                          </div>
+                          <Progress value={(doc.read / doc.pages) * 100} className="h-1.5 bg-gray-100 mb-1.5">
+                            <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: `${(doc.read / doc.pages) * 100}%` }} />
+                          </Progress>
+                          <p className="text-xs text-gray-400">{doc.read}/{doc.pages} trang · {Math.round((doc.read / doc.pages) * 100)}% hoàn thành</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#2d5a3d] transition-colors shrink-0" />
+                      </CardContent>
+                    </Card>
+                  ))}
+
+                  <Button variant="outline" className="w-full border-dashed border-[#2d5a3d]/30 text-[#2d5a3d] hover:bg-[#eaf0eb]">
+                    Xem tất cả 38 tài liệu →
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-export default function ProfilePage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-[#f3f4f6]">
-        <div className="w-8 h-8 border-4 border-[#2a4a38] border-t-transparent rounded-full animate-spin" />
-      </div>
-    }>
-      <ProfileContent />
-    </Suspense>
+      <AnimatePresence>
+        {showLoginModal && (
+          <RegisterModal 
+            isOpen={showLoginModal} 
+            onClose={() => setShowLoginModal(false)} 
+            triggerMessage={triggerMessage} 
+          />
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
