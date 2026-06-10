@@ -18,9 +18,16 @@ export default function CommunityLibraryPage() {
   const fetchDecks = async () => {
     try {
       const data = await getPublicDecks();
-      setDecks(data);
+      if (Array.isArray(data)) {
+        setDecks(data);
+      } else {
+        console.error("API returned non-array:", data);
+        setDecks([]);
+        if (data.error) toast.error(data.error);
+      }
     } catch (error) {
       toast.error('Failed to load community decks');
+      setDecks([]);
     } finally {
       setLoading(false);
     }
