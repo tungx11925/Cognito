@@ -5,6 +5,9 @@ import axios from 'axios';
 import Groq from 'groq-sdk';
 // @ts-ignore
 import mammoth from 'mammoth';
+import multer from 'multer';
+const pdfParse = require('pdf-parse');
+import xlsx from 'xlsx';
 import { authenticate, AuthRequest } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -302,18 +305,11 @@ router.get('/flashcards/decks/:deckId/review', authenticate, async (req: AuthReq
 // Create a deck
 router.post('/flashcards/decks', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-<<<<<<< HEAD
-    const { name, description } = req.body;
+    const { name, description, is_public } = req.body;
     const userId = req.user!.id;
     const result = await db.query(
-      'INSERT INTO flashcard_decks (user_id, name, description) VALUES ($1, $2, $3) RETURNING *',
-      [userId, name, description || '']
-=======
-    const { user_id, name, description, is_public } = req.body;
-    const result = await db.query(
       'INSERT INTO flashcard_decks (user_id, name, description, is_public) VALUES ($1, $2, $3, $4) RETURNING *',
-      [user_id || 2, name, description || '', is_public || false]
->>>>>>> e47dcbacf8072551c1af475f33e4edf4d40510a0
+      [userId, name, description || '', is_public || false]
     );
     res.status(201).json(result.rows[0]);
   } catch (error: any) {
@@ -369,20 +365,17 @@ router.delete('/flashcards/decks/:id', async (req: Request, res: Response) => {
 router.post('/flashcards', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { deck_id, document_id, front, back } = req.body;
-<<<<<<< HEAD
     const userId = req.user!.id;
+
+    if (!front || !back || front.trim() === '' || back.trim() === '') {
+      return res.status(400).json({ error: 'Nội dung Front và Back không được để trống' });
+    }
 
     // Ensure the deck belongs to this user
     const deckCheck = await db.query('SELECT id FROM flashcard_decks WHERE id = $1 AND user_id = $2', [deck_id, userId]);
     if (deckCheck.rows.length === 0) {
       return res.status(403).json({ error: 'Bạn không có quyền truy cập bộ thẻ này hoặc bộ thẻ không tồn tại' });
     }
-
-=======
-    if (!front || !back || front.trim() === '' || back.trim() === '') {
-      return res.status(400).json({ error: 'Nội dung Front và Back không được để trống' });
-    }
->>>>>>> e47dcbacf8072551c1af475f33e4edf4d40510a0
     const result = await db.query(
       'INSERT INTO flashcards (deck_id, document_id, front, back) VALUES ($1, $2, $3, $4) RETURNING *',
       [deck_id, document_id || null, front, back]
@@ -429,6 +422,118 @@ router.delete('/flashcards/:id', async (req: Request, res: Response) => {
     }
     
     res.status(200).json({ message: 'Đã xóa thẻ thành công' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Toggle star status of a flashcard
+router.put('/flashcards/:id/star', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { is_starred } = req.body;
+    
+    const result = await db.query(
+      'UPDATE flashcards SET is_starred = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+      [is_starred, id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+    }
+    
+    res.status(200).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all public decks for the Community Library
+router.get('/flashcards/community/decks', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query(`
+      SELECT d.*, u.username as author_name, u.avatar_url,
+             (SELECT COUNT(*) FROM flashcards WHERE deck_id = d.id) as card_count,
+             (SELECT COUNT(*) FROM flashcard_decks WHERE forked_from_id = d.id) as fork_count
+      FROM flashcard_decks d
+      JOIN users u ON d.user_id = u.id
+      WHERE d.is_public = true
+      ORDER BY d.created_at DESC
+    `);
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Fork a public deck
+router.post('/flashcards/decks/:deckId/fork', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { deckId } = req.params;
+    const userId = req.user!.id;
+    
+    // Check if deck is public
+    const deckResult = await db.query('SELECT * FROM flashcard_decks WHERE id = $1', [deckId]);
+    if (deckResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bộ thẻ' });
+    }
+    
+    const originalDeck = deckResult.rows[0];
+    if (!originalDeck.is_public && originalDeck.user_id !== userId) {
+      return res.status(403).json({ error: 'Không có quyền sao chép bộ thẻ này' });
+    }
+    
+    // Create new deck
+    const newDeckResult = await db.query(
+      'INSERT INTO flashcard_decks (user_id, name, description, forked_from_id, is_public) VALUES ($1, $2, $3, $4, false) RETURNING *',
+      [userId, originalDeck.name + ' (Copy)', originalDeck.description, deckId]
+    );
+    const newDeck = newDeckResult.rows[0];
+    
+    // Copy cards
+    const cardsResult = await db.query('SELECT * FROM flashcards WHERE deck_id = $1', [deckId]);
+    for (let card of cardsResult.rows) {
+      await db.query(
+        'INSERT INTO flashcards (deck_id, front, back, is_starred) VALUES ($1, $2, $3, false)',
+        [newDeck.id, card.front, card.back]
+      );
+    }
+    
+    res.status(201).json(newDeck);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Match game leaderboard
+router.get('/flashcards/decks/:deckId/match-leaderboard', async (req: Request, res: Response) => {
+  try {
+    const { deckId } = req.params;
+    const result = await db.query(`
+      SELECT m.id, m.time_ms, m.played_at, u.name, u.avatar_url 
+      FROM match_game_leaderboards m
+      JOIN users u ON m.user_id = u.id
+      WHERE m.deck_id = $1
+      ORDER BY m.time_ms ASC
+      LIMIT 5
+    `, [deckId]);
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/flashcards/decks/:deckId/match-leaderboard', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { deckId } = req.params;
+    const { time_ms } = req.body;
+    const userId = req.user!.id;
+    
+    const result = await db.query(
+      'INSERT INTO match_game_leaderboards (deck_id, user_id, time_ms) VALUES ($1, $2, $3) RETURNING *',
+      [deckId, userId, time_ms]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -968,6 +1073,90 @@ ${note_content}
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// AI FLASHCARD LAB ENDPOINT
+// ==========================================
+const uploadMem = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const validMimes = [
+      'application/pdf',
+      'text/plain',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv'
+    ];
+    if (validMimes.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Định dạng không được hỗ trợ.'));
+  }
+});
+
+router.post('/ai/generate-flashcards-from-file', uploadMem.single('document'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Vui lòng chọn file' });
+
+    let extractedText = '';
+    const { mimetype, buffer } = req.file;
+
+    if (mimetype === 'application/pdf') {
+      const data = await pdfParse(buffer);
+      extractedText = data.text;
+    } else if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const data = await mammoth.extractRawText({ buffer: buffer });
+      extractedText = data.value;
+    } else if (mimetype === 'text/plain') {
+      extractedText = buffer.toString('utf-8');
+    } else if (mimetype.includes('spreadsheetml') || mimetype.includes('excel') || mimetype === 'text/csv') {
+      const workbook = xlsx.read(buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      extractedText = xlsx.utils.sheet_to_csv(sheet);
+    }
+
+    if (!extractedText.trim()) {
+      return res.status(400).json({ error: 'Không tìm thấy chữ trong tài liệu này.' });
+    }
+
+    const truncatedText = extractedText.substring(0, 20000);
+
+    const systemPrompt = `Bạn là một chuyên gia học thuật. Hãy đọc đoạn văn bản sau đây và trích xuất ra các khái niệm quan trọng nhất để tạo thành bộ thẻ Flashcard ghi nhớ. 
+Yêu cầu đầu ra BẮT BUỘC phải là một mảng JSON có cấu trúc chính xác như sau, không được chứa thêm bất kỳ đoạn text giải thích nào khác bên ngoài JSON, KHÔNG BỌC TRONG \`\`\`json:
+[
+  { "front": "Thuật ngữ hoặc câu hỏi ngắn bằng ngôn ngữ gốc của tài liệu", "back": "Định nghĩa hoặc câu trả lời chi tiết bằng Tiếng Việt hoặc cùng ngôn ngữ" }
+]`;
+
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const completion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `NỘI DUNG TÀI LIỆU:\n${truncatedText}` }
+      ],
+      model: "llama-3.3-70b-versatile", // Use latest supported Groq model
+      temperature: 0.2,
+    });
+
+    const responseText = completion.choices[0]?.message?.content || "";
+
+    const cleanedJsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    let cards = [];
+    try {
+      cards = JSON.parse(cleanedJsonStr);
+    } catch (parseError) {
+      console.error("Lỗi Parse JSON từ AI:", responseText);
+      return res.status(500).json({ error: 'AI trả về định dạng dữ liệu không hợp lệ. Vui lòng thử lại.' });
+    }
+
+    res.status(200).json({ cards });
+
+  } catch (error: any) {
+    console.error("Lỗi AI Flashcard Generator:", error);
+    res.status(500).json({ error: error.message || 'Lỗi server nội bộ' });
   }
 });
 

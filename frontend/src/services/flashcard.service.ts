@@ -15,6 +15,11 @@ export const getDeckById = (id: number) => apiFetch(`/flashcards/decks/${id}`, {
     headers: getAuthHeaders()
 });
 
+export const getPublicDecks = () => apiFetch('/flashcards/community/decks', {
+    method: 'GET'
+});
+
+
 export const createDeck = (name: string, description: string, is_public: boolean = false) => apiFetch('/flashcards/decks', {
     method: 'POST',
     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
@@ -69,4 +74,26 @@ export const generateFlashcardsFromNote = (note_content: string, deck_id?: numbe
     method: 'POST',
     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ note_content, deck_id, document_id })
+});
+
+export const toggleStarFlashcard = (id: number, is_starred: boolean) => apiFetch(`/flashcards/${id}/star`, {
+    method: 'PUT',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_starred })
+});
+
+export const forkDeck = (deckId: number) => apiFetch(`/flashcards/decks/${deckId}/fork`, {
+    method: 'POST',
+    headers: getAuthHeaders()
+});
+
+export const getMatchLeaderboard = (deckId: number) => apiFetch(`/flashcards/decks/${deckId}/match-leaderboard`, {
+    method: 'GET',
+    headers: getAuthHeaders()
+});
+
+export const postMatchLeaderboard = (deckId: number, time_ms: number) => apiFetch(`/flashcards/decks/${deckId}/match-leaderboard`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ time_ms })
 });

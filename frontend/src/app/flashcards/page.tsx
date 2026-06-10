@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
@@ -37,11 +37,18 @@ import {
   getDecks,
   createDeck,
   getAllFlashcards,
-  reviewFlashcard
+  reviewFlashcard,
+  createFlashcard
 } from "@/services/flashcard.service";
 import confetti from "canvas-confetti";
 import { playFlipSound, playSuccessSound, playHardSound, playCompleteSound } from "@/utils/sound";
 import { Background, BackgroundStyle } from "@/components/flashcards/Background";
+import MatchGameMode from "@/components/flashcards/modes/MatchGameMode";
+import TestMode from "@/components/flashcards/modes/TestMode";
+import LearnMode from "@/components/flashcards/modes/LearnMode";
+import AIFlashcardLab from "@/components/flashcards/AIFlashcardLab";
+import { useTextToSpeech } from "@/hooks/useTextToSpeech";
+import AudioButton from "@/components/flashcards/AudioButton";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -249,6 +256,39 @@ function StudyView({
   const [finished, setFinished] = useState(false);
 
   const card = cards[index];
+
+  const { speak, isPlaying } = useTextToSpeech();
+
+  // Settings
+  const autoPlayAudio = false; // Tắt tự động phát âm thanh theo yêu cầu
+
+  const playTTS = useCallback(() => {
+    if (!card) return;
+    const textToSpeak = flipped ? card.back : card.front;
+    // Ngôn ngữ sẽ tự động detect bởi hệ thống Mixed Language TTS
+    speak(textToSpeak);
+  }, [card, flipped, speak]);
+
+  // Auto Play Audio when card flips or index changes
+  useEffect(() => {
+    if (autoPlayAudio) {
+      playTTS();
+    }
+  }, [index, flipped, autoPlayAudio, playTTS]);
+
+  // Keyboard shortcut 'V' to play TTS
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.code === 'KeyV') {
+        e.preventDefault();
+        playTTS();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [playTTS]);
+
   const progress = cards.length > 0 ? ((index + (flipped ? 0.5 : 0)) / cards.length) * 100 : 0;
 
   useEffect(() => {
@@ -280,7 +320,8 @@ function StudyView({
     }
   }, [finished, muted]);
 
-  function goNext() {
+  function goNext(e?: React.MouseEvent) {
+    if (e?.currentTarget instanceof HTMLElement) e.currentTarget.blur();
     if (index === cards.length - 1) {
       setFinished(true);
       return;
@@ -290,7 +331,8 @@ function StudyView({
     setTimeout(() => setIndex((i) => i + 1), 50);
   }
 
-  function goPrev() {
+  function goPrev(e?: React.MouseEvent) {
+    if (e?.currentTarget instanceof HTMLElement) e.currentTarget.blur();
     if (index === 0) return;
     setDirection(-1);
     setFlipped(false);
@@ -334,12 +376,8 @@ function StudyView({
       if (e.key === "ArrowLeft") goPrev();
       if (e.key === " " || e.key === "Enter") {
         e.preventDefault();
-        if (!flipped) {
-          setFlipped(true);
-          playFlipSound(muted);
-        } else {
-          rate("good");
-        }
+        setFlipped(prev => !prev);
+        playFlipSound(muted);
       }
       // Review hotkeys (only active when flipped)
       if (flipped) {
@@ -554,18 +592,25 @@ function StudyView({
               position: "relative",
             }}
           >
-            {/* Tag */}
-            <span
-              className="absolute top-4 left-4 text-xs px-2.5 py-1 rounded-lg"
-              style={{
-                background: dark ? "#2a2a2a" : "#f0f0ec",
-                color: dark ? "#9ca3af" : "#4b5563",
-                fontWeight: 600,
-                fontFamily: "'Outfit', sans-serif",
-              }}
-            >
-              {card.tag || "Thẻ học tập"}
-            </span>
+            {/* Tag and TTS Group */}
+            <div className="absolute top-4 left-4 flex gap-2 z-20">
+              <span
+                className="text-xs px-2.5 py-1.5 rounded-lg"
+                style={{
+                  background: dark ? "#2a2a2a" : "#f0f0ec",
+                  color: dark ? "#9ca3af" : "#4b5563",
+                  fontWeight: 600,
+                  fontFamily: "'Outfit', sans-serif",
+                }}
+              >
+                {card.tag || "Thẻ học tập"}
+              </span>
+              <AudioButton 
+                isPlaying={isPlaying} 
+                onClick={playTTS} 
+                dark={dark} 
+              />
+            </div>
 
             {/* Flip hint */}
             <span
@@ -740,8 +785,11 @@ export default function FlashcardsPage() {
   } = useStudy();
 
   const [dark, setDark] = useState(false);
-  const [studying, setStudying] = useState(false);
+  const [activeMode, setActiveMode] = useState<'study' | 'test' | 'match' | 'learn' | null>(null);
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
+  
+  // Modals
+  const [showAILab, setShowAILab] = useState(false);
   
   // Real database states
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -870,7 +918,7 @@ export default function FlashcardsPage() {
       const cardsList = await getAllFlashcards(deck.id);
       if (Array.isArray(cardsList)) {
         setCards(cardsList);
-        setStudying(true);
+        setActiveMode('study');
       } else {
         console.error("Lỗi khi tải danh sách flashcard:", cardsList);
         triggerMessage(cardsList?.error || "Không thể tải các thẻ ghi nhớ của bộ này.", "error");
@@ -1032,26 +1080,68 @@ export default function FlashcardsPage() {
 
       <div className="max-w-4xl mx-auto w-full px-4 mt-6 flex-1 flex flex-col overflow-x-hidden relative">
         <AnimatePresence mode="wait">
-          {studying ? (
+          {activeMode ? (
             <motion.div
-              key="study"
+              key="study-mode"
               initial={{ opacity: 0, x: 30 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -30 }}
               transition={{ duration: 0.22 }}
-              className="flex-1 flex flex-col w-full"
+              className="flex-1 flex flex-col w-full relative"
             >
-              <StudyView
-                dark={dark}
-                onBack={() => {
-                  setStudying(false);
-                  setSelectedDeck(null);
-                  fetchDecks(); // reload progress
-                }}
-                cards={cards}
-                deckTitle={selectedDeck?.name || "Bộ thẻ học tập"}
-                muted={muted}
-              />
+              <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide px-2">
+                <button
+                  onClick={() => setActiveMode('study')}
+                  className={`px-4 py-2 font-bold rounded-xl whitespace-nowrap transition-colors ${activeMode === 'study' ? 'bg-[#10b981] text-white' : dark ? 'bg-[#2a2a2a] text-gray-300' : 'bg-gray-100 text-gray-600'}`}
+                >Lật thẻ</button>
+                <button
+                  onClick={() => setActiveMode('test')}
+                  className={`px-4 py-2 font-bold rounded-xl whitespace-nowrap transition-colors ${activeMode === 'test' ? 'bg-[#10b981] text-white' : dark ? 'bg-[#2a2a2a] text-gray-300' : 'bg-gray-100 text-gray-600'}`}
+                >Kiểm tra</button>
+                <button
+                  onClick={() => setActiveMode('match')}
+                  className={`px-4 py-2 font-bold rounded-xl whitespace-nowrap transition-colors ${activeMode === 'match' ? 'bg-[#10b981] text-white' : dark ? 'bg-[#2a2a2a] text-gray-300' : 'bg-gray-100 text-gray-600'}`}
+                >Ghép thẻ</button>
+                <button
+                  onClick={() => setActiveMode('learn')}
+                  className={`px-4 py-2 font-bold rounded-xl whitespace-nowrap transition-colors ${activeMode === 'learn' ? 'bg-[#10b981] text-white' : dark ? 'bg-[#2a2a2a] text-gray-300' : 'bg-gray-100 text-gray-600'}`}
+                >Học cuốn chiếu</button>
+              </div>
+
+              {activeMode === 'study' && (
+                <StudyView
+                  dark={dark}
+                  onBack={() => {
+                    setActiveMode(null);
+                    setSelectedDeck(null);
+                    fetchDecks(); // reload progress
+                  }}
+                  cards={cards}
+                  deckTitle={selectedDeck?.name || "Bộ thẻ học tập"}
+                  muted={muted}
+                />
+              )}
+              {activeMode === 'test' && (
+                <TestMode 
+                  cards={cards} 
+                  deckId={selectedDeck?.id || 0}
+                  onBack={() => { setActiveMode(null); fetchDecks(); }} 
+                />
+              )}
+              {activeMode === 'match' && (
+                <MatchGameMode 
+                  cards={cards} 
+                  deckId={selectedDeck?.id || 0}
+                  onBack={() => { setActiveMode(null); fetchDecks(); }} 
+                />
+              )}
+              {activeMode === 'learn' && (
+                <LearnMode 
+                  cards={cards} 
+                  deckId={selectedDeck?.id || 0}
+                  onBack={() => { setActiveMode(null); fetchDecks(); }} 
+                />
+              )}
             </motion.div>
           ) : (
             <motion.div
@@ -1080,14 +1170,23 @@ export default function FlashcardsPage() {
                 </p>
               </div>
               {isAuthenticated && (
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="px-4 py-2 bg-[#1a2e1c] hover:opacity-90 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
-                  style={{ background: primaryColor }}
-                >
-                  <Plus size={14} />
-                  Tạo bộ thẻ
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowAILab(true)}
+                    className="px-4 py-2 bg-emerald-50 text-emerald-600 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm border border-emerald-200 hover:bg-emerald-100"
+                  >
+                    <Sparkles size={14} />
+                    Tạo bằng AI
+                  </button>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="px-4 py-2 bg-[#1a2e1c] hover:opacity-90 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+                    style={{ background: primaryColor }}
+                  >
+                    <Plus size={14} />
+                    Tạo bộ thẻ
+                  </button>
+                </div>
               )}
             </div>
 
@@ -1326,6 +1425,44 @@ export default function FlashcardsPage() {
           </div>
         </div>
       )}
+
+      {/* AI Flashcard Lab Modal */}
+      <AnimatePresence>
+        {showAILab && (
+          <AIFlashcardLab 
+            onClose={() => setShowAILab(false)} 
+            onSaveDeck={async (cards, deckName) => {
+              try {
+                // 1. Tạo bộ thẻ rỗng trước
+                const resDeck = await createDeck(deckName || "AI Flashcards", "Bộ thẻ được tạo tự động bởi AI");
+                
+                if (resDeck.error) {
+                  triggerMessage(resDeck.error, "error");
+                  return;
+                }
+
+                const deckId = resDeck.id;
+                
+                // 2. Loop qua tất cả các cards do AI sinh ra và insert vào database
+                // Dùng Promise.all để lưu song song cho nhanh
+                const insertPromises = cards.map(card => 
+                  createFlashcard(deckId, card.front, card.back)
+                );
+                
+                await Promise.all(insertPromises);
+
+                triggerMessage(`Đã lưu ${cards.length} thẻ vào bộ "${deckName}" thành công!`, "success");
+                setShowAILab(false);
+                
+                // Refresh lại danh sách decks để nó hiện số lượng thẻ đúng
+                fetchDecks();
+              } catch (e) {
+                triggerMessage("Có lỗi khi lưu bộ thẻ", "error");
+              }
+            }} 
+          />
+        )}
+      </AnimatePresence>
 
       {/* Login Modal for guest user */}
       <AnimatePresence>
