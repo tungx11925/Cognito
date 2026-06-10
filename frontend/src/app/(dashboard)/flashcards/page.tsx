@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getDecks, createDeck } from '@/services/flashcard.service';
-import { Layers, Plus, Brain, ArrowRight, Play, Loader2 } from 'lucide-react';
+import { getDecks, createDeck, deleteDeck } from '@/services/flashcard.service';
+import { Layers, Plus, Brain, ArrowRight, Play, Loader2, Trash2, AlertTriangle, X } from 'lucide-react';
 
 export default function FlashcardsPage() {
   const [decks, setDecks] = useState<any[]>([]);
@@ -12,6 +12,8 @@ export default function FlashcardsPage() {
   const [newDeckName, setNewDeckName] = useState('');
   const [newDeckDesc, setNewDeckDesc] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [deleteDeckId, setDeleteDeckId] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchDecks();
@@ -42,6 +44,20 @@ export default function FlashcardsPage() {
       console.error('Lỗi khi tạo bộ thẻ:', error);
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteDeckId) return;
+    setIsDeleting(true);
+    try {
+      await deleteDeck(deleteDeckId);
+      setDeleteDeckId(null);
+      fetchDecks();
+    } catch (error) {
+      console.error('Lỗi khi xóa bộ thẻ:', error);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -81,12 +97,19 @@ export default function FlashcardsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {decks.map(deck => (
-            <div key={deck.id} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group flex flex-col h-full">
+            <div key={deck.id} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all group flex flex-col h-full relative">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setDeleteDeckId(deck.id); }}
+                className="absolute top-4 right-4 text-gray-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
+                title="Xóa bộ thẻ"
+              >
+                <Trash2 size={18} />
+              </button>
               <div className="flex-1">
                 <div className="w-10 h-10 rounded-xl bg-[#FAF8F5] text-[#0D2B24] flex items-center justify-center mb-4">
                   <Layers size={20} />
                 </div>
-                <h3 className="font-bold text-gray-900 text-lg mb-1">{deck.name}</h3>
+                <h3 className="font-bold text-gray-900 text-lg mb-1 pr-8">{deck.name}</h3>
                 <p className="text-gray-500 text-sm line-clamp-2">{deck.description || 'Không có mô tả'}</p>
               </div>
               <div className="mt-6 flex items-center gap-2">
@@ -148,6 +171,38 @@ export default function FlashcardsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Xóa Bộ Thẻ (Thay thế cho window.confirm) */}
+      {deleteDeckId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4 shadow-inner">
+                <AlertTriangle size={32} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Xóa bộ thẻ?</h2>
+              <p className="text-gray-500 mb-6">
+                Bạn có chắc chắn muốn xóa bộ thẻ này? Tất cả các thẻ bên trong cũng sẽ bị xóa vĩnh viễn và <strong>không thể khôi phục</strong>.
+              </p>
+              <div className="flex gap-3 w-full">
+                <button 
+                  onClick={() => setDeleteDeckId(null)}
+                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+                <button 
+                  onClick={confirmDelete}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-red-500/20"
+                >
+                  {isDeleting ? <Loader2 size={18} className="animate-spin" /> : 'Xóa vĩnh viễn'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
