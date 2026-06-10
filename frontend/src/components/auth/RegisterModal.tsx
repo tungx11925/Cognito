@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Phone, Mail, Lock, Eye, EyeOff, CheckCircle2, XCircle, Circle, X } from 'lucide-react';
+import { User, Phone, Mail, Lock, Eye, EyeOff, CheckCircle2, XCircle, Circle, X, GraduationCap, Hourglass } from 'lucide-react';
 import { useStudy } from '@/context/StudyContext';
 import { useRouter } from 'next/navigation';
 import { googleLogin } from '../../services/auth.service';
@@ -11,6 +11,85 @@ interface RegisterModalProps {
   isOpen: boolean;
   onClose: () => void;
   triggerMessage: (msg: string, type: 'success' | 'error') => void;
+}
+
+interface FloatingInputProps {
+  id: string;
+  type: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  icon: React.ReactNode;
+  error?: string;
+  rightElement?: React.ReactNode;
+}
+
+function FloatingInput({
+  id,
+  type,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  icon,
+  error,
+  rightElement,
+}: FloatingInputProps) {
+  const [isFocused, setIsFocused] = useState(false);
+
+  return (
+    <div className="space-y-1 w-full">
+      <div className="relative group">
+        {/* Floating Label */}
+        <span
+          className={`absolute left-10 transition-all duration-200 pointer-events-none ${
+            isFocused || value
+              ? 'top-0 -translate-y-1/2 bg-white px-1.5 text-xs text-[#00c495] font-semibold z-10'
+              : 'top-1/2 -translate-y-1/2 text-gray-400 text-sm'
+          }`}
+        >
+          {placeholder}
+        </span>
+
+        {/* Icon */}
+        <div className={`absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200 z-10 ${
+          isFocused ? 'text-[#00c495]' : 'text-gray-400 group-hover:text-gray-600'
+        }`}>
+          {icon}
+        </div>
+
+        {/* Input */}
+        <input
+          id={id}
+          type={type}
+          value={value}
+          onChange={onChange}
+          onFocus={() => setIsFocused(true)}
+          onBlur={(e) => {
+            setIsFocused(false);
+            if (onBlur) onBlur(e);
+          }}
+          placeholder={placeholder}
+          className={`w-full pl-11 ${rightElement ? 'pr-12' : 'pr-4'} py-3 bg-transparent border ${
+            error
+              ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500'
+              : isFocused
+              ? 'border-[#00c495] ring-1 ring-[#00c495]'
+              : 'border-gray-200 hover:border-gray-300'
+          } rounded-xl text-sm text-gray-800 focus:outline-none transition-all placeholder:text-transparent`}
+        />
+
+        {/* Right Element */}
+        {rightElement && (
+          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 z-10 flex items-center">
+            {rightElement}
+          </div>
+        )}
+      </div>
+      {error && <p className="text-[10px] text-red-500 pl-1">{error}</p>}
+    </div>
+  );
 }
 
 export default function RegisterModal({ isOpen, onClose, triggerMessage }: RegisterModalProps) {
@@ -27,6 +106,10 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [errors, setErrors] = useState({ name: '', phone: '', email: '', password: '', confirmPassword: '' });
+
+  // Custom states for styling compliance
+  const [isRobotChecked, setIsRobotChecked] = useState(false);
+  const [agreeToTerms, setAgreeToTerms] = useState(true);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const phoneRegex = /^(03|05|07|08|09)\d{8}$/;
@@ -164,6 +247,14 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         newErrors.confirmPassword = 'Mật khẩu xác nhận không trùng khớp';
         isValid = false;
       }
+      if (!agreeToTerms) {
+        triggerMessage("Vui lòng đồng ý với Điều khoản dịch vụ & Chính sách bảo mật", "error");
+        return;
+      }
+      if (!isRobotChecked) {
+        triggerMessage("Vui lòng xác thực bạn không phải là robot", "error");
+        return;
+      }
     } else {
       if (!password) {
         newErrors.password = 'Vui lòng nhập mật khẩu';
@@ -228,6 +319,16 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     }
   };
 
+  const handleCloseAttempt = () => {
+    if (hasData) {
+      if (window.confirm("Bạn có chắc chắn muốn thoát? Các thông tin bạn vừa nhập sẽ bị mất.")) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -239,356 +340,392 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="w-full max-w-md bg-[#FAF8F5] border border-[#0D2B24]/10 rounded-[24px] shadow-2xl overflow-hidden flex flex-col"
+        className="w-full max-w-md md:max-w-4xl bg-white border border-gray-100 rounded-[28px] shadow-2xl overflow-hidden flex flex-col md:flex-row relative min-h-[500px] max-h-[90vh] md:h-[680px]"
       >
-        {/* Sticky Header */}
-        <div className="flex-shrink-0 bg-[#FAF8F5] border-b border-[#0D2B24]/10 z-10 relative">
-          <div className="flex relative">
-            <button 
-              onClick={() => { setIsRegisterMode(false); setIsForgotPasswordMode(false); setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''}); }}
-              className={`flex-1 py-3 text-[13px] font-bold transition-colors ${!isRegisterMode && !isForgotPasswordMode ? 'text-[#0D2B24] border-b-2 border-[#0D2B24]' : 'text-[#0D2B24]/40 hover:text-[#0D2B24]/60'}`}
-            >
-              Đăng Nhập
-            </button>
-            <button 
-              onClick={() => { setIsRegisterMode(true); setIsForgotPasswordMode(false); setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''}); }}
-              className={`flex-1 py-3 text-[13px] font-bold transition-colors ${isRegisterMode && !isForgotPasswordMode ? 'text-[#0D2B24] border-b-2 border-[#0D2B24]' : 'text-[#0D2B24]/40 hover:text-[#0D2B24]/60'}`}
-            >
-              Đăng Ký
-            </button>
-            
-            <button 
-              onClick={() => {
-                if (hasData) {
-                  if (window.confirm("Bạn có chắc chắn muốn thoát? Các thông tin bạn vừa nhập sẽ bị mất.")) {
-                    onClose();
-                  }
-                } else {
-                  onClose();
-                }
-              }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-[#0D2B24]/40 hover:text-[#0D2B24] transition-colors rounded-full hover:bg-[#0D2B24]/5"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+        {/* Left Side: Brand Visual Section (hidden on mobile) */}
+        <div className="hidden md:flex md:w-5/12 bg-[#1a3d28] p-8 relative flex-col justify-between overflow-hidden">
+          {/* Grid pattern background (craft aesthetic on dark green) */}
+          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.15) 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
 
-        {/* Scrollable Body */}
-        <div className="overflow-y-auto p-5 custom-scrollbar" style={{ maxHeight: 'calc(100vh - 80px)' }}>
-          <div className="mb-4">
-            <h1 className="text-[20px] font-black tracking-widest font-serif text-[#0D2B24] uppercase">
-              {isForgotPasswordMode ? "Khôi phục mật khẩu" : "EduShare AI"}
-            </h1>
-            <p className="text-[11px] text-[#0D2B24]/60 font-semibold mt-0.5">
-              {isForgotPasswordMode 
-                ? "Nhập email của bạn để nhận liên kết đặt lại mật khẩu" 
-                : isRegisterMode ? "Bắt đầu hành trình học tập của bạn" : "Chào mừng quay trở lại"}
+          {/* Layered Paper Elements */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            {/* Yellow Lined Paper tilted in the bottom-right corner */}
+            <div 
+              className="absolute right-6 bottom-6 w-60 h-64 transform rotate-[8deg] shadow-lg z-0" 
+              style={{
+                background: "#fef9c3",
+                backgroundImage: "repeating-linear-gradient(transparent, transparent 24px, rgba(26,61,40,0.08) 24px, rgba(26,61,40,0.08) 25px)",
+                borderRadius: "16px",
+                borderLeft: "2px solid rgba(239, 68, 68, 0.15)"
+              }}
+            />
+            {/* Secondary dark background shape to add depth */}
+            <div 
+              className="absolute left-6 bottom-6 w-64 h-56 transform -rotate-[4deg] shadow-xl z-10"
+              style={{ background: "#112a1c", borderRadius: "24px" }}
+            />
+            {/* White notebook sheet on top - bottom-left */}
+            <div 
+              className="absolute left-6 bottom-6 w-[85%] h-52 transform -rotate-[2deg] bg-white border border-gray-100 shadow-md rounded-xl z-20 p-4 flex flex-col justify-between"
+            >
+              {/* Binder holes at the top of the paper */}
+              <div className="absolute top-2 left-0 right-0 flex justify-around px-4 opacity-40">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="w-2 h-2 rounded-full bg-gray-200" />
+                ))}
+              </div>
+              
+              {/* Content inside the mock paper */}
+              <div className="pt-4 flex-grow flex flex-col justify-between">
+                <div>
+                  <div className="w-6 h-6 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 mb-3">
+                    <Hourglass className="w-3.5 h-3.5" />
+                  </div>
+                  <h4 className="font-bold text-gray-800 text-xs mb-1 font-serif">Kế hoạch học tập</h4>
+                  <p className="text-[9px] text-gray-400 leading-normal">
+                    {isRegisterMode 
+                      ? "Đăng ký tài khoản để bắt đầu theo dõi thời gian học tập."
+                      : "Tiếp tục tích lũy thời gian học tập cùng Trợ lý."}
+                  </p>
+                </div>
+                
+                <div className="pt-2 border-t border-dashed border-gray-100">
+                  <div className="flex justify-between text-[8px] text-[#1a3d28] font-bold mb-1">
+                    <span>Tiến trình</span>
+                    <span>100%</span>
+                  </div>
+                  <div className="h-1 w-full bg-emerald-100 rounded-full overflow-hidden mb-2">
+                    <div className="h-full bg-emerald-500 rounded-full w-full"></div>
+                  </div>
+                  <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-100 rounded-full text-[8px] text-emerald-700 font-bold uppercase tracking-wider">
+                    <span className="text-yellow-500">★</span> Workspace
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Branding Content */}
+          <div className="relative z-30 flex flex-col pt-6">
+            <div className="w-12 h-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center mb-5">
+              <GraduationCap className="w-6 h-6 text-[#00c495]" />
+            </div>
+            <h2 
+              className="text-2xl font-black text-white mb-3 leading-none"
+              style={{ fontFamily: "'Playfair Display', 'Merriweather', serif" }}
+            >
+              EduShare AI
+            </h2>
+            <p className="text-xs text-gray-300 leading-relaxed max-w-[85%]">
+              {isRegisterMode 
+                ? "Đăng ký để mở khóa các bài ôn tập thông minh bằng Flashcards và chat cùng trợ lý tài liệu AI."
+                : "Chào mừng quay trở lại. Hãy tiếp tục tiến trình nghiên cứu học thuật của bạn cùng Trợ lý."}
             </p>
           </div>
 
-          <AnimatePresence mode="wait">
-            {isForgotPasswordMode ? (
-              <motion.form 
-                key="forgot-form"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                onSubmit={handleForgotSubmit} 
-                className="space-y-4"
+          {/* Empty div for bottom space layout */}
+          <div className="relative z-30 mt-auto" />
+        </div>
+
+        {/* Right Side: Form and Navigation */}
+        <div className="w-full md:w-7/12 flex flex-col p-6 md:p-10 overflow-y-auto relative bg-[#FAF8F5] md:bg-white">
+          {/* Close button top right */}
+          <button 
+            onClick={handleCloseAttempt}
+            className="absolute right-6 top-6 p-2 bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-700 transition-colors rounded-full z-20 focus:outline-none"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {/* Navigation Tabs (Only visible when not resetting password) */}
+          {!isForgotPasswordMode && (
+            <div className="flex gap-6 border-b border-gray-100 mb-6 flex-shrink-0">
+              <button 
+                type="button"
+                onClick={() => { setIsRegisterMode(false); setIsForgotPasswordMode(false); setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''}); }}
+                className={`pb-3 text-sm font-bold transition-all relative focus:outline-none ${!isRegisterMode ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
               >
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#0D2B24]/60 uppercase tracking-wider pl-1">ĐỊA CHỈ EMAIL</label>
-                  <div className="relative flex items-center">
-                    <Mail className="absolute left-3 w-4 h-4 text-[#0D2B24]/40" />
-                    <input 
-                      type="email" 
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if(errors.email) setErrors({...errors, email: ''});
-                      }}
-                      onBlur={() => {
-                        if (email && !emailRegex.test(email)) {
-                          setErrors({...errors, email: 'Vui lòng nhập đúng định dạng email'});
-                        }
-                      }}
-                      className={`w-full pl-9 pr-10 py-2.5 bg-white border ${errors.email ? 'border-red-500' : 'border-[#0D2B24]/10'} focus:border-[#0D2B24] focus:ring-1 focus:ring-[#0D2B24] text-[13px] text-[#0D2B24] rounded-xl focus:outline-none transition-all placeholder:text-[#0D2B24]/30`}
-                      placeholder="Nhập email đã đăng ký của bạn..."
-                    />
-                    <div className="absolute right-4 flex items-center">
-                      <AnimatePresence>
-                        {emailRegex.test(email) && (
-                          <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}>
-                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                  {errors.email && <p className="text-[10px] text-red-500 pl-1">{errors.email}</p>}
-                </div>
-                
-                <button 
-                  type="submit" 
-                  disabled={!emailRegex.test(email)}
-                  className={`w-full py-2.5 text-white font-extrabold text-[13px] rounded-xl transition-all duration-300 shadow-md ${!emailRegex.test(email) ? 'bg-[#0D2B24]/40 cursor-not-allowed' : 'bg-[#0D2B24] hover:bg-[#0D2B24]/90 active:scale-[0.98]'}`}
-                >
-                  Gửi yêu cầu
-                </button>
-                
-                <div className="text-center pt-2">
-                  <button type="button" onClick={() => setIsForgotPasswordMode(false)} className="text-[11px] font-bold text-[#0D2B24]/60 hover:text-[#0D2B24] transition-colors underline-offset-2 hover:underline">
-                    Quay lại Đăng nhập
-                  </button>
-                </div>
-              </motion.form>
-            ) : (
-              <motion.div key="auth-container" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
-                <form onSubmit={handleAuthSubmit} className="space-y-2.5">
+                Đăng Nhập
+                {!isRegisterMode && (
+                  <motion.div layoutId="activeTabUnderline" className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#00c495] rounded-full" />
+                )}
+              </button>
+              <button 
+                type="button"
+                onClick={() => { setIsRegisterMode(true); setIsForgotPasswordMode(false); setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''}); }}
+                className={`pb-3 text-sm font-bold transition-all relative focus:outline-none ${isRegisterMode ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                Đăng Ký
+                {isRegisterMode && (
+                  <motion.div layoutId="activeTabUnderline" className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#00c495] rounded-full" />
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Form Header */}
+          <div className="mb-6 flex-shrink-0">
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+              {isForgotPasswordMode 
+                ? "Khôi phục mật khẩu" 
+                : isRegisterMode 
+                  ? "Đăng Ký Tài Khoản" 
+                  : "Chào Mừng Quay Trở Lại"}
+            </h1>
+            <p className="text-xs text-gray-500 mt-1 font-medium">
+              {isForgotPasswordMode 
+                ? "Nhập email của bạn để nhận liên kết đặt lại mật khẩu" 
+                : isRegisterMode 
+                  ? "Bắt đầu đăng ký tài khoản để học tập cùng trợ lý AI" 
+                  : "Vui lòng đăng nhập để tiếp tục học tập"}
+            </p>
+          </div>
+
+          {/* Form Body */}
+          <div className="flex-grow">
             <AnimatePresence mode="wait">
-              {isRegisterMode && (
-                <motion.div 
-                  key="register-fields"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-2.5"
+              {isForgotPasswordMode ? (
+                <motion.form 
+                  key="forgot-form"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  onSubmit={handleForgotSubmit} 
+                  className="space-y-4"
                 >
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-[#0D2B24]/60 uppercase tracking-wider pl-1">Tên người dùng</label>
-                      <div className="relative flex items-center">
-                        <User className="absolute left-3 w-4 h-4 text-[#0D2B24]/40" />
-                        <input 
-                          type="text" 
+                  <FloatingInput
+                    id="forgot-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if(errors.email) setErrors({...errors, email: ''});
+                    }}
+                    onBlur={() => {
+                      if (email && !emailRegex.test(email)) {
+                        setErrors({...errors, email: 'Vui lòng nhập đúng định dạng email'});
+                      }
+                    }}
+                    placeholder="Địa chỉ Email"
+                    icon={<Mail className="w-4 h-4" />}
+                    error={errors.email}
+                  />
+                  
+                  <button 
+                    type="submit" 
+                    disabled={!emailRegex.test(email)}
+                    className={`w-full py-3.5 mt-2 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md ${!emailRegex.test(email) ? 'bg-[#0D2B24]/40 cursor-not-allowed' : 'bg-[#00c495] hover:bg-[#00b085] active:scale-[0.98]'}`}
+                  >
+                    Gửi yêu cầu khôi phục
+                  </button>
+                  
+                  <div className="text-center pt-2">
+                    <button type="button" onClick={() => setIsForgotPasswordMode(false)} className="text-xs font-bold text-[#00c495] hover:underline transition-colors focus:outline-none">
+                      Quay lại Đăng nhập
+                    </button>
+                  </div>
+                </motion.form>
+              ) : (
+                <motion.div key="auth-container" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+                  <form onSubmit={handleAuthSubmit} className="space-y-4">
+                    {isRegisterMode && (
+                      <div className="space-y-4">
+                        {/* Name Input */}
+                        <FloatingInput
+                          id="register-name"
+                          type="text"
                           value={name}
                           onChange={(e) => {
                             setName(e.target.value);
                             if(errors.name) setErrors({...errors, name: ''});
                           }}
                           onBlur={(e) => handleBlur('name', e.target.value)}
-                          className={`w-full pl-9 pr-8 py-2 bg-white border ${errors.name ? 'border-red-500' : 'border-[#0D2B24]/10'} focus:border-[#0D2B24] focus:ring-1 focus:ring-[#0D2B24] text-[13px] text-[#0D2B24] rounded-xl focus:outline-none transition-all placeholder:text-[#0D2B24]/30`}
-                          placeholder="Nguyễn Văn A"
+                          placeholder="Tên người dùng"
+                          icon={<User className="w-4 h-4" />}
+                          error={errors.name}
                         />
-                        <div className="absolute right-2 flex items-center">
-                          <AnimatePresence>
-                            {name.trim().length >= 2 && !errors.name && (
-                              <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}>
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                              </motion.div>
-                            )}
-                            {errors.name && (
-                              <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}>
-                                <XCircle className="w-4 h-4 text-rose-500" />
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      </div>
-                      {errors.name && <p className="text-[10px] text-red-500 pl-1">{errors.name}</p>}
-                    </div>
 
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-[#0D2B24]/60 uppercase tracking-wider pl-1">SĐT</label>
-                      <div className="relative flex items-center">
-                        <Phone className="absolute left-3 w-4 h-4 text-[#0D2B24]/40" />
-                        <input 
-                          type="tel" 
+                        {/* Phone Input */}
+                        <FloatingInput
+                          id="register-phone"
+                          type="tel"
                           value={phone}
                           onChange={(e) => {
                             setPhone(e.target.value);
                             if(errors.phone) setErrors({...errors, phone: ''});
                           }}
                           onBlur={(e) => handleBlur('phone', e.target.value)}
-                          className={`w-full pl-9 pr-8 py-2 bg-white border ${errors.phone ? 'border-red-500' : 'border-[#0D2B24]/10'} focus:border-[#0D2B24] focus:ring-1 focus:ring-[#0D2B24] text-[13px] text-[#0D2B24] rounded-xl focus:outline-none transition-all placeholder:text-[#0D2B24]/30`}
-                          placeholder="091234..."
+                          placeholder="Số điện thoại"
+                          icon={<Phone className="w-4 h-4" />}
+                          error={errors.phone}
                         />
-                        <div className="absolute right-2 flex items-center">
-                          <AnimatePresence>
-                            {phoneRegex.test(phone) && !errors.phone && (
-                              <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}>
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                              </motion.div>
-                            )}
-                            {errors.phone && (
-                              <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}>
-                                <XCircle className="w-4 h-4 text-rose-500" />
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
                       </div>
-                      {errors.phone && <p className="text-[10px] text-red-500 pl-1">{errors.phone}</p>}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#0D2B24]/60 uppercase tracking-wider pl-1">{isRegisterMode ? "ĐỊA CHỈ EMAIL" : "TÀI KHOẢN"}</label>
-              <div className="relative flex items-center">
-                <Mail className="absolute left-3 w-4 h-4 text-[#0D2B24]/40" />
-                <input 
-                  type={isRegisterMode ? "email" : "text"} 
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if(errors.email) setErrors({...errors, email: ''});
-                  }}
-                  onBlur={(e) => handleBlur('email', e.target.value)}
-                  className={`w-full pl-9 pr-10 py-2 bg-white border ${errors.email ? 'border-red-500' : 'border-[#0D2B24]/10'} focus:border-[#0D2B24] focus:ring-1 focus:ring-[#0D2B24] text-[13px] text-[#0D2B24] rounded-xl focus:outline-none transition-all placeholder:text-[#0D2B24]/30`}
-                  placeholder={isRegisterMode ? "Địa chỉ email..." : "Email hoặc Tên đăng nhập"}
-                />
-                <div className="absolute right-4 flex items-center">
-                  <AnimatePresence>
-                    {(isRegisterMode ? emailRegex.test(email) : email.trim().length > 0) && !errors.email && (
-                      <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      </motion.div>
                     )}
-                    {errors.email && (
-                      <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}>
-                        <XCircle className="w-4 h-4 text-rose-500" />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
-              {errors.email && <p className="text-[10px] text-red-500 pl-1">{errors.email}</p>}
-            </div>
 
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#0D2B24]/60 uppercase tracking-wider pl-1">Mật khẩu</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#0D2B24]/40" />
-                <input 
-                  type={passwordVisible ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if(errors.password) setErrors({...errors, password: ''});
-                  }}
-                  className={`w-full pl-9 pr-10 py-2 bg-white border ${errors.password ? 'border-red-500' : 'border-[#0D2B24]/10'} focus:border-[#0D2B24] focus:ring-1 focus:ring-[#0D2B24] text-[13px] text-[#0D2B24] rounded-xl focus:outline-none transition-all placeholder:text-[#0D2B24]/30`}
-                  placeholder="••••••••"
-                />
-                <button 
-                  type="button"
-                  onClick={() => setPasswordVisible(!passwordVisible)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#0D2B24]/40 hover:text-[#0D2B24] transition-colors"
-                >
-                  {passwordVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <div className="flex justify-between items-start mt-1">
-                <div className="flex-1">
-                  {errors.password && <p className="text-[10px] text-red-500 pl-1">{errors.password}</p>}
-                </div>
-                {!isRegisterMode && (
-                  <button 
-                    type="button" 
-                    onClick={() => setIsForgotPasswordMode(true)} 
-                    className="text-[10px] font-bold text-[#0D2B24]/60 hover:text-[#0D2B24] transition-colors underline-offset-2 hover:underline ml-2"
-                  >
-                    Quên mật khẩu?
-                  </button>
-                )}
-              </div>
-            </div>
+                    {/* Email Input */}
+                    <FloatingInput
+                      id="login-email"
+                      type={isRegisterMode ? "email" : "text"}
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if(errors.email) setErrors({...errors, email: ''});
+                      }}
+                      onBlur={(e) => handleBlur('email', e.target.value)}
+                      placeholder={isRegisterMode ? "Địa chỉ Email" : "Email hoặc Tên đăng nhập"}
+                      icon={<Mail className="w-4 h-4" />}
+                      error={errors.email}
+                    />
 
-            <AnimatePresence mode="wait">
-              {isRegisterMode && (
-                <motion.div 
-                  key="password-requirements"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-2.5"
-                >
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 pl-1 mt-1">
-                    <div className="flex items-center gap-1.5 w-[45%]">
-                      {password ? (
-                        hasLetter ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <XCircle className="w-3.5 h-3.5 text-rose-500" />
-                      ) : <Circle className="w-3.5 h-3.5 text-[#0D2B24]/30" />}
-                      <span className={`text-[10px] leading-tight ${password && hasLetter ? 'text-emerald-600 font-semibold' : password && !hasLetter ? 'text-rose-600' : 'text-[#0D2B24]/50'}`}>Có chữ cái</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 w-[45%]">
-                      {password ? (
-                        isLongEnough ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <XCircle className="w-3.5 h-3.5 text-rose-500" />
-                      ) : <Circle className="w-3.5 h-3.5 text-[#0D2B24]/30" />}
-                      <span className={`text-[10px] leading-tight ${password && isLongEnough ? 'text-emerald-600 font-semibold' : password && !isLongEnough ? 'text-rose-600' : 'text-[#0D2B24]/50'}`}>Tối thiểu 10 ký tự</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 w-full">
-                      {password ? (
-                        hasNumberOrSymbol ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <XCircle className="w-3.5 h-3.5 text-rose-500" />
-                      ) : <Circle className="w-3.5 h-3.5 text-[#0D2B24]/30" />}
-                      <span className={`text-[10px] leading-tight ${password && hasNumberOrSymbol ? 'text-emerald-600 font-semibold' : password && !hasNumberOrSymbol ? 'text-rose-600' : 'text-[#0D2B24]/50'}`}>Có chữ số hoặc ký tự đặc biệt</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 pt-1">
-                    <label className="text-[10px] font-bold text-[#0D2B24]/60 uppercase tracking-wider pl-1">Xác nhận mật khẩu</label>
-                    <div className="relative flex items-center">
-                      <Lock className="absolute left-3 w-4 h-4 text-[#0D2B24]/40" />
-                      <input 
-                        type={confirmPasswordVisible ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={(e) => {
-                          setConfirmPassword(e.target.value);
-                          if(errors.confirmPassword) setErrors({...errors, confirmPassword: ''});
-                        }}
-                        className={`w-full pl-9 pr-14 py-2 bg-white border ${errors.confirmPassword ? 'border-red-500' : 'border-[#0D2B24]/10'} focus:border-[#0D2B24] focus:ring-1 focus:ring-[#0D2B24] text-[13px] text-[#0D2B24] rounded-xl focus:outline-none transition-all placeholder:text-[#0D2B24]/30`}
-                        placeholder="••••••••"
-                      />
-                      <div className="absolute right-3 flex items-center gap-2">
-                        <AnimatePresence>
-                          {confirmPassword && confirmPassword === password && (
-                            <motion.div 
-                              initial={{ opacity: 0, scale: 0.5 }} 
-                              animate={{ opacity: 1, scale: 1 }}
-                              exit={{ opacity: 0, scale: 0.5 }}
-                            >
-                              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                    {/* Password Input */}
+                    <FloatingInput
+                      id="login-password"
+                      type={passwordVisible ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if(errors.password) setErrors({...errors, password: ''});
+                      }}
+                      placeholder="Mật khẩu"
+                      icon={<Lock className="w-4 h-4" />}
+                      error={errors.password}
+                      rightElement={
                         <button 
                           type="button"
-                          onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
-                          className="text-[#0D2B24]/40 hover:text-[#0D2B24] transition-colors flex items-center justify-center"
+                          onClick={() => setPasswordVisible(!passwordVisible)}
+                          className="text-gray-400 hover:text-gray-600 transition-colors focus:outline-none"
                         >
-                          {confirmPasswordVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          {passwordVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      }
+                    />
+
+                    {/* Forgot password placement */}
+                    {!isRegisterMode && (
+                      <div className="flex justify-end pt-1">
+                        <button 
+                          type="button" 
+                          onClick={() => setIsForgotPasswordMode(true)} 
+                          className="text-xs font-semibold text-[#00c495] hover:underline transition-colors focus:outline-none"
+                        >
+                          Quên mật khẩu?
                         </button>
                       </div>
+                    )}
+
+                    {/* Password requirements block (Sign Up only) */}
+                    {isRegisterMode && (
+                      <div className="space-y-4 pt-1">
+                        {/* Password Requirements Indicator */}
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 pl-1 mt-1">
+                          <div className="flex items-center gap-1.5 w-[45%]">
+                            {password ? (
+                              hasLetter ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                            ) : <Circle className="w-3.5 h-3.5 text-gray-300" />}
+                            <span className={`text-[10px] leading-tight ${password && hasLetter ? 'text-emerald-600 font-semibold' : password && !hasLetter ? 'text-rose-600' : 'text-gray-400'}`}>Có chữ cái</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 w-[45%]">
+                            {password ? (
+                              isLongEnough ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                            ) : <Circle className="w-3.5 h-3.5 text-gray-300" />}
+                            <span className={`text-[10px] leading-tight ${password && isLongEnough ? 'text-emerald-600 font-semibold' : password && !isLongEnough ? 'text-rose-600' : 'text-gray-400'}`}>Tối thiểu 10 ký tự</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 w-full">
+                            {password ? (
+                              hasNumberOrSymbol ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                            ) : <Circle className="w-3.5 h-3.5 text-gray-300" />}
+                            <span className={`text-[10px] leading-tight ${password && hasNumberOrSymbol ? 'text-emerald-600 font-semibold' : password && !hasNumberOrSymbol ? 'text-rose-600' : 'text-gray-400'}`}>Có chữ số hoặc ký tự đặc biệt</span>
+                          </div>
+                        </div>
+
+                        {/* Confirm Password Input */}
+                        <FloatingInput
+                          id="register-confirm-password"
+                          type={confirmPasswordVisible ? "text" : "password"}
+                          value={confirmPassword}
+                          onChange={(e) => {
+                            setConfirmPassword(e.target.value);
+                            if(errors.confirmPassword) setErrors({...errors, confirmPassword: ''});
+                          }}
+                          placeholder="Xác nhận mật khẩu"
+                          icon={<Lock className="w-4 h-4" />}
+                          error={errors.confirmPassword}
+                          rightElement={
+                            <div className="flex items-center gap-2">
+                              {confirmPassword && confirmPassword === password && (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                              )}
+                              <button 
+                                type="button"
+                                onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
+                                className="text-gray-400 hover:text-gray-600 transition-colors focus:outline-none"
+                              >
+                                {confirmPasswordVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          }
+                        />
+
+                        {/* Recaptcha Mock Widget */}
+                        <div className="flex items-center justify-between p-3.5 bg-gray-50 border border-gray-100 rounded-xl mt-4">
+                          <div className="flex items-center gap-3">
+                            <input 
+                              type="checkbox" 
+                              id="recaptcha-mock"
+                              className="w-5 h-5 text-[#00c495] border-gray-300 rounded focus:ring-[#00c495] cursor-pointer"
+                              checked={isRobotChecked}
+                              onChange={(e) => setIsRobotChecked(e.target.checked)}
+                            />
+                            <label htmlFor="recaptcha-mock" className="text-xs font-semibold text-gray-700 select-none cursor-pointer">
+                              Tôi không phải là robot
+                            </label>
+                          </div>
+                          <div className="flex flex-col items-center select-none">
+                            <img src="https://www.gstatic.com/recaptcha/api2/logo_48.png" alt="recaptcha" className="w-5 h-5 opacity-60" />
+                            <span className="text-[8px] text-gray-400 mt-0.5">Bảo mật</span>
+                          </div>
+                        </div>
+
+                        {/* Terms checkbox */}
+                        <div className="flex items-start gap-2.5 pl-0.5">
+                          <input 
+                            type="checkbox" 
+                            id="terms-checkbox"
+                            className="w-4 h-4 mt-0.5 text-[#00c495] border-gray-300 rounded focus:ring-[#00c495] cursor-pointer"
+                            checked={agreeToTerms}
+                            onChange={(e) => setAgreeToTerms(e.target.checked)}
+                          />
+                          <label htmlFor="terms-checkbox" className="text-[11px] text-gray-500 leading-tight select-none cursor-pointer">
+                            Tôi đồng ý với <span className="text-[#00c495] hover:underline font-medium cursor-pointer">Điều khoản dịch vụ</span> & <span className="text-[#00c495] hover:underline font-medium cursor-pointer">Chính sách bảo mật</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Submit Button */}
+                    <button 
+                      type="submit" 
+                      className="w-full py-3.5 mt-2 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md bg-[#00c495] hover:bg-[#00b085] active:scale-[0.98] focus:outline-none"
+                    >
+                      {isRegisterMode ? "Tạo Tài Khoản" : "Đăng Nhập"}
+                    </button>
+                  </form>
+
+                  {/* Social Login Divider & Official Button */}
+                  <div className="mt-6 flex-shrink-0">
+                    <div className="relative flex items-center mb-4">
+                      <div className="flex-grow border-t border-gray-100"></div>
+                      <span className="flex-shrink mx-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hoặc tiếp tục với</span>
+                      <div className="flex-grow border-t border-gray-100"></div>
                     </div>
-                    {errors.confirmPassword && <p className="text-[10px] text-red-500 pl-1">{errors.confirmPassword}</p>}
+                    <div className="flex justify-center w-full">
+                      <div id="googleSignInButton" className="w-full flex justify-center [&>div]:w-full overflow-hidden rounded-xl"></div>
+                    </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
-
-            <button 
-              type="submit" 
-              className="w-full py-2.5 mt-2 text-white font-extrabold text-[13px] rounded-xl transition-all duration-300 shadow-md bg-[#0D2B24] hover:bg-[#0D2B24]/90 active:scale-[0.98]"
-            >
-              {isRegisterMode ? "Tạo Tài Khoản" : "Đăng Nhập"}
-            </button>
-          </form>
-
-          <div className="mt-4">
-            <div className="relative flex items-center mb-4">
-              <div className="flex-grow border-t border-[#0D2B24]/10"></div>
-              <span className="flex-shrink mx-4 text-[10px] font-bold text-[#0D2B24]/30 uppercase tracking-wider">Hoặc tiếp tục với</span>
-              <div className="flex-grow border-t border-[#0D2B24]/10"></div>
-            </div>
-            <div className="flex justify-center w-full">
-              <div id="googleSignInButton" className="w-full flex justify-center [&>div]:w-full overflow-hidden rounded-xl"></div>
-            </div>
           </div>
-          </motion.div>
-          )}
-          </AnimatePresence>
         </div>
       </motion.div>
     </div>
