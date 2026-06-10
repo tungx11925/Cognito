@@ -69,6 +69,7 @@ interface StudyContextType {
   updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string }) => Promise<boolean>;
   toggleVerification: (enable: boolean) => Promise<boolean>;
   verify2FA: (email: string, code: string) => Promise<boolean>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   searchQuery: string;
 
   setSearchQuery: (query: string) => void;
@@ -97,6 +98,7 @@ interface StudyContextType {
   setNewDocSolution: (s: string) => void;
   handleAddDocumentSubmit: (e: React.FormEvent) => Promise<void>;
   handleDeleteDocument: (id: number) => Promise<void>;
+  handleEditDocument: (id: number, title: string, category?: string, description?: string) => Promise<boolean>;
 
   // Decks & Flashcards
   decks: FlashcardDeck[];
@@ -175,6 +177,11 @@ interface StudyContextType {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+const getAuthHeaders = (): Record<string, string> => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
 
 const MOCK_DOCUMENTS: DocumentItem[] = [
   {
@@ -544,6 +551,37 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      triggerMessage("Bạn chưa đăng nhập", "error");
+      return { success: false, error: "Bạn chưa đăng nhập" };
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/change-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        triggerMessage(data.message || "Thay đổi mật khẩu thành công!", "success");
+        return { success: true };
+      } else {
+        triggerMessage(data.error || "Đổi mật khẩu thất bại", "error");
+        return { success: false, error: data.error };
+      }
+    } catch (e) {
+      triggerMessage("Lỗi kết nối máy chủ", "error");
+      return { success: false, error: "Lỗi kết nối máy chủ" };
+    }
+  };
+
   const verify2FA = async (email: string, code: string): Promise<boolean> => {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/verify-2fa`, {
@@ -604,7 +642,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch Documents
   const fetchDocuments = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/documents`);
+      const res = await fetch(`${API_BASE_URL}/documents`, {
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         if (data && data.length > 0) {
@@ -622,7 +662,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch Decks
   const fetchFlashcardDecks = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/flashcards/decks`);
+      const res = await fetch(`${API_BASE_URL}/flashcards/decks`, {
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         if (data && data.length > 0) {
@@ -640,7 +682,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch cards in a deck
   const fetchCardsForDeck = async (deckId: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/flashcards/decks/${deckId}/cards`);
+      const res = await fetch(`${API_BASE_URL}/flashcards/decks/${deckId}/cards`, {
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         if (data && data.length > 0) {
@@ -658,7 +702,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch notes for active document
   const fetchNotesForDoc = async (docId: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/notes/document/${docId}`);
+      const res = await fetch(`${API_BASE_URL}/notes/document/${docId}`, {
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.length > 0) {
@@ -677,7 +723,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch stats
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/study-sessions/stats`);
+      const res = await fetch(`${API_BASE_URL}/study-sessions/stats`, {
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         if (data && data.total_study_minutes > 0) {
@@ -703,9 +751,11 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/documents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({
-          user_id: activeUser?.id,
           title: newDocTitle,
           description: newDocDesc,
           doc_url: '',
@@ -737,7 +787,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!confirm("Bạn có chắc chắn muốn xóa tài liệu này khỏi thư viện?")) return;
     try {
       const res = await fetch(`${API_BASE_URL}/documents/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         triggerMessage("Đã xóa tài liệu thành công");
@@ -747,6 +798,32 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     } catch (e) {
       triggerMessage("Lỗi khi xóa tài liệu", "error");
+    }
+  };
+
+  // API Call: Edit Document (Rename / Edit)
+  const handleEditDocument = async (id: number, title: string, category?: string, description?: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/documents/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({ title, category, description })
+      });
+      if (res.ok) {
+        triggerMessage("Đã chỉnh sửa thông tin tài liệu thành công");
+        fetchDocuments();
+        return true;
+      } else {
+        const err = await res.json();
+        triggerMessage(err.error || "Lỗi khi chỉnh sửa tài liệu", "error");
+        return false;
+      }
+    } catch (e) {
+      triggerMessage("Lỗi kết nối máy chủ", "error");
+      return false;
     }
   };
 
@@ -761,9 +838,11 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/flashcards/decks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({
-          user_id: activeUser?.id,
           name: newDeckName,
           description: newDeckDesc
         })
@@ -789,9 +868,11 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/notes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({
-          user_id: activeUser?.id,
           document_id: activeDoc.id,
           title: notesTitle,
           content: notesText
@@ -821,7 +902,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/ai/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({
           document_id: activeDoc.id,
           message: userMsg
@@ -850,7 +934,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/ai/generate-quiz`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({ document_id: activeDoc.id })
       });
       if (res.ok) {
@@ -872,7 +959,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/ai/generate-flashcards`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({
           document_id: activeDoc.id,
           deck_id: activeDeck.id
@@ -899,7 +989,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/flashcards/review/${currentCard.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({ difficulty })
       });
 
@@ -941,9 +1034,11 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       try {
         await fetch(`${API_BASE_URL}/study-sessions`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          },
           body: JSON.stringify({
-            user_id: activeUser?.id,
             document_id: activeDoc.id,
             duration_seconds: elapsedStudyTime || (timerMaxMinutes * 60)
           })
@@ -981,6 +1076,15 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     fetchFlashcardDecks();
     fetchAnalytics();
   }, []);
+
+  // Refetch data when user logs in/authenticates
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchDocuments();
+      fetchFlashcardDecks();
+      fetchAnalytics();
+    }
+  }, [isAuthenticated]);
 
   // Update Notes when activeDoc changes
   useEffect(() => {
@@ -1041,6 +1145,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       updateProfile,
       toggleVerification,
       verify2FA,
+      changePassword,
       showLanding,
       setShowLanding,
       showLoginModal,
@@ -1074,6 +1179,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setNewDocSolution,
       handleAddDocumentSubmit,
       handleDeleteDocument,
+      handleEditDocument,
 
       decks,
       fetchFlashcardDecks,

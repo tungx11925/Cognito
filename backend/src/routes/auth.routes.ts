@@ -9,7 +9,8 @@ import {
   updateAvatar, 
   updateProfile,
   toggleVerification,
-  verify2FA
+  verify2FA,
+  changePassword
 } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import multer from 'multer';
@@ -51,5 +52,6 @@ router.post('/avatar', authenticate, upload.single('avatar'), updateAvatar);
 router.put('/profile', authenticate, updateProfile);
 router.post('/toggle-verification', authenticate, toggleVerification);
 router.post('/verify-2fa', verify2FA);
+router.put('/change-password', authenticate, changePassword);
 
 export default router;

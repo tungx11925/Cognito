@@ -7,11 +7,12 @@ import { useStudy } from '../../context/StudyContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, BookOpen, FlaskConical, Timer, Settings,
-  LogOut, Zap, Search, Bell, Plus, FileText, CreditCard, StickyNote, History,
+  LogOut, Zap, Search, Bell, Plus, FileText, CreditCard, StickyNote, History, Globe
 } from 'lucide-react';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+  { icon: Globe, label: 'Community', path: '/community' },
   { icon: BookOpen, label: 'My Library', path: '/library' },
   { icon: FlaskConical, label: 'AI Lab', path: '/ai-lab' },
   { icon: Timer, label: 'Study Sessions', path: '/study-sessions' },

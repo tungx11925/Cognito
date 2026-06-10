@@ -5,6 +5,10 @@ import axios from 'axios';
 import Groq from 'groq-sdk';
 // @ts-ignore
 import mammoth from 'mammoth';
+import multer from 'multer';
+const pdfParse = require('pdf-parse');
+import xlsx from 'xlsx';
+import { authenticate, AuthRequest } from '../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -13,9 +17,10 @@ const router = Router();
 // ==========================================
 
 // Get all documents
-router.get('/documents', async (req: Request, res: Response) => {
+router.get('/documents', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const result = await db.query('SELECT * FROM documents ORDER BY created_at DESC');
+    const userId = req.user!.id;
+    const result = await db.query('SELECT * FROM documents WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
     res.status(200).json(result.rows);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -23,10 +28,11 @@ router.get('/documents', async (req: Request, res: Response) => {
 });
 
 // Get document by ID
-router.get('/documents/:id', async (req: Request, res: Response) => {
+router.get('/documents/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await db.query('SELECT * FROM documents WHERE id = $1', [id]);
+    const userId = req.user!.id;
+    const result = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [id, userId]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Document not found' });
     }
@@ -37,18 +43,15 @@ router.get('/documents/:id', async (req: Request, res: Response) => {
 });
 
 // Create document
-router.post('/documents', async (req: Request, res: Response) => {
+router.post('/documents', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { user_id, title, description, doc_url, solution_text, solution_url, category } = req.body;
-    
-    // Check if user exists, default to user_id = 2 (Nguyễn Văn Học) if not specified or doesn't exist
-    const userCheck = await db.query('SELECT id FROM users WHERE id = $1', [user_id || 2]);
-    const validUserId = userCheck.rows.length > 0 ? (user_id || 2) : 2;
+    const { title, description, doc_url, solution_text, solution_url, category } = req.body;
+    const userId = req.user!.id;
 
     const result = await db.query(
       `INSERT INTO documents (user_id, title, description, doc_url, solution_text, solution_url, category) 
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [validUserId, title, description || '', doc_url || '', solution_text || '', solution_url || '', category || 'Khác']
+      [userId, title, description || '', doc_url || '', solution_text || '', solution_url || '', category || 'Khác']
     );
     res.status(201).json(result.rows[0]);
   } catch (error: any) {
@@ -56,10 +59,47 @@ router.post('/documents', async (req: Request, res: Response) => {
   }
 });
 
-// Delete document
-router.delete('/documents/:id', async (req: Request, res: Response) => {
+// Update document (Rename / Edit)
+router.put('/documents/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const userId = req.user!.id;
+    const { title, description, category } = req.body;
+
+    // Check ownership before updating
+    const docCheck = await db.query('SELECT id FROM documents WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (docCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Bạn không có quyền sửa tài liệu này hoặc tài liệu không tồn tại' });
+    }
+
+    const result = await db.query(
+      `UPDATE documents 
+       SET title = COALESCE($1, title), 
+           description = COALESCE($2, description), 
+           category = COALESCE($3, category) 
+       WHERE id = $4 AND user_id = $5 
+       RETURNING *`,
+      [title, description, category, id, userId]
+    );
+
+    res.status(200).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete document
+router.delete('/documents/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+
+    // Check ownership before deleting
+    const docCheck = await db.query('SELECT id FROM documents WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (docCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Bạn không có quyền xóa tài liệu này hoặc tài liệu không tồn tại' });
+    }
+
     await db.query('DELETE FROM documents WHERE id = $1', [id]);
     res.status(200).json({ message: 'Document deleted successfully' });
   } catch (error: any) {
@@ -72,13 +112,18 @@ router.delete('/documents/:id', async (req: Request, res: Response) => {
 // STUDY SESSIONS ENDPOINTS
 // ==========================================
 
-router.get('/study-sessions/stats', async (req: Request, res: Response) => {
+router.get('/study-sessions/stats', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
     // Get aggregate statistics
-    const totalTimeResult = await db.query('SELECT SUM(duration_seconds) as total_seconds FROM study_sessions');
-    const sessionsCountResult = await db.query('SELECT COUNT(*) as count FROM study_sessions');
-    const documentCountResult = await db.query('SELECT COUNT(*) as count FROM documents');
-    const flashcardsCountResult = await db.query('SELECT COUNT(*) as count FROM flashcards');
+    const totalTimeResult = await db.query('SELECT SUM(duration_seconds) as total_seconds FROM study_sessions WHERE user_id = $1', [userId]);
+    const sessionsCountResult = await db.query('SELECT COUNT(*) as count FROM study_sessions WHERE user_id = $1', [userId]);
+    const documentCountResult = await db.query('SELECT COUNT(*) as count FROM documents WHERE user_id = $1', [userId]);
+    const flashcardsCountResult = await db.query(
+      `SELECT COUNT(*) as count FROM flashcards f
+       JOIN flashcard_decks d ON f.deck_id = d.id
+       WHERE d.user_id = $1`, [userId]
+    );
     
     // Mock daily analytics data for chart
     const chartData = [
@@ -103,12 +148,13 @@ router.get('/study-sessions/stats', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/study-sessions', async (req: Request, res: Response) => {
+router.post('/study-sessions', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { user_id, document_id, duration_seconds } = req.body;
+    const { document_id, duration_seconds } = req.body;
+    const userId = req.user!.id;
     const result = await db.query(
       'INSERT INTO study_sessions (user_id, document_id, duration_seconds) VALUES ($1, $2, $3) RETURNING *',
-      [user_id || 2, document_id, duration_seconds]
+      [userId, document_id, duration_seconds]
     );
     res.status(201).json(result.rows[0]);
   } catch (error: any) {
@@ -122,12 +168,20 @@ router.post('/study-sessions', async (req: Request, res: Response) => {
 // ==========================================
 
 // Get notes by document ID
-router.get('/notes/document/:docId', async (req: Request, res: Response) => {
+router.get('/notes/document/:docId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { docId } = req.params;
+    const userId = req.user!.id;
+
+    // Ensure document belongs to user
+    const docCheck = await db.query('SELECT id FROM documents WHERE id = $1 AND user_id = $2', [docId, userId]);
+    if (docCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     const result = await db.query(
-      'SELECT * FROM notes WHERE document_id = $1 ORDER BY created_at DESC',
-      [docId]
+      'SELECT * FROM notes WHERE document_id = $1 AND user_id = $2 ORDER BY created_at DESC',
+      [docId, userId]
     );
     res.status(200).json(result.rows);
   } catch (error: any) {
@@ -136,14 +190,21 @@ router.get('/notes/document/:docId', async (req: Request, res: Response) => {
 });
 
 // Upsert note (creates if not exists, updates if exists)
-router.post('/notes', async (req: Request, res: Response) => {
+router.post('/notes', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { user_id, document_id, title, content } = req.body;
+    const { document_id, title, content } = req.body;
+    const userId = req.user!.id;
+
+    // Ensure document belongs to user
+    const docCheck = await db.query('SELECT id FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
+    if (docCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
     
     // Check if a note already exists for this document and user
     const checkExist = await db.query(
       'SELECT id FROM notes WHERE user_id = $1 AND document_id = $2',
-      [user_id || 2, document_id]
+      [userId, document_id]
     );
 
     let result;
@@ -157,7 +218,7 @@ router.post('/notes', async (req: Request, res: Response) => {
       // Insert
       result = await db.query(
         'INSERT INTO notes (user_id, document_id, title, content) VALUES ($1, $2, $3, $4) RETURNING *',
-        [user_id || 2, document_id, title || 'Ghi chú học tập', content]
+        [userId, document_id, title || 'Ghi chú học tập', content]
       );
     }
     
@@ -173,9 +234,10 @@ router.post('/notes', async (req: Request, res: Response) => {
 // ==========================================
 
 // Get all decks
-router.get('/flashcards/decks', async (req: Request, res: Response) => {
+router.get('/flashcards/decks', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const result = await db.query('SELECT * FROM flashcard_decks ORDER BY created_at DESC');
+    const userId = req.user!.id;
+    const result = await db.query('SELECT * FROM flashcard_decks WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
     res.status(200).json(result.rows);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -197,9 +259,17 @@ router.get('/flashcards/decks/:id', async (req: Request, res: Response) => {
 });
 
 // Get flashcards in a deck
-router.get('/flashcards/decks/:deckId/cards', async (req: Request, res: Response) => {
+router.get('/flashcards/decks/:deckId/cards', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { deckId } = req.params;
+    const userId = req.user!.id;
+
+    // Ensure the deck belongs to this user
+    const deckCheck = await db.query('SELECT id FROM flashcard_decks WHERE id = $1 AND user_id = $2', [deckId, userId]);
+    if (deckCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Bạn không có quyền truy cập bộ thẻ này hoặc bộ thẻ không tồn tại' });
+    }
+
     const result = await db.query(
       'SELECT * FROM flashcards WHERE deck_id = $1 ORDER BY id ASC',
       [deckId]
@@ -211,9 +281,17 @@ router.get('/flashcards/decks/:deckId/cards', async (req: Request, res: Response
 });
 
 // Get due flashcards for study/review in a deck
-router.get('/flashcards/decks/:deckId/review', async (req: Request, res: Response) => {
+router.get('/flashcards/decks/:deckId/review', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { deckId } = req.params;
+    const userId = req.user!.id;
+
+    // Ensure the deck belongs to this user
+    const deckCheck = await db.query('SELECT id FROM flashcard_decks WHERE id = $1 AND user_id = $2', [deckId, userId]);
+    if (deckCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Bạn không có quyền truy cập bộ thẻ này hoặc bộ thẻ không tồn tại' });
+    }
+
     const result = await db.query(
       'SELECT * FROM flashcards WHERE deck_id = $1 AND (next_review_at IS NULL OR next_review_at <= CURRENT_TIMESTAMP) ORDER BY next_review_at ASC',
       [deckId]
@@ -225,12 +303,13 @@ router.get('/flashcards/decks/:deckId/review', async (req: Request, res: Respons
 });
 
 // Create a deck
-router.post('/flashcards/decks', async (req: Request, res: Response) => {
+router.post('/flashcards/decks', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { user_id, name, description, is_public } = req.body;
+    const { name, description, is_public } = req.body;
+    const userId = req.user!.id;
     const result = await db.query(
       'INSERT INTO flashcard_decks (user_id, name, description, is_public) VALUES ($1, $2, $3, $4) RETURNING *',
-      [user_id || 2, name, description || '', is_public || false]
+      [userId, name, description || '', is_public || false]
     );
     res.status(201).json(result.rows[0]);
   } catch (error: any) {
@@ -283,11 +362,19 @@ router.delete('/flashcards/decks/:id', async (req: Request, res: Response) => {
 });
 
 // Create a flashcard
-router.post('/flashcards', async (req: Request, res: Response) => {
+router.post('/flashcards', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { deck_id, document_id, front, back } = req.body;
+    const userId = req.user!.id;
+
     if (!front || !back || front.trim() === '' || back.trim() === '') {
       return res.status(400).json({ error: 'Nội dung Front và Back không được để trống' });
+    }
+
+    // Ensure the deck belongs to this user
+    const deckCheck = await db.query('SELECT id FROM flashcard_decks WHERE id = $1 AND user_id = $2', [deck_id, userId]);
+    if (deckCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Bạn không có quyền truy cập bộ thẻ này hoặc bộ thẻ không tồn tại' });
     }
     const result = await db.query(
       'INSERT INTO flashcards (deck_id, document_id, front, back) VALUES ($1, $2, $3, $4) RETURNING *',
@@ -340,16 +427,134 @@ router.delete('/flashcards/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Toggle star status of a flashcard
+router.put('/flashcards/:id/star', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { is_starred } = req.body;
+    
+    const result = await db.query(
+      'UPDATE flashcards SET is_starred = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+      [is_starred, id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+    }
+    
+    res.status(200).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all public decks for the Community Library
+router.get('/flashcards/community/decks', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query(`
+      SELECT d.*, u.username as author_name, u.avatar_url,
+             (SELECT COUNT(*) FROM flashcards WHERE deck_id = d.id) as card_count,
+             (SELECT COUNT(*) FROM flashcard_decks WHERE forked_from_id = d.id) as fork_count
+      FROM flashcard_decks d
+      JOIN users u ON d.user_id = u.id
+      WHERE d.is_public = true
+      ORDER BY d.created_at DESC
+    `);
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Fork a public deck
+router.post('/flashcards/decks/:deckId/fork', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { deckId } = req.params;
+    const userId = req.user!.id;
+    
+    // Check if deck is public
+    const deckResult = await db.query('SELECT * FROM flashcard_decks WHERE id = $1', [deckId]);
+    if (deckResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bộ thẻ' });
+    }
+    
+    const originalDeck = deckResult.rows[0];
+    if (!originalDeck.is_public && originalDeck.user_id !== userId) {
+      return res.status(403).json({ error: 'Không có quyền sao chép bộ thẻ này' });
+    }
+    
+    // Create new deck
+    const newDeckResult = await db.query(
+      'INSERT INTO flashcard_decks (user_id, name, description, forked_from_id, is_public) VALUES ($1, $2, $3, $4, false) RETURNING *',
+      [userId, originalDeck.name + ' (Copy)', originalDeck.description, deckId]
+    );
+    const newDeck = newDeckResult.rows[0];
+    
+    // Copy cards
+    const cardsResult = await db.query('SELECT * FROM flashcards WHERE deck_id = $1', [deckId]);
+    for (let card of cardsResult.rows) {
+      await db.query(
+        'INSERT INTO flashcards (deck_id, front, back, is_starred) VALUES ($1, $2, $3, false)',
+        [newDeck.id, card.front, card.back]
+      );
+    }
+    
+    res.status(201).json(newDeck);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Match game leaderboard
+router.get('/flashcards/decks/:deckId/match-leaderboard', async (req: Request, res: Response) => {
+  try {
+    const { deckId } = req.params;
+    const result = await db.query(`
+      SELECT m.id, m.time_ms, m.played_at, u.name, u.avatar_url 
+      FROM match_game_leaderboards m
+      JOIN users u ON m.user_id = u.id
+      WHERE m.deck_id = $1
+      ORDER BY m.time_ms ASC
+      LIMIT 5
+    `, [deckId]);
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/flashcards/decks/:deckId/match-leaderboard', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { deckId } = req.params;
+    const { time_ms } = req.body;
+    const userId = req.user!.id;
+    
+    const result = await db.query(
+      'INSERT INTO match_game_leaderboards (deck_id, user_id, time_ms) VALUES ($1, $2, $3) RETURNING *',
+      [deckId, userId, time_ms]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Review flashcard (Spaced Repetition Algorithm)
-router.post('/flashcards/review/:id', async (req: Request, res: Response) => {
+router.post('/flashcards/review/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { difficulty } = req.body; // 'easy', 'good', 'hard'
+    const userId = req.user!.id;
     
-    // Fetch the flashcard
-    const cardResult = await db.query('SELECT * FROM flashcards WHERE id = $1', [id]);
+    // Fetch the flashcard and verify ownership
+    const cardResult = await db.query(
+      `SELECT f.* FROM flashcards f 
+       JOIN flashcard_decks d ON f.deck_id = d.id 
+       WHERE f.id = $1 AND d.user_id = $2`, 
+      [id, userId]
+    );
     if (cardResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Flashcard not found' });
+      return res.status(404).json({ error: 'Flashcard not found or access denied' });
     }
     
     const card = cardResult.rows[0];
@@ -405,12 +610,13 @@ router.post('/flashcards/review/:id', async (req: Request, res: Response) => {
 // ==========================================
 
 // Chat with AI about document
-router.post('/ai/chat', async (req: Request, res: Response) => {
+router.post('/ai/chat', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { document_id, message, history } = req.body;
+    const userId = req.user!.id;
     
-    // Fetch document to extract context
-    const docResult = await db.query('SELECT * FROM documents WHERE id = $1', [document_id]);
+    // Fetch document to extract context and verify ownership
+    const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
     const document = docResult.rows[0];
     const docTitle = document ? document.title : 'Tài liệu học tập';
     const docDesc = document ? document.description : '';
@@ -595,11 +801,12 @@ Dựa trên kiến thức của tài liệu này, câu hỏi của bạn: *"${me
 });
 
 // Generate dynamic quiz questions from document
-router.post('/ai/generate-quiz', async (req: Request, res: Response) => {
+router.post('/ai/generate-quiz', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { document_id } = req.body;
+    const userId = req.user!.id;
     
-    const docResult = await db.query('SELECT * FROM documents WHERE id = $1', [document_id]);
+    const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
     const document = docResult.rows[0];
     
     // Dynamic generated quiz based on the document category/title
@@ -710,12 +917,20 @@ router.post('/ai/generate-quiz', async (req: Request, res: Response) => {
 });
 
 // AI automatically generates flashcards from document
-router.post('/ai/generate-flashcards', async (req: Request, res: Response) => {
+router.post('/ai/generate-flashcards', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { document_id, deck_id } = req.body;
+    const userId = req.user!.id;
     
-    const docResult = await db.query('SELECT * FROM documents WHERE id = $1', [document_id]);
+    const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
     const document = docResult.rows[0];
+    
+    if (deck_id) {
+      const deckCheck = await db.query('SELECT id FROM flashcard_decks WHERE id = $1 AND user_id = $2', [deck_id, userId]);
+      if (deckCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'Bạn không có quyền truy cập bộ thẻ này hoặc bộ thẻ không tồn tại' });
+      }
+    }
     
     let cards = [];
     if (document && document.category === 'Trí tuệ nhân tạo') {
@@ -858,6 +1073,90 @@ ${note_content}
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// AI FLASHCARD LAB ENDPOINT
+// ==========================================
+const uploadMem = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const validMimes = [
+      'application/pdf',
+      'text/plain',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv'
+    ];
+    if (validMimes.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Định dạng không được hỗ trợ.'));
+  }
+});
+
+router.post('/ai/generate-flashcards-from-file', uploadMem.single('document'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Vui lòng chọn file' });
+
+    let extractedText = '';
+    const { mimetype, buffer } = req.file;
+
+    if (mimetype === 'application/pdf') {
+      const data = await pdfParse(buffer);
+      extractedText = data.text;
+    } else if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const data = await mammoth.extractRawText({ buffer: buffer });
+      extractedText = data.value;
+    } else if (mimetype === 'text/plain') {
+      extractedText = buffer.toString('utf-8');
+    } else if (mimetype.includes('spreadsheetml') || mimetype.includes('excel') || mimetype === 'text/csv') {
+      const workbook = xlsx.read(buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      extractedText = xlsx.utils.sheet_to_csv(sheet);
+    }
+
+    if (!extractedText.trim()) {
+      return res.status(400).json({ error: 'Không tìm thấy chữ trong tài liệu này.' });
+    }
+
+    const truncatedText = extractedText.substring(0, 20000);
+
+    const systemPrompt = `Bạn là một chuyên gia học thuật. Hãy đọc đoạn văn bản sau đây và trích xuất ra các khái niệm quan trọng nhất để tạo thành bộ thẻ Flashcard ghi nhớ. 
+Yêu cầu đầu ra BẮT BUỘC phải là một mảng JSON có cấu trúc chính xác như sau, không được chứa thêm bất kỳ đoạn text giải thích nào khác bên ngoài JSON, KHÔNG BỌC TRONG \`\`\`json:
+[
+  { "front": "Thuật ngữ hoặc câu hỏi ngắn bằng ngôn ngữ gốc của tài liệu", "back": "Định nghĩa hoặc câu trả lời chi tiết bằng Tiếng Việt hoặc cùng ngôn ngữ" }
+]`;
+
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const completion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `NỘI DUNG TÀI LIỆU:\n${truncatedText}` }
+      ],
+      model: "llama-3.3-70b-versatile", // Use latest supported Groq model
+      temperature: 0.2,
+    });
+
+    const responseText = completion.choices[0]?.message?.content || "";
+
+    const cleanedJsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    let cards = [];
+    try {
+      cards = JSON.parse(cleanedJsonStr);
+    } catch (parseError) {
+      console.error("Lỗi Parse JSON từ AI:", responseText);
+      return res.status(500).json({ error: 'AI trả về định dạng dữ liệu không hợp lệ. Vui lòng thử lại.' });
+    }
+
+    res.status(200).json({ cards });
+
+  } catch (error: any) {
+    console.error("Lỗi AI Flashcard Generator:", error);
+    res.status(500).json({ error: error.message || 'Lỗi server nội bộ' });
   }
 });
 

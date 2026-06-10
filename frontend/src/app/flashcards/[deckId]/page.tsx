@@ -3,13 +3,22 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getAllFlashcards, updateFlashcard, deleteFlashcard, getDeckById, updateDeck, deleteDeck } from '@/services/flashcard.service';
-import { ArrowLeft, Loader2, ChevronLeft, ChevronRight, Maximize, RefreshCw, Play, Edit2, Trash2, Check, X, BookOpen, Layers, Settings, Globe, Lock } from 'lucide-react';
+import { ArrowLeft, Loader2, ChevronLeft, ChevronRight, Maximize, RefreshCw, Play, Edit2, Trash2, Check, X, BookOpen, Layers, Settings, Globe, Lock, PenTool, Puzzle, Star, Volume2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toggleStarFlashcard } from '@/services/flashcard.service';
+import MatchGameMode from '@/components/flashcards/modes/MatchGameMode';
+import WriteMode from '@/components/flashcards/modes/WriteMode';
 
 export default function FlashcardDeckPage() {
   const params = useParams();
   const router = useRouter();
   const deckId = Number(params.deckId);
+  
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    const saved = localStorage.getItem("app-theme");
+    if (saved === "dark") setDark(true);
+  }, []);
 
   const [cards, setCards] = useState<any[]>([]);
   const [deck, setDeck] = useState<any>(null);
@@ -30,8 +39,8 @@ export default function FlashcardDeckPage() {
   const [editDeckDesc, setEditDeckDesc] = useState('');
   const [editDeckPublic, setEditDeckPublic] = useState(false);
   
-  // Modes: 'dashboard' | 'study' | 'quiz'
-  const [viewMode, setViewMode] = useState<'dashboard' | 'study' | 'quiz'>('dashboard');
+  // Modes: 'dashboard' | 'study' | 'quiz' | 'match' | 'write'
+  const [viewMode, setViewMode] = useState<'dashboard' | 'study' | 'quiz' | 'match' | 'write'>('dashboard');
   
   // Create States
   const [isAddingCard, setIsAddingCard] = useState(false);
@@ -250,17 +259,40 @@ export default function FlashcardDeckPage() {
     }, 1500);
   };
 
+  const speakText = (text: string, lang = 'en-US') => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    utterance.rate = 0.9;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleToggleStar = async (card: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      const isStarred = !card.is_starred;
+      await toggleStarFlashcard(card.id, isStarred);
+      setCards(cards.map(c => c.id === card.id ? { ...c, is_starred: isStarred } : c));
+      showToast(isStarred ? 'Đã gắn sao thẻ này' : 'Đã bỏ gắn sao', 'success');
+    } catch (err: any) {
+      showToast('Lỗi: ' + err.message, 'error');
+    }
+  };
+
   // -------------------------
   // STUDY (FLIP) LOGIC
   // -------------------------
-  const handleNext = () => {
+  const handleNext = (e?: React.MouseEvent) => {
+    if (e?.currentTarget instanceof HTMLElement) e.currentTarget.blur();
     setIsFlipped(false);
     setTimeout(() => {
       setCurrentIndex(prev => (prev < cards.length - 1 ? prev + 1 : prev));
     }, 150);
   };
 
-  const handlePrev = () => {
+  const handlePrev = (e?: React.MouseEvent) => {
+    if (e?.currentTarget instanceof HTMLElement) e.currentTarget.blur();
     setIsFlipped(false);
     setTimeout(() => {
       setCurrentIndex(prev => (prev > 0 ? prev - 1 : prev));
@@ -351,11 +383,24 @@ export default function FlashcardDeckPage() {
     </>
   );
 
-  const renderDashboard = () => (
-    <div className="max-w-5xl mx-auto w-full p-6 animate-in fade-in zoom-in-95 duration-300">
+  const renderDashboard = () => {
+    const cardBg = dark ? "#1e1e1e" : "#ffffff";
+    const border = dark ? "#2a2a2a" : "rgba(26,46,28,0.22)";
+    const shadow = dark
+      ? "4px 4px 0px 0px rgba(255,255,255,0.04)"
+      : "4px 4px 0px 0px rgba(26,46,28,0.12)";
+    const textMain = dark ? "#f0f0f0" : "#1a2e1c";
+    const textSub = dark ? "#9ca3af" : "#6b7280";
+    const primaryColor = "#10b981";
+
+    return (
+    <div className="max-w-5xl mx-auto w-full p-6 animate-in fade-in zoom-in-95 duration-300" style={{ fontFamily: "'Outfit', sans-serif" }}>
       <div className="flex flex-col md:flex-row gap-6 mb-10">
         {/* Banner/Actions */}
-        <div className="flex-1 bg-white rounded-2xl p-8 shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center relative overflow-hidden">
+        <div 
+          className="flex-1 rounded-2xl p-8 flex flex-col justify-center items-center text-center relative overflow-hidden"
+          style={{ background: cardBg, border: `2px solid ${border}`, boxShadow: shadow }}
+        >
           {deck && deck.is_public && (
             <div className="absolute top-4 left-4 bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
               <Globe size={12} /> CÔNG KHAI
@@ -369,33 +414,51 @@ export default function FlashcardDeckPage() {
           
           <button 
             onClick={() => setShowSettings(true)}
-            className="absolute top-4 right-4 text-gray-400 hover:text-[#4255FF] bg-gray-50 hover:bg-blue-50 p-2 rounded-full transition-colors"
+            className="absolute top-4 right-4 p-2 rounded-full transition-colors"
+            style={{ color: textSub, background: dark ? "#2a2a2a" : "#f0f0ec" }}
             title="Cài đặt bộ thẻ"
           >
             <Settings size={18} />
           </button>
 
-          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4 shadow-inner">
+          <div 
+            className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+            style={{ background: primaryColor + "22", color: primaryColor }}
+          >
             <Layers size={32} />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">{deck ? deck.name : 'Bộ thẻ Flashcards'}</h2>
-          {deck?.description && <p className="text-gray-600 mb-2 max-w-lg">{deck.description}</p>}
-          <p className="text-gray-400 text-sm mb-8">Tổng cộng {cards.length} thẻ thuật ngữ. Chọn chế độ học bên dưới để bắt đầu luyện tập nâng cao.</p>
+          <h2 className="text-2xl font-bold mb-2" style={{ color: textMain }}>{deck ? deck.name : 'Bộ thẻ Flashcards'}</h2>
+          {deck?.description && <p className="mb-2 max-w-lg" style={{ color: textSub }}>{deck.description}</p>}
+          <p className="text-sm mb-8" style={{ color: textSub }}>Tổng cộng {cards.length} thẻ thuật ngữ. Chọn chế độ học bên dưới để bắt đầu luyện tập nâng cao.</p>
           
-          <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-2xl">
             <button 
               onClick={() => { setViewMode('study'); setCurrentIndex(0); setIsFlipped(false); }}
-              className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-[#4255FF] to-[#5a6aff] text-white py-3.5 px-6 rounded-xl font-bold hover:shadow-lg hover:-translate-y-0.5 transition-all shadow-md shadow-blue-500/20"
+              className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all"
+              style={{ background: primaryColor, color: "#fff", border: "none" }}
             >
-              <BookOpen size={20} />
-              Lật thẻ
+              <BookOpen size={18} /> Lật thẻ
+            </button>
+            <button 
+              onClick={() => { setViewMode('write'); setCurrentIndex(0); }}
+              className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all"
+              style={{ background: dark ? "#2a2a2a" : "#ffffff", border: `2px solid ${border}`, color: textMain }}
+            >
+              <PenTool size={18} /> Chép tả
             </button>
             <button 
               onClick={generateQuiz}
-              className="flex-1 flex items-center justify-center gap-2 bg-white border-2 border-gray-200 text-gray-800 py-3.5 px-6 rounded-xl font-bold hover:border-[#4255FF] hover:text-[#4255FF] hover:bg-blue-50 transition-all hover:-translate-y-0.5"
+              className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all"
+              style={{ background: dark ? "#2a2a2a" : "#ffffff", border: `2px solid ${border}`, color: textMain }}
             >
-              <Play size={20} />
-              Trắc nghiệm
+              <Play size={18} /> Trắc nghiệm
+            </button>
+            <button 
+              onClick={() => setViewMode('match')}
+              className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all"
+              style={{ background: dark ? "#2a2a2a" : "#ffffff", border: `2px solid ${border}`, color: textMain }}
+            >
+              <Puzzle size={18} /> Ghép thẻ
             </button>
           </div>
         </div>
@@ -403,14 +466,15 @@ export default function FlashcardDeckPage() {
 
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+          <h3 className="text-xl font-bold flex items-center gap-2" style={{ color: textMain }}>
             Danh sách thuật ngữ ({cards.length})
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Ấn để xem, hoặc nhấn nút sửa/xóa.</p>
+          <p className="text-sm mt-1" style={{ color: textSub }}>Ấn để xem, hoặc nhấn nút sửa/xóa.</p>
         </div>
         <button 
           onClick={() => setIsAddingCard(!isAddingCard)}
-          className="flex items-center gap-2 bg-blue-50 text-[#4255FF] px-4 py-2 rounded-lg font-bold hover:bg-blue-100 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-colors"
+          style={{ background: primaryColor + "22", color: primaryColor }}
         >
           {isAddingCard ? <X size={18} /> : <Check size={18} className="opacity-0 w-0 hidden" />} 
           {isAddingCard ? 'Hủy' : '+ Thêm thẻ mới'}
@@ -510,10 +574,11 @@ export default function FlashcardDeckPage() {
           </div>
         )}
 
-        {/* LIST OF EXISTING CARDS */}
         {cards.map((card) => (
-          <div key={card.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all hover:shadow-md group">
-            {editingCardId === card.id ? (
+            <div 
+              className="p-5 rounded-2xl mb-4 border-2 shadow-sm transition-all relative group"
+              style={{ background: cardBg, borderColor: border }}
+            >{editingCardId === card.id ? (
               <div className="p-5 flex flex-col gap-4 bg-blue-50/50">
                 <div className="flex flex-col md:flex-row gap-4">
                   <div className="flex-1">
@@ -558,7 +623,8 @@ export default function FlashcardDeckPage() {
         ))}
       </div>
     </div>
-  );
+    );
+  };
 
   const renderStudyMode = () => {
     const progressPercent = cards.length > 0 ? ((currentIndex + 1) / cards.length) * 100 : 0;
@@ -593,7 +659,12 @@ export default function FlashcardDeckPage() {
                 </h2>
                 <div className="absolute top-6 flex w-full justify-between px-8 opacity-0 group-hover:opacity-100 transition-opacity">
                   <span className="text-gray-400 text-sm font-semibold uppercase tracking-wider">Thuật ngữ (Mặt trước)</span>
-                  <button className="text-gray-400 hover:text-[#4255FF]"><Maximize size={18} /></button>
+                  <div className="flex gap-2">
+                    <button onClick={(e) => { e.stopPropagation(); speakText(cards[currentIndex]?.front); }} className="text-gray-400 hover:text-blue-500"><Volume2 size={20} /></button>
+                    <button onClick={(e) => handleToggleStar(cards[currentIndex], e)} className={`hover:text-yellow-500 ${cards[currentIndex]?.is_starred ? 'text-yellow-500' : 'text-gray-400'}`}>
+                      <Star size={20} fill={cards[currentIndex]?.is_starred ? "currentColor" : "none"} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -606,7 +677,12 @@ export default function FlashcardDeckPage() {
                 </div>
                 <div className="absolute top-6 flex w-full justify-between px-8 opacity-0 group-hover:opacity-100 transition-opacity">
                   <span className="text-gray-400 text-sm font-semibold uppercase tracking-wider">Định nghĩa (Mặt sau)</span>
-                  <button className="text-gray-400 hover:text-[#4255FF]"><Maximize size={18} /></button>
+                  <div className="flex gap-2">
+                    <button onClick={(e) => { e.stopPropagation(); speakText(cards[currentIndex]?.back); }} className="text-gray-400 hover:text-blue-500"><Volume2 size={20} /></button>
+                    <button onClick={(e) => handleToggleStar(cards[currentIndex], e)} className={`hover:text-yellow-500 ${cards[currentIndex]?.is_starred ? 'text-yellow-500' : 'text-gray-400'}`}>
+                      <Star size={20} fill={cards[currentIndex]?.is_starred ? "currentColor" : "none"} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -746,6 +822,8 @@ export default function FlashcardDeckPage() {
             {viewMode === 'dashboard' && renderDashboard()}
             {viewMode === 'study' && renderStudyMode()}
             {viewMode === 'quiz' && renderQuizMode()}
+            {viewMode === 'match' && <MatchGameMode cards={cards} deckId={deckId} onBack={() => setViewMode('dashboard')} />}
+            {viewMode === 'write' && <WriteMode cards={cards} onBack={() => setViewMode('dashboard')} />}
           </>
         )}
       </main>
