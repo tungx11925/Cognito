@@ -94,7 +94,7 @@ function FloatingInput({
 
 export default function RegisterModal({ isOpen, onClose, triggerMessage }: RegisterModalProps) {
   const router = useRouter();
-  const { login: contextLogin, register: contextRegister, setActiveUser, setIsAuthenticated } = useStudy();
+  const { login: contextLogin, register: contextRegister, setActiveUser, setIsAuthenticated, verify2FA } = useStudy();
 
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false);
@@ -110,6 +110,10 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
   // Custom states for styling compliance
   const [isRobotChecked, setIsRobotChecked] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(true);
+  const [isTwoFAMode, setIsTwoFAMode] = useState(false);
+  const [twoFAEmail, setTwoFAEmail] = useState('');
+  const [twoFACode, setTwoFACode] = useState('');
+  const [twoFAError, setTwoFAError] = useState('');
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const phoneRegex = /^(03|05|07|08|09)\d{8}$/;
@@ -179,6 +183,14 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         }
       };
       initGoogle();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsTwoFAMode(false);
+      setTwoFACode('');
+      setTwoFAError('');
     }
   }, [isOpen]);
 
@@ -301,11 +313,31 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         }
       }
     } else {
-      const success = await contextLogin(email, password);
-      if (success) {
-        onClose();
-        router.push('/dashboard');
+      const result = await contextLogin(email, password);
+      if (result.success) {
+        if (result.requires2FA) {
+          setTwoFAEmail(result.email || email);
+          setIsTwoFAMode(true);
+        } else {
+          onClose();
+          router.push('/dashboard');
+        }
       }
+    }
+  };
+
+  const handleTwoFASubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (twoFACode.trim().length !== 6) {
+      setTwoFAError("Mã xác thực phải gồm 6 chữ số");
+      return;
+    }
+    const success = await verify2FA(twoFAEmail, twoFACode);
+    if (success) {
+      onClose();
+      router.push('/dashboard');
+    } else {
+      setTwoFAError("Mã xác thực không chính xác hoặc đã hết hạn");
     }
   };
 
@@ -437,8 +469,8 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
             <X className="w-4 h-4" />
           </button>
 
-          {/* Navigation Tabs (Only visible when not resetting password) */}
-          {!isForgotPasswordMode && (
+          {/* Navigation Tabs (Only visible when not resetting password and not in 2FA mode) */}
+          {!isForgotPasswordMode && !isTwoFAMode && (
             <div className="flex gap-6 border-b border-gray-100 mb-6 flex-shrink-0">
               <button 
                 type="button"
@@ -468,16 +500,20 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
               {isForgotPasswordMode 
                 ? "Khôi phục mật khẩu" 
-                : isRegisterMode 
-                  ? "Đăng Ký Tài Khoản" 
-                  : "Chào Mừng Quay Trở Lại"}
+                : isTwoFAMode
+                  ? "Xác thực hai lớp (2FA)"
+                  : isRegisterMode 
+                    ? "Đăng Ký Tài Khoản" 
+                    : "Chào Mừng Quay Trở Lại"}
             </h1>
             <p className="text-xs text-gray-500 mt-1 font-medium">
               {isForgotPasswordMode 
                 ? "Nhập email của bạn để nhận liên kết đặt lại mật khẩu" 
-                : isRegisterMode 
-                  ? "Bắt đầu đăng ký tài khoản để học tập cùng trợ lý AI" 
-                  : "Vui lòng đăng nhập để tiếp tục học tập"}
+                : isTwoFAMode
+                  ? "Nhập mã xác thực để đăng nhập tài khoản của bạn"
+                  : isRegisterMode 
+                    ? "Bắt đầu đăng ký tài khoản để học tập cùng trợ lý AI" 
+                    : "Vui lòng đăng nhập để tiếp tục học tập"}
             </p>
           </div>
 
@@ -521,6 +557,61 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                   
                   <div className="text-center pt-2">
                     <button type="button" onClick={() => setIsForgotPasswordMode(false)} className="text-xs font-bold text-[#00c495] hover:underline transition-colors focus:outline-none">
+                      Quay lại Đăng nhập
+                    </button>
+                  </div>
+                </motion.form>
+              ) : isTwoFAMode ? (
+                <motion.form 
+                  key="2fa-form"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  onSubmit={handleTwoFASubmit} 
+                  className="space-y-4"
+                >
+                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3 mb-2">
+                    <Mail className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-800">Mã xác thực đã được gửi</h4>
+                      <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
+                        Chúng tôi đã gửi một mã xác thực 6 chữ số đến địa chỉ email <span className="font-bold">{twoFAEmail}</span>. Vui lòng kiểm tra hộp thư của bạn.
+                      </p>
+                    </div>
+                  </div>
+
+                  <FloatingInput
+                    id="twofa-code"
+                    type="text"
+                    value={twoFACode}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setTwoFACode(val);
+                      if (twoFAError) setTwoFAError('');
+                    }}
+                    placeholder="Mã xác thực (6 chữ số)"
+                    icon={<Lock className="w-4 h-4" />}
+                    error={twoFAError}
+                  />
+                  
+                  <button 
+                    type="submit" 
+                    disabled={twoFACode.length !== 6}
+                    className={`w-full py-3.5 mt-2 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md ${twoFACode.length !== 6 ? 'bg-[#0D2B24]/40 cursor-not-allowed' : 'bg-[#00c495] hover:bg-[#00b085] active:scale-[0.98]'}`}
+                  >
+                    Xác thực & Đăng nhập
+                  </button>
+                  
+                  <div className="text-center pt-2">
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setIsTwoFAMode(false);
+                        setTwoFACode('');
+                        setTwoFAError('');
+                      }} 
+                      className="text-xs font-bold text-[#00c495] hover:underline transition-colors focus:outline-none"
+                    >
                       Quay lại Đăng nhập
                     </button>
                   </div>

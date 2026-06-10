@@ -1,5 +1,16 @@
 import { Router } from 'express';
-import { register, login, googleLogin, getMe, logout, checkAvailability, updateAvatar, updateProfile } from '../controllers/auth.controller';
+import { 
+  register, 
+  login, 
+  googleLogin, 
+  getMe, 
+  logout, 
+  checkAvailability, 
+  updateAvatar, 
+  updateProfile,
+  toggleVerification,
+  verify2FA
+} from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import multer from 'multer';
 import path from 'path';
@@ -38,5 +49,7 @@ router.post('/check-availability', checkAvailability);
 router.get('/me', authenticate, getMe);
 router.post('/avatar', authenticate, upload.single('avatar'), updateAvatar);
 router.put('/profile', authenticate, updateProfile);
+router.post('/toggle-verification', authenticate, toggleVerification);
+router.post('/verify-2fa', verify2FA);
 
 export default router;
