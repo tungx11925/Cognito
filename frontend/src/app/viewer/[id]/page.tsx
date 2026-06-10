@@ -75,6 +75,14 @@ export default function DocumentViewerPage() {
     window.getSelection()?.removeAllRanges();
   };
 
+  const handleExplain = () => {
+    setIsSidebarOpen(true);
+    setActiveTab('ai');
+    window.dispatchEvent(new CustomEvent('SEND_AI_MESSAGE', { detail: `Giải thích chi tiết thuật ngữ/khái niệm chuyên ngành sau:\n\n"${selectedText}"` }));
+    setSelectionPosition(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
   const handleQuickNote = () => {
     setIsSidebarOpen(true);
     setActiveTab('tools');
@@ -173,15 +181,19 @@ export default function DocumentViewerPage() {
             initial={{ opacity: 0, y: 10, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="fixed z-50 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.15)] rounded-lg border border-gray-200 flex items-center p-1.5 gap-1"
+            className="fixed z-50 bg-[#0D2B24] text-white shadow-2xl rounded-lg border border-[#1a3a2a] flex items-center p-1 gap-0.5"
             style={{ left: selectionPosition.x, top: selectionPosition.y, transform: 'translate(-50%, -100%)' }}
           >
-            <button onClick={handleTranslate} className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 hover:bg-gray-50 rounded-md text-[#0D2B24] transition-colors">
-              <Languages size={14} /> Dịch nhanh
+            <button onClick={handleTranslate} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 hover:bg-white/10 rounded-md transition-colors">
+              <Languages size={14} className="text-emerald-300" /> Dịch nhanh
             </button>
-            <div className="w-px h-4 bg-gray-200"></div>
-            <button onClick={handleQuickNote} className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 hover:bg-gray-50 rounded-md text-[#0D2B24] transition-colors">
-              <PenLine size={14} /> Note nhanh
+            <div className="w-px h-4 bg-white/20 mx-0.5"></div>
+            <button onClick={handleExplain} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 hover:bg-white/10 rounded-md transition-colors">
+              <AlertCircle size={14} className="text-blue-300" /> Giải thích AI
+            </button>
+            <div className="w-px h-4 bg-white/20 mx-0.5"></div>
+            <button onClick={handleQuickNote} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 hover:bg-white/10 rounded-md transition-colors">
+              <PenLine size={14} className="text-yellow-300" /> Thêm Note
             </button>
           </motion.div>
         )}
