@@ -561,7 +561,7 @@ export default function FlashcardDeckPage() {
   // ── Quiz Generation Logic ──────────────────────────────────────────────────
   const generateQuiz = () => {
     if (cards.length < 4) {
-      triggerMessage('Cần tối thiểu 4 thẻ ghi nhớ để tạo các đáp án gây nhiễu cho Trắc nghiệm (Quiz). Hãy thêm thẻ trước!', 'warning');
+      triggerMessage('Cần tối thiểu 4 thẻ ghi nhớ để tạo các đáp án gây nhiễu cho Trắc nghiệm (Quiz). Hãy thêm thẻ trước!', 'error');
       return;
     }
     const questions = cards.map(card => {

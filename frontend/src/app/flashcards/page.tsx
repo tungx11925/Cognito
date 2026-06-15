@@ -383,13 +383,15 @@ export default function FlashcardsPage() {
   // Daily suggestion deck (find deck with most due cards)
   let suggestedDeck: Deck | null = null;
   let maxDue = 0;
-  decks.forEach(d => {
+  for (const d of decks) {
     const dueCount = deckCounts[d.id]?.due || 0;
     if (dueCount > maxDue) {
       maxDue = dueCount;
       suggestedDeck = d;
     }
-  });
+  }
+
+  const suggest = suggestedDeck;
 
   // Calculate totals
   const totalDecks = decks.length;
@@ -575,9 +577,9 @@ export default function FlashcardsPage() {
           </div>
 
           {/* Daily Suggestion Banner */}
-          {suggestedDeck && (
+          {suggest && (
             <div
-              onClick={() => router.push(`/flashcards/${suggestedDeck!.id}?mode=study`)}
+              onClick={() => router.push(`/flashcards/${suggest.id}?mode=study`)}
               className="rounded-2xl p-5 flex items-center justify-between cursor-pointer z-10 hover:opacity-95 transition-opacity duration-200"
               style={{
                 background: dark
@@ -608,7 +610,7 @@ export default function FlashcardsPage() {
                     fontSize: 18,
                   }}
                 >
-                  {suggestedDeck.name}
+                  {suggest.name}
                 </h2>
                 <p
                   style={{
@@ -616,7 +618,7 @@ export default function FlashcardsPage() {
                     fontSize: 12,
                   }}
                 >
-                  {deckCounts[suggestedDeck.id]?.due || 0} thẻ đến hạn cần ôn ngay
+                  {deckCounts[suggest.id]?.due || 0} thẻ đến hạn cần ôn ngay
                 </p>
               </div>
               <button
