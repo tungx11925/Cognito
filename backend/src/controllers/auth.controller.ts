@@ -66,7 +66,7 @@ export const register = async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     
     const result = await db.query(
-      'INSERT INTO users (email, phone, password, name) VALUES ($1, $2, $3, $4) RETURNING id, email, phone, name, education, address, website, created_at, avatar_url, is_verified',
+      'INSERT INTO users (email, phone, password, name) VALUES ($1, $2, $3, $4) RETURNING id, email, phone, name, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date',
       [formattedEmail, phone, hashedPassword, name]
     );
     
@@ -167,7 +167,9 @@ export const login = async (req: Request, res: Response) => {
         address: user.address, 
         website: user.website, 
         avatar_url: user.avatar_url,
-        is_verified: user.is_verified
+        is_verified: user.is_verified,
+        streak: user.streak,
+        last_study_date: user.last_study_date
       } 
     });
   } catch (error: any) {
@@ -226,7 +228,9 @@ export const verify2FA = async (req: Request, res: Response) => {
         address: user.address,
         website: user.website,
         avatar_url: user.avatar_url,
-        is_verified: user.is_verified
+        is_verified: user.is_verified,
+        streak: user.streak,
+        last_study_date: user.last_study_date
       }
     });
   } catch (error: any) {
@@ -241,7 +245,7 @@ export const toggleVerification = async (req: any, res: Response) => {
     const { enable } = req.body;
 
     const result = await db.query(
-      'UPDATE users SET is_verified = $1 WHERE id = $2 RETURNING id, email, name, phone, education, address, website, avatar_url, is_verified',
+      'UPDATE users SET is_verified = $1 WHERE id = $2 RETURNING id, email, name, phone, education, address, website, avatar_url, is_verified, streak, last_study_date',
       [enable === true, userId]
     );
 
@@ -282,7 +286,7 @@ export const googleLogin = async (req: Request, res: Response) => {
       // User doesn't exist, create a new one
       const dummyPassword = await bcrypt.hash(Math.random().toString(36).slice(-10), 10);
       const insertResult = await db.query(
-        'INSERT INTO users (email, name, password) VALUES ($1, $2, $3) RETURNING id, email, name, phone, education, address, website, created_at, avatar_url, is_verified',
+        'INSERT INTO users (email, name, password) VALUES ($1, $2, $3) RETURNING id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date',
         [email, name || 'Google User', dummyPassword]
       );
       user = insertResult.rows[0];
@@ -315,7 +319,9 @@ export const googleLogin = async (req: Request, res: Response) => {
         address: user.address, 
         website: user.website, 
         avatar_url: user.avatar_url,
-        is_verified: user.is_verified
+        is_verified: user.is_verified,
+        streak: user.streak,
+        last_study_date: user.last_study_date
       }
     });
   } catch (error: any) {
@@ -327,7 +333,7 @@ export const googleLogin = async (req: Request, res: Response) => {
 export const getMe = async (req: any, res: Response) => {
   try {
     const userId = req.user.id;
-    const result = await db.query('SELECT id, email, name, phone, education, address, website, created_at, avatar_url, is_verified FROM users WHERE id = $1', [userId]);
+    const result = await db.query('SELECT id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date FROM users WHERE id = $1', [userId]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Người dùng không tồn tại' });
@@ -415,7 +421,7 @@ export const updateAvatar = async (req: any, res: Response) => {
 
     // Update user in database
     const dbResult = await db.query(
-      'UPDATE users SET avatar_url = $1 WHERE id = $2 RETURNING id, email, name, created_at, avatar_url, is_verified',
+      'UPDATE users SET avatar_url = $1 WHERE id = $2 RETURNING id, email, name, created_at, avatar_url, is_verified, streak, last_study_date',
       [avatarUrl, userId]
     );
 
@@ -455,7 +461,7 @@ export const updateProfile = async (req: any, res: Response) => {
     }
 
     const dbResult = await db.query(
-      'UPDATE users SET name = $1, phone = $2, education = $3, address = $4 WHERE id = $5 RETURNING id, email, name, phone, education, address, created_at, avatar_url, is_verified',
+      'UPDATE users SET name = $1, phone = $2, education = $3, address = $4 WHERE id = $5 RETURNING id, email, name, phone, education, address, created_at, avatar_url, is_verified, streak, last_study_date',
       [name.trim(), normalizedPhone, education || '', address || '', userId]
     );
 

@@ -63,8 +63,8 @@ interface StudyContextType {
   setShowLanding: (show: boolean) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  activeUser: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean } | null;
-  setActiveUser: (user: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean } | null) => void;
+  activeUser: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string } | null;
+  setActiveUser: (user: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string } | null) => void;
   updateAvatar: (file: File) => Promise<boolean>;
   updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string }) => Promise<boolean>;
   toggleVerification: (enable: boolean) => Promise<boolean>;
@@ -165,12 +165,12 @@ interface StudyContextType {
   handleSelectQuizAnswer: (qId: number, optionIdx: number) => void;
   getQuizScore: () => number;
 
-  // Analytics
   analyticsData: {
     total_study_minutes: number;
     total_sessions: number;
     total_documents: number;
     total_flashcards: number;
+    streak?: number;
     chart_data: { day: string; minutes: number }[];
   };
   fetchAnalytics: () => Promise<void>;
@@ -301,6 +301,7 @@ const MOCK_ANALYTICS = {
   total_sessions: 12,
   total_documents: 3,
   total_flashcards: 5,
+  streak: 12,
   chart_data: [
     { day: 'Thứ 2', minutes: 30 },
     { day: 'Thứ 3', minutes: 45 },
@@ -320,7 +321,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean } | null>(null);
+  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -379,6 +380,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     total_sessions: 0,
     total_documents: 0,
     total_flashcards: 0,
+    streak: 0,
     chart_data: [] as { day: string; minutes: number }[]
   });
 
@@ -728,10 +730,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       if (res.ok) {
         const data = await res.json();
-        if (data && data.total_study_minutes > 0) {
-          setAnalyticsData(data);
-          return;
-        }
+        setAnalyticsData(data);
+        return;
       }
       setAnalyticsData(MOCK_ANALYTICS);
     } catch (e) {
@@ -1000,6 +1000,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const data = await res.json();
         triggerMessage(`Thẻ ghi nhớ được lên lịch ôn tập sau ${data.next_review_days} ngày!`);
         
+        if (data.updated_streak !== undefined) {
+          setActiveUser(prev => prev ? { ...prev, streak: data.updated_streak } : null);
+        }
+        
         setIsCardFlipped(false);
         setTimeout(() => {
           if (currentCardIndex < activeDeckCards.length - 1) {
@@ -1032,7 +1036,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     
     if (activeDoc) {
       try {
-        await fetch(`${API_BASE_URL}/study-sessions`, {
+        const res = await fetch(`${API_BASE_URL}/study-sessions`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -1043,6 +1047,12 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
             duration_seconds: elapsedStudyTime || (timerMaxMinutes * 60)
           })
         });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.updated_streak !== undefined) {
+            setActiveUser(prev => prev ? { ...prev, streak: data.updated_streak } : null);
+          }
+        }
         fetchAnalytics();
       } catch (e) {
         console.error(e);

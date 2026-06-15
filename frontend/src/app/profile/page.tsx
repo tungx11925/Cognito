@@ -126,18 +126,45 @@ const getDocType = (docUrl: string) => {
 };
 
 
-const currentStreak = 32;
-const longestStreak = 45;
-const streakTarget = 100;
-const streakDays = Array.from({ length: 42 }, (_, i) => {
-  const daysAgo = 41 - i;
-  if (daysAgo < 32) return true;
-  if (daysAgo < 38) return [33, 34, 36].includes(daysAgo) ? false : true;
-  return Math.random() > 0.4;
-}).map((active, i) => ({ active, day: i }));
 
-function StreakCard() {
+function StreakCard({ streak = 0, lastStudyDate }: { streak?: number; lastStudyDate?: string }) {
+  const streakTarget = 100;
+  const currentStreak = streak;
   const progressPct = Math.min((currentStreak / streakTarget) * 100, 100);
+
+  const today = new Date();
+
+  // Use LOCAL date string (not UTC) to avoid timezone mismatch for Vietnam UTC+7
+  const toLocalDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const todayStr = toLocalDateStr(today);
+  const studiedToday = lastStudyDate ? lastStudyDate.split('T')[0] === todayStr : false;
+
+  // Real-time date display in Vietnamese
+  const dayNames = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
+  const todayLabel = `${dayNames[today.getDay()]}, ngày ${today.getDate()}/${today.getMonth() + 1}/${today.getFullYear()}`;
+
+  // ── Fix calendar alignment ──────────────────────────────────────────────
+  // Always build exactly 42 cells (6 weeks).
+  // Start at the Monday of (current week - 5 weeks), so:
+  //   - every cell's column (i % 7) matches its real weekday
+  //   - today always lands in the correct column
+  //   - days after today in the current week show as 'future' (light gray)
+  const daysSinceMonday = (today.getDay() + 6) % 7; // Mon=0, Tue=1, …, Sun=6
+  const gridStart = new Date(today);
+  gridStart.setDate(today.getDate() - daysSinceMonday - 35); // 5 full weeks back
+
+  const streakDays = Array.from({ length: 42 }, (_, i) => {
+    const cellDate = new Date(gridStart);
+    cellDate.setDate(gridStart.getDate() + i);
+    const cellStr = toLocalDateStr(cellDate);
+    if (cellStr === todayStr) return studiedToday ? 'today' : 'today-empty';
+    if (cellDate > today) return 'future';
+    const daysAgo = Math.round((today.getTime() - cellDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysAgo > 0 && daysAgo < currentStreak) return 'streak';
+    return 'inactive';
+  });
 
   return (
     <Card className="border-0 shadow-sm">
@@ -159,11 +186,15 @@ function StreakCard() {
               <span className="text-5xl font-bold text-[#1a2e1c]">{currentStreak}</span>
               <span className="text-gray-400 mb-2 text-sm">/ {streakTarget} ngày mục tiêu</span>
             </div>
-            <p className="text-xs text-gray-400 mt-0.5">Kỷ lục cá nhân: <span className="font-semibold text-[#2d5a3d]">{longestStreak} ngày</span></p>
+            <p className="text-xs text-gray-400 mt-0.5">Ngày hiện tại: <span className="font-semibold text-[#2d5a3d]">{todayLabel}</span></p>
           </div>
           <div className="text-right text-xs text-gray-400">
-            <p>Hôm nay</p>
-            <p className="text-[#2d5a3d] font-semibold mt-0.5">✓ Đã học</p>
+            <p className="font-medium">{today.getDate()}/{today.getMonth() + 1}/{today.getFullYear()}</p>
+            {studiedToday ? (
+              <p className="text-[#2d5a3d] font-semibold mt-0.5">✓ Đã học hôm nay</p>
+            ) : (
+              <p className="text-orange-500 font-semibold mt-0.5">⚡ Chưa học hôm nay</p>
+            )}
           </div>
         </div>
 
@@ -172,7 +203,7 @@ function StreakCard() {
             <span>Tiến độ đến mục tiêu {streakTarget} ngày</span>
             <span className="text-[#2d5a3d] font-medium">{progressPct.toFixed(0)}%</span>
           </div>
-          <Progress value={progressPct} className="h-2.5 bg-gray-100 [&>div]:bg-gradient-to-r [&>div]:from-orange-400 [&>div]:to-[#2d5a3d]">
+          <Progress value={progressPct} className="h-2.5 bg-gray-100">
              <div className="h-full bg-gradient-to-r from-orange-400 to-[#2d5a3d] rounded-full transition-all" style={{ width: `${progressPct}%` }} />
           </Progress>
         </div>
@@ -180,35 +211,67 @@ function StreakCard() {
         <div>
           <p className="text-xs text-gray-400 mb-2">6 tuần gần đây</p>
           <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
-            {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map(d => (
-              <div key={d} className="text-center text-[10px] text-gray-300 font-medium pb-0.5">{d}</div>
-            ))}
-            {streakDays.map((d, i) => (
+            {/* Day headers — highlight the current weekday column */}
+            {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((d, idx) => (
               <div
-                key={i}
-                title={d.active ? "Đã học" : "Chưa học"}
-                className={`aspect-square rounded-md transition-all ${
-                  d.active
-                    ? i >= 42 - currentStreak
-                      ? "bg-[#1a2e1c]"
-                      : "bg-[#6aad81]"
-                    : "bg-gray-100"
+                key={d}
+                className={`text-center text-[10px] font-bold pb-1 ${
+                  idx === daysSinceMonday ? "text-[#1a2e1c]" : "text-gray-500"
                 }`}
-              />
+              >
+                {d}
+              </div>
             ))}
+            {streakDays.map((status, i) => {
+              const col = i % 7;
+              if (status === 'today') return (
+                <div key={i} title="Hôm nay — Đã học"
+                  className="aspect-square rounded-full flex items-center justify-center ring-2 ring-orange-400 ring-offset-1 shadow-sm"
+                  style={{ background: 'linear-gradient(135deg, #1a2e1c, #2d5a3d)' }}>
+                  <Flame className="w-3 h-3 text-orange-400 fill-orange-400" />
+                </div>
+              );
+              if (status === 'today-empty') return (
+                <div key={i} title="Hôm nay — Chưa học"
+                  className="aspect-square rounded-full flex items-center justify-center ring-2 ring-orange-300 ring-offset-1 bg-orange-50">
+                  <span className="text-orange-500 font-black leading-none" style={{ fontSize: 10 }}>!</span>
+                </div>
+              );
+              if (status === 'streak') return (
+                <div key={i} title="Đã học (streak)"
+                  className="aspect-square rounded-full flex items-center justify-center overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #fef3c7, #fcd34d)' }}>
+                  <span role="img" aria-label="streak" style={{ fontSize: 11, lineHeight: 1, display: 'block' }}>🔥</span>
+                </div>
+              );
+              if (status === 'future') return (
+                <div key={i} title="Chưa đến ngày"
+                  className="aspect-square rounded-full border border-dashed border-gray-200" />
+              );
+              return (
+                <div key={i} title="Chưa học"
+                  className={`aspect-square rounded-full ${col === daysSinceMonday ? 'bg-gray-200' : 'bg-gray-100'}`} />
+              );
+            })}
           </div>
-          <div className="flex items-center justify-end gap-3 mt-2 text-[10px] text-gray-400">
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-gray-100 inline-block" />Chưa học</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-[#6aad81] inline-block" />Đã học</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-[#1a2e1c] inline-block" />Streak hiện tại</span>
+          <div className="flex items-center justify-end gap-3 mt-2.5 text-[10px] text-gray-400">
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-gray-100 border border-gray-200 inline-block" />Chưa học
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: 'linear-gradient(135deg,#f97316,#22c55e)' }} />Streak
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#1a2e1c] inline-block ring-1 ring-orange-400 ring-offset-[1px]" />Hôm nay
+            </span>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2 pt-1">
           {[
-            { label: "Tuần này", value: "7/7", icon: "✅", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
-            { label: "Tháng này", value: "32/32", icon: "📅", bg: "bg-[#edf4fc]", border: "border-blue-200" },
-            { label: "Cần duy trì", value: `${streakTarget - currentStreak} ngày`, icon: "🎯", bg: "bg-[#fcf8ec]", border: "border-amber-200" },
+            { label: "Streak hiện tại", value: `${currentStreak} ngày`, icon: "🔥", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
+            { label: "Hôm nay", value: studiedToday ? '✅ Đã học' : '⚡ Chưa học', icon: "📅", bg: studiedToday ? "bg-[#eef8f0]" : "bg-[#fff8ec]", border: studiedToday ? "border-[#2d5a3d]/25" : "border-amber-200" },
+            { label: "Cần thêm", value: `${Math.max(streakTarget - currentStreak, 0)} ngày`, icon: "🎯", bg: "bg-[#fcf8ec]", border: "border-amber-200" },
           ].map(s => (
             <div key={s.label} className={`p-2.5 rounded-xl ${s.bg} border ${s.border} text-center shadow-2xs`}>
               <p className="text-base">{s.icon}</p>
@@ -263,7 +326,7 @@ export default function UserProfile() {
               const cardsList = await getAllFlashcards(deck.id);
               if (Array.isArray(cardsList)) {
                 const total = cardsList.length;
-                const mastered = cardsList.filter((c: any) => c.repetitions > 2 && c.interval_days > 3).length;
+                const mastered = cardsList.filter((c: any) => c.repetitions > 0).length;
                 countsMap[deck.id] = { total, mastered };
               } else {
                 countsMap[deck.id] = { total: 0, mastered: 0 };
@@ -563,7 +626,7 @@ export default function UserProfile() {
               {[
                 { label: "Bộ Flashcard", value: `${decks.length}`, icon: Layers, sub: "Đang sở hữu", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25", iconBg: "bg-blue-50 text-blue-500" },
                 { label: "Thẻ đã học", value: `${totalCards}`, icon: Brain, sub: `${totalMastered} thẻ thành thạo`, bg: "bg-[#edf4fc]", border: "border-blue-200", iconBg: "bg-pink-50 text-pink-500" },
-                { label: "Streak hiện tại", value: "32 ngày", icon: Flame, sub: "Kỷ lục: 45 ngày", bg: "bg-[#fcf3eb]", border: "border-orange-200", iconBg: "bg-red-50 text-red-500" },
+                { label: "Streak hiện tại", value: `${activeUser?.streak ?? 0} ngày`, icon: Flame, sub: activeUser?.last_study_date ? `Gần nhất: ${new Date(activeUser.last_study_date).toLocaleDateString('vi-VN')}` : 'Chưa học ngày nào', bg: "bg-[#fcf3eb]", border: "border-orange-200", iconBg: "bg-red-50 text-red-500" },
                 { label: "Độ chính xác", value: totalCards > 0 ? `${totalPct}%` : "0%", icon: Target, sub: "Thành thạo", bg: "bg-[#f5ecfc]", border: "border-purple-200", iconBg: "bg-emerald-50 text-emerald-600" },
               ].map((s) => (
                 <div key={s.label} className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-[#1a2e1c]/18 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.07)] hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.12)] hover:border-[#1a2e1c]/30 transition-all duration-300">
@@ -586,7 +649,7 @@ export default function UserProfile() {
 
           {/* LEFT SIDEBAR */}
           <div className="space-y-5">
-            <StreakCard />
+            <StreakCard streak={activeUser?.streak ?? 0} lastStudyDate={activeUser?.last_study_date} />
 
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-3">

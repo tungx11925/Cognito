@@ -415,7 +415,7 @@ export default function LibraryPage() {
                   fontSize: 13
                 }}
               >
-                12 ngày Streak
+                {activeUser?.streak || 0} ngày Streak
               </span>
             </div>
 
