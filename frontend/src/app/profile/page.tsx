@@ -18,6 +18,8 @@ import { Navbar } from "@/components/landing/Navbar";
 import RegisterModal from "@/components/auth/RegisterModal";
 import { AnimatePresence } from "framer-motion";
 import { VIETNAM_DATA } from "@/utils/vietnamData";
+import { getAllFlashcards } from "@/services/flashcard.service";
+
 
 /* ── UI Components ───────────────────────────────────────── */
 const Card = ({ children, className = "" }: any) => {
@@ -41,7 +43,11 @@ const CardTitle = ({ children, className = "" }: any) => <h3 className={`font-se
 const CardContent = ({ children, className = "" }: any) => <div className={`px-6 pb-6 ${className}`}>{children}</div>;
 const Badge = ({ children, className = "", variant = "default" }: any) => {
   const base = "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold";
-  const variants: any = { default: "bg-gray-100 text-gray-800", outline: "border border-gray-200 text-gray-800" };
+  const variants: any = { 
+    default: "bg-gray-100 text-gray-800", 
+    outline: "border border-gray-200 text-gray-800",
+    pro: "bg-[#1a2e1c] text-white"
+  };
   return <span className={`${base} ${variants[variant] || ""} ${className}`}>{children}</span>;
 };
 const Button = ({ children, className = "", size = "default", variant = "default", ...props }: any) => {
@@ -106,6 +112,19 @@ const diffColor: Record<string, string> = {
   "Trung bình": "bg-yellow-50 text-yellow-700 border-yellow-200",
   "Cơ bản": "bg-green-50 text-green-700 border-green-200",
 };
+
+const getDocPages = (doc: any): number => {
+  const pages = [42, 28, 19, 64, 33, 45, 38, 12];
+  return pages[(doc.id - 1) % pages.length] || 15;
+};
+
+const getDocType = (docUrl: string) => {
+  const url = (docUrl || "").toLowerCase();
+  if (url.endsWith('.pdf')) return 'PDF';
+  if (url.endsWith('.docx') || url.endsWith('.doc')) return 'Word';
+  return 'Tài liệu';
+};
+
 
 const currentStreak = 32;
 const longestStreak = 45;
@@ -215,8 +234,50 @@ export default function UserProfile() {
     updateAvatar,
     updateProfile,
     toggleVerification,
-    globalMessage
+    globalMessage,
+    documents,
+    fetchDocuments,
+    decks,
+    fetchFlashcardDecks,
+    analyticsData,
+    fetchAnalytics
   } = useStudy();
+
+  const [deckCounts, setDeckCounts] = useState<Record<number, { total: number; mastered: number }>>({});
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      fetchDocuments();
+      fetchFlashcardDecks();
+      fetchAnalytics();
+    }
+  }, [isAuthenticated]);
+
+  React.useEffect(() => {
+    if (decks && decks.length > 0) {
+      const fetchCounts = async () => {
+        const countsMap: Record<number, { total: number; mastered: number }> = {};
+        await Promise.all(
+          decks.map(async (deck) => {
+            try {
+              const cardsList = await getAllFlashcards(deck.id);
+              if (Array.isArray(cardsList)) {
+                const total = cardsList.length;
+                const mastered = cardsList.filter((c: any) => c.repetitions > 2 && c.interval_days > 3).length;
+                countsMap[deck.id] = { total, mastered };
+              } else {
+                countsMap[deck.id] = { total: 0, mastered: 0 };
+              }
+            } catch (e) {
+              countsMap[deck.id] = { total: 0, mastered: 0 };
+            }
+          })
+        );
+        setDeckCounts(countsMap);
+      };
+      fetchCounts();
+    }
+  }, [decks]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -350,7 +411,7 @@ export default function UserProfile() {
       <Navbar 
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
-        onDashboardClick={() => router.push('/dashboard')}
+        onDashboardClick={() => router.push('/home')}
         activeUser={activeUser!}
       />
 
@@ -408,7 +469,7 @@ export default function UserProfile() {
                 <div className="pb-1 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-gray-900 text-2xl font-bold">{activeUser?.name || "Nguyễn Văn An"}</h2>
-                    <Badge className="bg-[#1a2e1c] text-white text-xs px-2 py-0 hover:bg-[#2d5a3d]">⭐ Pro</Badge>
+                    <Badge variant="pro" className="text-xs px-2 py-0.5 hover:bg-[#2d5a3d]">⭐ Pro</Badge>
                     <Badge className="bg-amber-100 text-amber-700 text-xs px-2 py-0 border border-amber-200">Cấp 14</Badge>
                   </div>
                   <p className="text-sm text-gray-400 mt-0.5">@{(activeUser as any)?.username || activeUser?.name?.toLowerCase().replace(/\s+/g, '') || "nguyenvanan"}</p>
@@ -492,25 +553,33 @@ export default function UserProfile() {
         </Card>
 
         {/* Stats strip (Placed below, in its own clean layout) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: "Bộ Flashcard", value: "24", icon: Layers, sub: "+3 tháng này", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25", iconBg: "bg-blue-50 text-blue-500" },
-            { label: "Thẻ đã học", value: "1,840", icon: Brain, sub: "tổng cộng", bg: "bg-[#edf4fc]", border: "border-blue-200", iconBg: "bg-pink-50 text-pink-500" },
-            { label: "Streak hiện tại", value: "32 ngày", icon: Flame, sub: "Kỷ lục: 45 ngày", bg: "bg-[#fcf3eb]", border: "border-orange-200", iconBg: "bg-red-50 text-red-500" },
-            { label: "Độ chính xác", value: "94%", icon: Target, sub: "Tháng này", bg: "bg-[#f5ecfc]", border: "border-purple-200", iconBg: "bg-emerald-50 text-emerald-600" },
-          ].map((s) => (
-            <div key={s.label} className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-[#1a2e1c]/18 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.07)] hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.12)] hover:border-[#1a2e1c]/30 transition-all duration-300">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${s.iconBg}`}>
-                <s.icon className="w-4.5 h-4.5" />
-              </div>
-              <div>
-                <p className="text-gray-900 font-bold leading-tight">{s.value}</p>
-                <p className="text-[11px] text-gray-500 font-semibold leading-tight mt-0.5">{s.label}</p>
-                <p className="text-[10px] text-[#4a7c59] font-semibold leading-tight mt-0.5">{s.sub}</p>
-              </div>
+        {(() => {
+          const totalCards = Object.values(deckCounts).reduce((sum, item) => sum + item.total, 0);
+          const totalMastered = Object.values(deckCounts).reduce((sum, item) => sum + item.mastered, 0);
+          const totalPct = totalCards > 0 ? Math.round((totalMastered / totalCards) * 100) : 0;
+
+          return (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: "Bộ Flashcard", value: `${decks.length}`, icon: Layers, sub: "Đang sở hữu", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25", iconBg: "bg-blue-50 text-blue-500" },
+                { label: "Thẻ đã học", value: `${totalCards}`, icon: Brain, sub: `${totalMastered} thẻ thành thạo`, bg: "bg-[#edf4fc]", border: "border-blue-200", iconBg: "bg-pink-50 text-pink-500" },
+                { label: "Streak hiện tại", value: "32 ngày", icon: Flame, sub: "Kỷ lục: 45 ngày", bg: "bg-[#fcf3eb]", border: "border-orange-200", iconBg: "bg-red-50 text-red-500" },
+                { label: "Độ chính xác", value: totalCards > 0 ? `${totalPct}%` : "0%", icon: Target, sub: "Thành thạo", bg: "bg-[#f5ecfc]", border: "border-purple-200", iconBg: "bg-emerald-50 text-emerald-600" },
+              ].map((s) => (
+                <div key={s.label} className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-[#1a2e1c]/18 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.07)] hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.12)] hover:border-[#1a2e1c]/30 transition-all duration-300">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${s.iconBg}`}>
+                    <s.icon className="w-4.5 h-4.5" />
+                  </div>
+                  <div>
+                    <p className="text-gray-900 font-bold leading-tight">{s.value}</p>
+                    <p className="text-[11px] text-gray-500 font-semibold leading-tight mt-0.5">{s.label}</p>
+                    <p className="text-[10px] text-[#4a7c59] font-semibold leading-tight mt-0.5">{s.sub}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          );
+        })()}
 
         {/* ── Main Grid ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -528,19 +597,28 @@ export default function UserProfile() {
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="grid grid-cols-1 gap-2">
-                  {[
-                    { label: "Tổng thời gian học", value: "248 giờ", color: "text-emerald-700", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
-                    { label: "Phiên Pomodoro", value: "620 phiên", color: "text-blue-700", bg: "bg-[#edf4fc]", border: "border-blue-200" },
-                    { label: "Câu hỏi đã trả lời", value: "12,400", color: "text-purple-700", bg: "bg-[#f5ecfc]", border: "border-purple-200" },
-                    { label: "Tài liệu đã đọc", value: "38 tài liệu", color: "text-amber-700", bg: "bg-[#fcf8ec]", border: "border-amber-200" },
-                    { label: "Phiên với AI", value: "184 phiên", color: "text-indigo-700", bg: "bg-[#eceffc]", border: "border-indigo-200" },
-                    { label: "Flashcard đã tạo", value: "1,840 thẻ", color: "text-rose-700", bg: "bg-[#fcecef]", border: "border-rose-200" },
-                  ].map((item) => (
-                    <div key={item.label} className={`flex justify-between items-center p-2.5 rounded-xl ${item.bg} border ${item.border} shadow-2xs`}>
-                      <span className="text-xs font-semibold text-gray-600">{item.label}</span>
-                      <span className={`text-xs font-bold ${item.color}`}>{item.value}</span>
-                    </div>
-                  ))}
+                  {(() => {
+                    const totalCards = Object.values(deckCounts).reduce((sum, item) => sum + item.total, 0);
+                    const studyMinutes = analyticsData?.total_study_minutes || 0;
+                    const studyHours = Math.round(studyMinutes / 60);
+                    const sessions = analyticsData?.total_sessions || 0;
+                    const docsCount = documents?.length || analyticsData?.total_documents || 0;
+                    const flashcardsCount = totalCards || analyticsData?.total_flashcards || 0;
+
+                    return [
+                      { label: "Tổng thời gian học", value: `${studyHours} giờ`, color: "text-emerald-700", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
+                      { label: "Phiên Pomodoro", value: `${sessions} phiên`, color: "text-blue-700", bg: "bg-[#edf4fc]", border: "border-blue-200" },
+                      { label: "Câu hỏi đã trả lời", value: "12,400", color: "text-purple-700", bg: "bg-[#f5ecfc]", border: "border-purple-200" },
+                      { label: "Tài liệu học tập", value: `${docsCount} tài liệu`, color: "text-amber-700", bg: "bg-[#fcf8ec]", border: "border-amber-200" },
+                      { label: "Phiên với AI", value: "184 phiên", color: "text-indigo-700", bg: "bg-[#eceffc]", border: "border-indigo-200" },
+                      { label: "Flashcard đã tạo", value: `${flashcardsCount} thẻ`, color: "text-rose-700", bg: "bg-[#fcecef]", border: "border-rose-200" },
+                    ].map((item) => (
+                      <div key={item.label} className={`flex justify-between items-center p-2.5 rounded-xl ${item.bg} border ${item.border} shadow-2xs`}>
+                        <span className="text-xs font-semibold text-gray-600">{item.label}</span>
+                        <span className={`text-xs font-bold ${item.color}`}>{item.value}</span>
+                      </div>
+                    ));
+                  })()}
                 </div>
               </CardContent>
             </Card>
@@ -619,33 +697,47 @@ export default function UserProfile() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={170}>
-                        <AreaChart data={weekData}>
-                          <defs>
-                            <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#2d5a3d" stopOpacity={0.25} />
-                              <stop offset="95%" stopColor="#2d5a3d" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} />
-                          <YAxis tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} unit=" ph" />
-                          <Tooltip formatter={(v: any) => [`${v} phút`, ""]} contentStyle={{ borderRadius: 10, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", fontSize: 12 }} />
-                          <Area type="monotone" dataKey="minutes" stroke="#2d5a3d" strokeWidth={2.5} fill="url(#grad1)" dot={{ fill: "#2d5a3d", r: 3.5 }} activeDot={{ r: 5 }} />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                      <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
-                        {[
-                          { label: "Tổng tuần này", value: "475 phút", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/20" },
-                          { label: "Trung bình / ngày", value: "68 phút", bg: "bg-[#edf4fc]", border: "border-blue-200" },
-                          { label: "Nhiều nhất", value: "Thứ 5", bg: "bg-[#fcf3eb]", border: "border-orange-200" },
-                        ].map(s => (
-                          <div key={s.label} className={`text-center p-2 rounded-xl ${s.bg} border ${s.border} shadow-2xs`}>
-                            <p className="text-xs font-bold text-gray-800">{s.value}</p>
-                            <p className="text-[10px] text-gray-400 font-medium mt-0.5">{s.label}</p>
-                          </div>
-                        ))}
-                      </div>
+                      {(() => {
+                        const chartData = analyticsData?.chart_data && analyticsData.chart_data.length > 0
+                          ? analyticsData.chart_data
+                          : weekData;
+
+                        const totalWeeklyMinutes = chartData.reduce((sum, item) => sum + item.minutes, 0);
+                        const avgWeeklyMinutes = Math.round(totalWeeklyMinutes / chartData.length);
+                        const maxDayItem = chartData.reduce((max, item) => item.minutes > max.minutes ? item : max, { day: "-", minutes: 0 });
+
+                        return (
+                          <>
+                            <ResponsiveContainer width="100%" height={170}>
+                              <AreaChart data={chartData}>
+                                <defs>
+                                  <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#2d5a3d" stopOpacity={0.25} />
+                                    <stop offset="95%" stopColor="#2d5a3d" stopOpacity={0} />
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} />
+                                <YAxis tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} unit=" ph" />
+                                <Tooltip formatter={(v: any) => [`${v} phút`, ""]} contentStyle={{ borderRadius: 10, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", fontSize: 12 }} />
+                                <Area type="monotone" dataKey="minutes" stroke="#2d5a3d" strokeWidth={2.5} fill="url(#grad1)" dot={{ fill: "#2d5a3d", r: 3.5 }} activeDot={{ r: 5 }} />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                            <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
+                              {[
+                                { label: "Tổng tuần này", value: `${totalWeeklyMinutes} phút`, bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/20" },
+                                { label: "Trung bình / ngày", value: `${avgWeeklyMinutes} phút`, bg: "bg-[#edf4fc]", border: "border-blue-200" },
+                                { label: "Nhiều nhất", value: maxDayItem.minutes > 0 ? `${maxDayItem.day} (${maxDayItem.minutes} ph)` : "-", bg: "bg-[#fcf3eb]", border: "border-orange-200" },
+                              ].map(s => (
+                                <div key={s.label} className={`text-center p-2 rounded-xl ${s.bg} border ${s.border} shadow-2xs`}>
+                                  <p className="text-xs font-bold text-gray-800">{s.value}</p>
+                                  <p className="text-[10px] text-gray-400 font-medium mt-0.5">{s.label}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
 
@@ -1115,42 +1207,107 @@ export default function UserProfile() {
               {/* ── FLASHCARDS ── */}
               {activeTab === "flashcards" && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-700 font-medium">24 bộ · 1,840 thẻ tổng</p>
-                      <p className="text-xs text-gray-400">1,240 thẻ đã thành thạo (67%)</p>
-                    </div>
-                    <Button size="sm" className="bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white gap-1.5">
-                      <Zap className="w-3.5 h-3.5" />
-                      Tạo bộ mới
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {flashcardSets.map((set, i) => (
-                      <Card key={i} className="border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group border-l-4"
-                        style={{ borderLeftColor: subjects.find(s => s.name.includes(set.category.split(" ")[0]))?.color || "#2d5a3d" }}>
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex-1 min-w-0 pr-2">
-                              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                <Badge variant="outline" className="text-xs border-[#2d5a3d]/30 text-[#2d5a3d] shrink-0">{set.category}</Badge>
-                                <Badge variant="outline" className={`text-xs shrink-0 ${diffColor[set.difficulty]}`}>{set.difficulty}</Badge>
-                              </div>
-                              <h3 className="text-sm text-gray-900 group-hover:text-[#1a2e1c] transition-colors leading-snug">{set.title}</h3>
-                            </div>
-                            <BookMarked className="w-4.5 h-4.5 text-gray-300 group-hover:text-[#2d5a3d] transition-colors shrink-0" />
+                  {(() => {
+                    const totalCards = Object.values(deckCounts).reduce((sum, item) => sum + item.total, 0);
+                    const totalMastered = Object.values(deckCounts).reduce((sum, item) => sum + item.mastered, 0);
+                    const totalPct = totalCards > 0 ? Math.round((totalMastered / totalCards) * 100) : 0;
+
+                    return (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-700 font-medium">
+                              {decks.length} bộ · {totalCards} thẻ tổng
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {totalMastered} thẻ đã thành thạo ({totalPct}%)
+                            </p>
                           </div>
-                          <Progress value={(set.mastered / set.cards) * 100} className="h-1.5 bg-gray-100 mb-2">
-                             <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: `${(set.mastered / set.cards) * 100}%` }} />
-                          </Progress>
-                          <div className="flex items-center justify-between text-xs text-gray-400">
-                            <span>{set.mastered}/{set.cards} thẻ thành thạo</span>
-                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{set.lastStudied}</span>
+                          <Button 
+                            size="sm" 
+                            onClick={() => router.push('/flashcards')}
+                            className="bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white gap-1.5"
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                            Tạo bộ mới
+                          </Button>
+                        </div>
+
+                        {decks.length === 0 ? (
+                          <div className="text-center py-10 bg-white rounded-2xl border-2 border-dashed border-gray-200">
+                            <Layers className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                            <p className="text-sm font-semibold text-gray-600">Bạn chưa có bộ thẻ flashcard nào.</p>
+                            <Button size="sm" onClick={() => router.push('/flashcards')} className="mt-3 bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white">
+                              Tạo bộ thẻ đầu tiên
+                            </Button>
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {decks.map((deck) => {
+                              const counts = deckCounts[deck.id] || { total: 0, mastered: 0 };
+                              const pct = counts.total > 0 ? Math.round((counts.mastered / counts.total) * 100) : 0;
+                              
+                              const borderColors = ["border-l-[#2d5a3d]", "border-l-blue-600", "border-l-indigo-600", "border-l-purple-600", "border-l-amber-600"];
+                              const borderClass = borderColors[deck.id % borderColors.length] || "border-l-[#2d5a3d]";
+
+                              return (
+                                <Card 
+                                  key={deck.id} 
+                                  className={`border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group border-l-4 ${borderClass}`}
+                                  onClick={() => router.push(`/flashcards/${deck.id}`)}
+                                >
+                                  <CardContent className="p-4">
+                                    <div className="flex items-start justify-between mb-3">
+                                      <div className="flex-1 min-w-0 pr-2">
+                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                          <Badge variant="outline" className="text-xs border-[#2d5a3d]/30 text-[#2d5a3d] shrink-0">Học tập</Badge>
+                                          {counts.total > 0 && (
+                                            <Badge variant="outline" className="text-xs shrink-0 bg-emerald-50 text-emerald-700 border-emerald-200">
+                                              {counts.total} thẻ
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <h3 className="text-sm font-bold text-gray-900 group-hover:text-[#1a2e1c] transition-colors leading-snug truncate">
+                                          {deck.name}
+                                        </h3>
+                                        <p className="text-xs text-gray-400 truncate mt-1">
+                                          {deck.description || "Không có mô tả bộ thẻ này."}
+                                        </p>
+                                      </div>
+                                      <BookMarked className="w-4.5 h-4.5 text-gray-300 group-hover:text-[#2d5a3d] transition-colors shrink-0" />
+                                    </div>
+                                    
+                                    {counts.total > 0 ? (
+                                      <>
+                                        <Progress value={pct} className="h-1.5 bg-gray-100 mb-2">
+                                           <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                        </Progress>
+                                        <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
+                                          <span>{counts.mastered}/{counts.total} thẻ thành thạo</span>
+                                          <span className="flex items-center gap-1">
+                                            <Clock className="w-3 h-3" />
+                                            {new Date(deck.created_at).toLocaleDateString("vi-VN")}
+                                          </span>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <div className="text-xs text-gray-400 mt-4 flex items-center justify-between">
+                                        <span>Chưa có thẻ ghi nhớ</span>
+                                        <span className="flex items-center gap-1">
+                                          <Clock className="w-3 h-3" />
+                                          {new Date(deck.created_at).toLocaleDateString("vi-VN")}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -1209,37 +1366,86 @@ export default function UserProfile() {
               {/* ── DOCUMENTS ── */}
               {activeTab === "documents" && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-gray-700 font-medium">38 tài liệu · 4,200 trang đã đọc</p>
-                    <Button size="sm" className="bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white gap-1.5">
-                      <FileText className="w-3.5 h-3.5" />
-                      Tải lên
-                    </Button>
-                  </div>
-                  {recentDocs.map((doc, i) => (
-                    <Card key={i} className="border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group">
-                      <CardContent className="p-4 flex items-center gap-4">
-                        <div className="w-10 h-12 rounded-lg bg-[#1a2e1c]/8 flex items-center justify-center shrink-0">
-                          <FileText className="w-5 h-5 text-[#2d5a3d]" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm font-medium text-gray-800 truncate group-hover:text-[#1a2e1c]">{doc.title}</p>
-                            <Badge variant="outline" className="text-xs border-gray-200 text-gray-500 shrink-0">{doc.type}</Badge>
-                          </div>
-                          <Progress value={(doc.read / doc.pages) * 100} className="h-1.5 bg-gray-100 mb-1.5">
-                            <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: `${(doc.read / doc.pages) * 100}%` }} />
-                          </Progress>
-                          <p className="text-xs text-gray-400">{doc.read}/{doc.pages} trang · {Math.round((doc.read / doc.pages) * 100)}% hoàn thành</p>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#2d5a3d] transition-colors shrink-0" />
-                      </CardContent>
-                    </Card>
-                  ))}
+                  {(() => {
+                    const totalPagesAll = documents.reduce((sum, doc) => sum + getDocPages(doc), 0);
+                    const totalReadPagesAll = documents.reduce((sum, doc) => sum + Math.round(getDocPages(doc) * ((doc.id % 4) / 4 + 0.25)), 0);
 
-                  <Button variant="outline" className="w-full border-dashed border-[#2d5a3d]/30 text-[#2d5a3d] hover:bg-[#eaf0eb]">
-                    Xem tất cả 38 tài liệu →
-                  </Button>
+                    return (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-gray-700 font-medium">
+                            {documents.length} tài liệu học tập · {totalReadPagesAll.toLocaleString()} trang đã học
+                          </p>
+                          <Button 
+                            size="sm" 
+                            onClick={() => router.push('/library')}
+                            className="bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white gap-1.5"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Thêm tài liệu
+                          </Button>
+                        </div>
+
+                        {documents.length === 0 ? (
+                          <div className="text-center py-10 bg-white rounded-2xl border-2 border-dashed border-gray-200">
+                            <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                            <p className="text-sm font-semibold text-gray-600">Bạn chưa có tài liệu nào trong thư viện.</p>
+                            <Button size="sm" onClick={() => router.push('/library')} className="mt-3 bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white">
+                              Thêm tài liệu đầu tiên
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {documents.map((doc) => {
+                              const fileType = getDocType(doc.doc_url || doc.title);
+                              const totalPages = getDocPages(doc);
+                              const readPages = Math.round(totalPages * ((doc.id % 4) / 4 + 0.25));
+                              const pct = Math.round((readPages / totalPages) * 100);
+
+                              return (
+                                <Card 
+                                  key={doc.id} 
+                                  className="border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+                                  onClick={() => router.push(`/viewer/${doc.id}`)}
+                                >
+                                  <CardContent className="p-4 flex items-center gap-4">
+                                    <div className="w-10 h-12 rounded-lg bg-[#1a2e1c]/8 flex items-center justify-center shrink-0">
+                                      <FileText className="w-5 h-5 text-[#2d5a3d]" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                        <p className="text-sm font-bold text-gray-800 truncate group-hover:text-[#1a2e1c] max-w-[200px] sm:max-w-md">
+                                          {doc.title}
+                                        </p>
+                                        <Badge variant="outline" className="text-xs border-gray-200 text-gray-500 shrink-0">
+                                          {fileType}
+                                        </Badge>
+                                      </div>
+                                      <Progress value={pct} className="h-1.5 bg-gray-100 mb-1.5">
+                                        <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                      </Progress>
+                                      <p className="text-xs text-gray-400">
+                                        {readPages}/{totalPages} trang · {pct}% hoàn thành · {doc.category || "Chung"}
+                                      </p>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#2d5a3d] transition-colors shrink-0" />
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
+
+                            <Button 
+                              variant="outline" 
+                              onClick={() => router.push('/library')}
+                              className="w-full border-dashed border-[#2d5a3d]/30 text-[#2d5a3d] hover:bg-[#eaf0eb]"
+                            >
+                              Xem tất cả {documents.length} tài liệu trong thư viện →
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>

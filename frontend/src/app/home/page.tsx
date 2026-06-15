@@ -8,6 +8,7 @@ import { HeroSection } from '@/components/landing/HeroSection';
 import { MarqueeSection } from '@/components/landing/MarqueeSection';
 import { StatsSection } from '@/components/landing/StatsSection';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
+import { ProgressStatsSection } from '@/components/landing/ProgressStatsSection';
 import { CtaSection } from '@/components/landing/CtaSection';
 import { Footer } from '@/components/landing/Footer';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -50,14 +51,14 @@ function LandingPageContent() {
       <Navbar 
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
-        onDashboardClick={() => router.push('/dashboard')}
+        onDashboardClick={() => router.push('/home')}
         activeUser={activeUser!}
       />
 
       <HeroSection 
         onStartClick={() => {
           if (!isAuthenticated) setShowLoginModal(true);
-          else router.push('/dashboard');
+          else router.push('/library');
         }}
         onDemoClick={handleDemoScroll}
       />
@@ -68,10 +69,12 @@ function LandingPageContent() {
 
       <FeaturesSection />
 
+      <ProgressStatsSection />
+
       <CtaSection 
         onStartClick={() => {
           if (!isAuthenticated) setShowLoginModal(true);
-          else router.push('/dashboard');
+          else router.push('/library');
         }}
         onExploreClick={handleDemoScroll}
       />

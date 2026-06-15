@@ -80,8 +80,17 @@ export function FeaturesSection() {
   };
 
   return (
-    <section id="features" className="py-24" style={{ background: "#f5f3ee" }}>
-      <div className="max-w-7xl mx-auto px-6 lg:px-8 space-y-32">
+    <section id="features" className="py-24 relative overflow-hidden" style={{ background: "linear-gradient(180deg, #f5f3ee 0%, #ebe7de 100%)" }}>
+      {/* Background elegant dots pattern */}
+      <div 
+        className="absolute inset-0 opacity-20 pointer-events-none" 
+        style={{ 
+          backgroundImage: "radial-gradient(#1a3d28 1.5px, transparent 1.5px)", 
+          backgroundSize: "28px 28px" 
+        }} 
+      />
+      
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 space-y-32 relative z-10">
         
         {/* SECTION 1: XEM TÀI LIỆU + TIMER */}
         <div>
@@ -104,10 +113,13 @@ export function FeaturesSection() {
                 { icon: <Clock size={18} />, val: "47h", label: "tuần này" },
                 { icon: <TrendingUp size={18} />, val: "12", label: "ngày liên tiếp" }
               ].map((stat, i) => (
-                <div key={i} className="bg-white rounded-2xl p-5 flex flex-col items-center justify-center min-w-[110px] shadow-sm border border-gray-100">
-                  <div style={{ color: "#4a5a52", marginBottom: "8px" }}>{stat.icon}</div>
+                <div 
+                  key={i} 
+                  className="bg-white rounded-2xl p-5 flex flex-col items-center justify-center min-w-[110px] border-2 border-[#1a3d28] shadow-[4px_4px_0px_0px_#1a3d28] hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  <div style={{ color: "#1a3d28", marginBottom: "8px" }}>{stat.icon}</div>
                   <div style={{ color: "#0d1a14", fontWeight: 800, fontSize: "1.4rem" }}>{stat.val}</div>
-                  <div style={{ color: "#6b7c72", fontSize: "0.75rem" }}>{stat.label}</div>
+                  <div style={{ color: "#1a3d28/70", fontSize: "0.75rem", fontWeight: 700 }} className="opacity-80">{stat.label}</div>
                 </div>
               ))}
             </div>
@@ -118,7 +130,7 @@ export function FeaturesSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
-            className="w-full rounded-2xl overflow-hidden shadow-2xl bg-white border border-gray-200 flex flex-col"
+            className="w-full rounded-2xl overflow-hidden bg-white border-2 border-[#1a3d28] shadow-[8px_8px_0px_0px_#1a3d28] flex flex-col hover:-translate-y-0.5 transition-all duration-300"
           >
             <div className="h-10 px-4 flex items-center gap-2" style={{ background: "#1a3d28" }}>
               <div className="flex gap-1.5">
@@ -154,9 +166,9 @@ export function FeaturesSection() {
                 <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white to-transparent pointer-events-none"></div>
               </div>
 
-              <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-gray-100 bg-gray-50/50 p-6 flex flex-col gap-6">
-                <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                  <div className="flex items-center gap-2 mb-4 text-sm font-semibold text-gray-700">
+              <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l-2 border-[#1a3d28] bg-[#fcfbfa] p-6 flex flex-col gap-6">
+                <div className="bg-white rounded-xl p-5 border-2 border-[#1a3d28] shadow-[4px_4px_0px_0px_#1a3d28]">
+                  <div className="flex items-center gap-2 mb-4 text-xs font-bold uppercase tracking-widest text-[#1a3d28]">
                     <Clock size={16} /> Pomodoro Timer
                   </div>
                   <div className="flex items-center gap-4">
@@ -237,14 +249,14 @@ export function FeaturesSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
-            className="w-full rounded-2xl overflow-hidden shadow-2xl border border-gray-200 bg-white flex flex-col lg:flex-row h-auto lg:h-[500px]"
+            className="w-full rounded-2xl overflow-hidden border-2 border-[#1a3d28] bg-white flex flex-col lg:flex-row h-auto lg:h-[500px] shadow-[8px_8px_0px_0px_#1a3d28] hover:-translate-y-0.5 transition-all duration-300"
           >
             {/* Left: Document Area */}
-            <div className="flex-1 p-6 lg:p-10 overflow-y-auto border-b lg:border-b-0 lg:border-r border-gray-100 bg-[#faf9f6]">
+            <div className="flex-1 p-6 lg:p-10 overflow-y-auto border-b lg:border-b-0 lg:border-r-2 border-[#1a3d28] bg-[#faf9f6]">
               {/* Sticky Note matching user image */}
-              <div className="bg-[#fef9c3] border border-[#fde047]/50 rounded-xl px-4 py-3 flex gap-3 items-center max-w-lg shadow-sm mb-10">
+              <div className="bg-[#fef9c3] border-2 border-[#1a3d28] rounded-xl px-4 py-3 flex gap-3 items-center max-w-lg shadow-[3px_3px_0px_0px_#1a3d28] mb-10">
                 <span className="text-sm">📝</span>
-                <span className="text-gray-800 text-sm font-semibold">Ghi chú của bạn: Nhớ chọn u = phần dễ lấy đạo hàm</span>
+                <span className="text-[#1a3d28] text-sm font-bold">Ghi chú của bạn: Nhớ chọn u = phần dễ lấy đạo hàm</span>
               </div>
               
               {/* Dummy Document Content */}
@@ -273,10 +285,10 @@ export function FeaturesSection() {
                 {chatMessages.map((msg) => (
                   <div 
                     key={msg.id}
-                    className={`text-sm p-4 rounded-2xl max-w-[90%] leading-relaxed whitespace-pre-wrap shadow-sm ${
+                    className={`text-xs p-4 rounded-2xl max-w-[90%] leading-relaxed whitespace-pre-wrap ${
                       msg.sender === "ai" 
-                        ? "self-start bg-white border border-gray-100 text-gray-700 rounded-tl-sm" 
-                        : "self-end bg-[#1a3d28] text-white rounded-tr-sm ml-auto"
+                        ? "self-start bg-white border-2 border-[#1a3d28] text-gray-700 rounded-tl-sm shadow-[3px_3px_0px_0px_rgba(26,61,40,0.1)]" 
+                        : "self-end bg-[#1a3d28] text-white rounded-tr-sm ml-auto border-2 border-[#1a3d28] shadow-[3px_3px_0px_0px_rgba(26,61,40,0.25)] font-medium"
                     }`}
                   >
                     {msg.text}
@@ -290,21 +302,21 @@ export function FeaturesSection() {
                   </div>
                 )}
               </div>
-              <div className="p-4 bg-white border-t border-gray-50">
-                <form onSubmit={handleChatSubmit} className="relative flex-shrink-0 shadow-sm rounded-full bg-gray-50 border border-gray-200 focus-within:border-[#1a3d28] transition-colors">
+              <div className="p-4 bg-white border-t-2 border-[#1a3d28]">
+                <form onSubmit={handleChatSubmit} className="relative flex-shrink-0 shadow-sm rounded-full bg-gray-50 border-2 border-[#1a3d28] focus-within:border-emerald-600 transition-colors">
                   <input 
                     type="text" 
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     placeholder="Hỏi AI về tài liệu..." 
-                    className="w-full bg-transparent px-5 py-3.5 text-sm focus:outline-none pr-12 text-gray-700" 
+                    className="w-full bg-transparent px-5 py-3.5 text-xs focus:outline-none pr-12 text-gray-700 font-semibold" 
                   />
                   <button 
                     type="submit"
                     disabled={!chatInput.trim() || isTyping}
-                    className="absolute right-1.5 top-1.5 w-10 h-10 rounded-full bg-[#1a3d28] text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#112a1b] transition-colors"
+                    className="absolute right-1 top-1 w-9 h-9 rounded-full bg-[#1a3d28] text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#112a1b] transition-colors"
                   >
-                    <Send size={16} />
+                    <Send size={14} />
                   </button>
                 </form>
               </div>
@@ -332,13 +344,16 @@ export function FeaturesSection() {
                 { icon: <RotateCcw size={18} />, title: "Spaced Repetition", desc: "Ôn đúng lúc, ghi nhớ hiệu quả tối đa" },
                 { icon: <CheckCircle size={18} />, title: "Theo dõi tiến độ", desc: "Biết chính xác bao nhiêu % đã nắm vững" }
               ].map((item, i) => (
-                <div key={i} className="bg-white rounded-xl p-4 flex items-center gap-4 shadow-sm border border-gray-100 transition-colors hover:bg-gray-50 cursor-default">
-                  <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-600 border border-gray-100">
+                <div 
+                  key={i} 
+                  className="bg-white rounded-xl p-4 flex items-center gap-4 border-2 border-[#1a3d28]/25 shadow-[3px_3px_0px_0px_rgba(26,61,40,0.15)] hover:border-[#1a3d28] hover:shadow-[4px_4px_0px_0px_#1a3d28] transition-all duration-200 cursor-default"
+                >
+                  <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-[#1a3d28] border-2 border-[#1a3d28]">
                     {item.icon}
                   </div>
                   <div>
-                    <div className="font-bold text-gray-800 text-sm mb-0.5">{item.title}</div>
-                    <div className="text-gray-500 text-xs">{item.desc}</div>
+                    <div className="font-extrabold text-gray-800 text-sm mb-0.5">{item.title}</div>
+                    <div className="text-gray-500 text-xs font-medium">{item.desc}</div>
                   </div>
                 </div>
               ))}
@@ -369,11 +384,11 @@ export function FeaturesSection() {
                 style={{ perspective: "1200px" }}
               >
                 {/* Background Cards for Stack Effect */}
-                <div className="absolute inset-x-4 -top-3 bottom-3 bg-white/50 border border-gray-200 rounded-3xl shadow-sm -z-20 transform -rotate-2"></div>
-                <div className="absolute inset-x-2 -top-1 bottom-1 bg-white/80 border border-gray-200 rounded-3xl shadow-md -z-10 transform rotate-1"></div>
+                <div className="absolute inset-x-4 -top-3 bottom-3 bg-white border-2 border-[#1a3d28] rounded-3xl shadow-sm -z-20 transform -rotate-2"></div>
+                <div className="absolute inset-x-2 -top-1 bottom-1 bg-white border-2 border-[#1a3d28] rounded-3xl shadow-md -z-10 transform rotate-1"></div>
 
                 <motion.div 
-                  className="w-full h-full relative preserve-3d shadow-xl rounded-3xl"
+                  className="w-full h-full relative preserve-3d rounded-3xl"
                   animate={{ rotateY: isFlipped ? 180 : 0 }}
                   transition={{ type: "spring", stiffness: 220, damping: 22 }}
                   style={{ transformStyle: "preserve-3d" }}
@@ -386,7 +401,8 @@ export function FeaturesSection() {
                       backfaceVisibility: "hidden", 
                       backgroundImage: "radial-gradient(#1a3d28 0.5px, transparent 0.5px)", 
                       backgroundSize: "20px 20px", 
-                      border: "2px solid #e5e5e5" 
+                      border: "2px solid #1a3d28",
+                      boxShadow: "6px 6px 0px 0px #1a3d28"
                     }}
                   >
                     <div className="absolute top-0 bottom-0 left-8 w-[2px] bg-red-100/50 hidden md:block"></div>
@@ -400,8 +416,12 @@ export function FeaturesSection() {
 
                   {/* Back - Dark Elegant Style */}
                   <div 
-                    className="absolute inset-0 backface-hidden bg-[#1a3d28] rounded-3xl p-8 md:p-12 text-center flex flex-col justify-center border-4 border-white/20" 
-                    style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+                    className="absolute inset-0 backface-hidden bg-[#1a3d28] rounded-3xl p-8 md:p-12 text-center flex flex-col justify-center border-2 border-[#1a3d28]" 
+                    style={{ 
+                      backfaceVisibility: "hidden", 
+                      transform: "rotateY(180deg)",
+                      boxShadow: "6px 6px 0px 0px #1a3d28"
+                    }}
                   >
                     <span className="text-white/50 text-[10px] font-bold tracking-widest uppercase mb-4 block">
                       MẶT SAU · KẾT QUẢ

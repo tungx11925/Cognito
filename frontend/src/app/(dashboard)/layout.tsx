@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+  { icon: LayoutDashboard, label: 'Home', path: '/home' },
   { icon: Globe, label: 'Community', path: '/community' },
   { icon: BookOpen, label: 'My Library', path: '/library' },
   { icon: FlaskConical, label: 'AI Lab', path: '/ai-lab' },

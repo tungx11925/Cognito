@@ -118,16 +118,24 @@ function DeckCard({
         >
           <BookOpen size={18} color={color} />
         </div>
-        <span
-          className="text-xs px-2.5 py-1 rounded-lg font-bold"
-          style={{
-            background: dark ? "#2a2a2a" : "#f0f0ec",
-            color: dark ? "#9ca3af" : "#4b5563",
-            fontFamily: "'Outfit', sans-serif",
-          }}
-        >
-          Học tập
-        </span>
+        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <Link
+            href={`/flashcards/${deck.id}`}
+            className="text-[10px] px-2 py-1 rounded-lg font-bold transition-all bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/50 hover:bg-emerald-100 hover:scale-105"
+            title="Quản lý & chỉnh sửa thẻ"
+          >
+            Chỉnh sửa
+          </Link>
+          <span
+            onClick={() => onSelect()}
+            className="text-[10px] px-2 py-1 rounded-lg font-bold cursor-pointer transition-all bg-[#1a2e1c] text-white hover:bg-[#2d5a3d] hover:scale-105"
+            style={{
+              fontFamily: "'Outfit', sans-serif",
+            }}
+          >
+            Học tập
+          </span>
+        </div>
       </div>
 
       <h3
@@ -242,12 +250,18 @@ function StudyView({
   cards,
   deckTitle,
   muted,
+  decks = [],
+  onSwitchDeck,
+  currentDeckId,
 }: {
   dark: boolean;
   onBack: () => void;
   cards: Flashcard[];
   deckTitle: string;
   muted: boolean;
+  decks?: Deck[];
+  onSwitchDeck?: (deck: Deck) => void;
+  currentDeckId?: number;
 }) {
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -359,7 +373,6 @@ function StudyView({
     goNext();
   }
 
-  const cardBg = dark ? "#1e1e1e" : "#ffffff";
   const border = dark ? "#2a2a2a" : "rgba(26,46,28,0.3)";
   const shadow = dark
     ? "6px 6px 0px 0px rgba(255,255,255,0.04)"
@@ -367,6 +380,20 @@ function StudyView({
   const primary = dark ? "#10b981" : "#1a2e1c";
   const textMain = dark ? "#f0f0f0" : "#1a2e1c";
   const textSub = dark ? "#9ca3af" : "#6b7280";
+
+  // Dynamic card colors depending on if it's flipped (Answer face vs Question face)
+  const isBackSide = flipped;
+  const currentCardBg = isBackSide
+    ? (dark ? "#0e2317" : "#1a3d28")
+    : (dark ? "#1e1e1e" : "#fffdf0"); // warm yellow/cream paper note feel for front
+
+  const currentCardBorder = isBackSide
+    ? (dark ? "#10b981" : "#1a3d28")
+    : border;
+
+  const currentCardShadow = isBackSide
+    ? (dark ? "8px 8px 0px 0px rgba(16,185,129,0.15)" : "8px 8px 0px 0px rgba(26,61,40,0.35)")
+    : shadow;
 
   // Keyboard navigation
   useEffect(() => {
@@ -421,7 +448,7 @@ function StudyView({
         <div
           className="w-full max-w-md rounded-2xl p-8 text-center z-10"
           style={{
-            background: cardBg,
+            background: dark ? "#1e1e1e" : "#ffffff",
             border: `2px solid ${border}`,
             boxShadow: shadow,
           }}
@@ -509,263 +536,403 @@ function StudyView({
 
   return (
     <div
-      className="flex-1 flex flex-col items-center px-4 py-6 gap-6 z-10"
+      className="w-full max-w-7xl mx-auto px-1 py-4 z-10"
       style={{ fontFamily: "'Outfit', sans-serif" }}
     >
-      {/* Top control bar */}
-      <div className="w-full max-w-xl flex items-center justify-between">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all active:scale-95"
-          style={{
-            background: dark ? "#1e1e1e" : "#fff",
-            border: `2px solid ${border}`,
-            color: textSub,
-            fontWeight: 600,
-            fontSize: 13,
-            fontFamily: "'Outfit', sans-serif",
-            boxShadow: dark
-              ? "2px 2px 0 rgba(255,255,255,0.03)"
-              : "2px 2px 0 rgba(26,46,28,0.08)",
-          }}
-        >
-          <ChevronLeft size={14} />
-          Bộ thẻ
-        </button>
-
-        <span
-          className="text-xs font-semibold px-3 py-1 bg-emerald-500/10 text-emerald-600 rounded-lg max-w-[200px] truncate"
-          style={{ fontFamily: "'Outfit', sans-serif" }}
-        >
-          {deckTitle}
-        </span>
-
-        <span
-          style={{
-            fontWeight: 700,
-            color: textMain,
-            fontSize: 14,
-            fontFamily: "'Outfit', sans-serif",
-          }}
-        >
-          {index + 1} / {cards.length}
-        </span>
-      </div>
-
-      {/* Progress bar */}
-      <div className="w-full max-w-xl">
-        <div
-          className="w-full h-2.5 rounded-full overflow-hidden"
-          style={{ background: dark ? "#2a2a2a" : "#e0dbd0" }}
-        >
-          <div
-            className="h-full rounded-full"
-            style={{ width: `${progress}%`, background: primary }}
-          />
-        </div>
-      </div>
-
-      {/* Flashcard */}
-      <div className="w-full max-w-xl" style={{ perspective: 1200 }}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={`${card.id}-${flipped}`}
-            initial={{ rotateY: flipped ? -90 : 90, opacity: 0 }}
-            animate={{ rotateY: 0, opacity: 1 }}
-            exit={{ rotateY: flipped ? 90 : -90, opacity: 0 }}
-            transition={{ duration: 0.28, ease: "easeInOut" }}
-            onClick={() => {
-              setFlipped((f) => !f);
-              playFlipSound(muted);
-            }}
-            className="rounded-2xl cursor-pointer select-none"
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        
+        {/* === LEFT COLUMN: STUDY STATS & QUICK SWITCHER === */}
+        <div className="hidden lg:flex lg:col-span-3 flex-col gap-5">
+          {/* Progress Card */}
+          <div 
+            className="rounded-2xl p-5 border-2 transition-all duration-300"
             style={{
-              background: cardBg,
-              border: `2px solid ${border}`,
-              boxShadow: shadow,
-              minHeight: 280,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "2.5rem 2rem",
-              position: "relative",
+              background: dark ? "#1e1e1e" : "#ffffff",
+              borderColor: dark ? "#2a2a2a" : "rgba(26,46,28,0.18)",
+              boxShadow: dark ? "4px 4px 0px 0px rgba(255,255,255,0.03)" : "4px 4px 0px 0px rgba(26,46,28,0.08)",
             }}
           >
-            {/* Tag and TTS Group */}
-            <div className="absolute top-4 left-4 flex gap-2 z-20">
-              <span
-                className="text-xs px-2.5 py-1.5 rounded-lg"
-                style={{
-                  background: dark ? "#2a2a2a" : "#f0f0ec",
-                  color: dark ? "#9ca3af" : "#4b5563",
-                  fontWeight: 600,
-                  fontFamily: "'Outfit', sans-serif",
-                }}
-              >
-                {card.tag || "Thẻ học tập"}
-              </span>
-              <AudioButton 
-                isPlaying={isPlaying} 
-                onClick={playTTS} 
-                dark={dark} 
-              />
+            <h3 className="text-sm font-extrabold uppercase tracking-wider mb-4 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <Activity size={16} />
+              Tiến trình học
+            </h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span style={{ color: textSub }}>Đã ôn tập:</span>
+                <span style={{ color: textMain }}>{index + 1} / {cards.length} thẻ</span>
+              </div>
+              <div className="w-full bg-slate-100 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden">
+                <div 
+                  className="h-full rounded-full transition-all duration-300" 
+                  style={{ width: `${progress}%`, background: primary }} 
+                />
+              </div>
+              <div className="flex justify-between items-center text-xs font-bold pt-1">
+                <span style={{ color: textSub }}>Hoàn thành:</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{Math.round(progress)}%</span>
+              </div>
             </div>
+          </div>
 
-            {/* Flip hint */}
-            <span
-              className="absolute top-4 right-4 text-xs px-2.5 py-1 rounded-lg"
+          {/* Quick Deck Switcher */}
+          {decks.length > 1 && (
+            <div 
+              className="rounded-2xl p-5 border-2 transition-all duration-300 flex flex-col"
               style={{
-                background: flipped
-                  ? primary + "22"
-                  : dark
-                  ? "#2a2a2a"
-                  : "#f0f0ec",
-                color: flipped ? primary : textSub,
+                background: dark ? "#1e1e1e" : "#ffffff",
+                borderColor: dark ? "#2a2a2a" : "rgba(26,46,28,0.18)",
+                boxShadow: dark ? "4px 4px 0px 0px rgba(255,255,255,0.03)" : "4px 4px 0px 0px rgba(26,46,28,0.08)",
+              }}
+            >
+              <h3 className="text-sm font-extrabold uppercase tracking-wider mb-3 flex items-center gap-2 text-[#1a3d28] dark:text-emerald-400">
+                <Layers size={16} />
+                Bộ thẻ khác
+              </h3>
+              <div className="overflow-y-auto pr-1 space-y-2 max-h-[220px] custom-scrollbar">
+                {decks.filter(d => d.id !== currentDeckId).slice(0, 5).map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => onSwitchDeck?.(d)}
+                    className="w-full text-left p-3 rounded-xl border border-dashed transition-all duration-200 hover:-translate-y-0.5 flex flex-col gap-1 text-xs"
+                    style={{
+                      background: dark ? "#2a2a2a" : "#fbfbfa",
+                      borderColor: dark ? "#3a3a3a" : "rgba(26,46,28,0.12)",
+                      color: textMain
+                    }}
+                  >
+                    <span className="font-bold truncate w-full">{d.name}</span>
+                    <span style={{ color: textSub }} className="text-[10px] truncate w-full">
+                      {d.description || "Không có mô tả."}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* === CENTER COLUMN: FLASHCARD PLAYER === */}
+        <div className="col-span-1 lg:col-span-6 flex flex-col items-center gap-6">
+          {/* Top control bar */}
+          <div className="w-full flex items-center justify-between">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all active:scale-95"
+              style={{
+                background: dark ? "#1e1e1e" : "#fff",
+                border: `2px solid ${border}`,
+                color: textSub,
                 fontWeight: 600,
+                fontSize: 13,
+                fontFamily: "'Outfit', sans-serif",
+                boxShadow: dark
+                  ? "2px 2px 0 rgba(255,255,255,0.03)"
+                  : "2px 2px 0 rgba(26,46,28,0.08)",
+              }}
+            >
+              <ChevronLeft size={14} />
+              Bộ thẻ
+            </button>
+
+            <span
+              className="text-xs font-semibold px-3 py-1 bg-emerald-500/10 text-emerald-600 rounded-lg max-w-[200px] truncate"
+              style={{ fontFamily: "'Outfit', sans-serif" }}
+            >
+              {deckTitle}
+            </span>
+
+            <span
+              style={{
+                fontWeight: 700,
+                color: textMain,
+                fontSize: 14,
                 fontFamily: "'Outfit', sans-serif",
               }}
             >
-              {flipped ? "Mặt sau" : "Mặt trước"}
+              {index + 1} / {cards.length}
             </span>
+          </div>
 
-            {!flipped ? (
-              <div className="text-center w-full px-4">
-                <div
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 800,
-                    color: textMain,
-                    fontFamily: "'Outfit', sans-serif",
-                    letterSpacing: "-0.5px",
-                    lineHeight: 1.3,
-                  }}
-                  className="break-words"
-                >
-                  {card.front}
-                </div>
-                <p
-                  className="mt-4 text-xs"
-                  style={{ color: textSub, fontFamily: "'Outfit', sans-serif" }}
-                >
-                  Nhấn để xem nghĩa
-                </p>
-              </div>
-            ) : (
-              <div className="text-center w-full px-4">
-                <div
-                  style={{
-                    fontSize: 22,
-                    fontWeight: 700,
-                    color: primary,
-                    fontFamily: "'Outfit', sans-serif",
-                    lineHeight: 1.4,
-                  }}
-                  className="break-words whitespace-pre-wrap"
-                >
-                  {card.back}
-                </div>
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      {/* Rating buttons — show only when flipped */}
-      <div className="w-full max-w-xl h-14 relative flex justify-center items-center overflow-visible">
-        <AnimatePresence>
-          {flipped && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="w-full flex gap-3"
+          {/* Progress bar */}
+          <div className="w-full">
+            <div
+              className="w-full h-2.5 rounded-full overflow-hidden"
+              style={{ background: dark ? "#2a2a2a" : "#e0dbd0" }}
             >
-              {[
-                { label: "Khó", icon: <X size={16} />, color: "#ef4444", r: "hard" },
-                { label: "Ổn", icon: <Minus size={16} />, color: "#f59e0b", r: "good" },
-                { label: "Dễ", icon: <Check size={16} />, color: "#10b981", r: "easy" },
-              ].map((btn) => (
-                <button
-                  key={btn.r}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    rate(btn.r as any);
-                  }}
-                  className="flex-1 py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 hover:opacity-90 font-bold"
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${progress}%`, background: primary }}
+              />
+            </div>
+          </div>
+
+          {/* Flashcard */}
+          <div className="w-full" style={{ perspective: 1200 }}>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${card.id}-${flipped}`}
+                initial={{ rotateY: flipped ? -90 : 90, opacity: 0 }}
+                animate={{ rotateY: 0, opacity: 1 }}
+                exit={{ rotateY: flipped ? 90 : -90, opacity: 0 }}
+                transition={{ duration: 0.28, ease: "easeInOut" }}
+                onClick={() => {
+                  setFlipped((f) => !f);
+                  playFlipSound(muted);
+                }}
+                className="rounded-2xl cursor-pointer select-none"
+                style={{
+                  background: currentCardBg,
+                  border: `2px solid ${currentCardBorder}`,
+                  boxShadow: currentCardShadow,
+                  minHeight: 320,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "2.5rem 2rem",
+                  position: "relative",
+                }}
+              >
+                {/* Tag and TTS Group */}
+                <div className="absolute top-4 left-4 flex gap-2 z-20">
+                  <span
+                    className="text-xs px-2.5 py-1.5 rounded-lg"
+                    style={{
+                      background: flipped ? "rgba(255, 255, 255, 0.12)" : (dark ? "#2a2a2a" : "#f0f0ec"),
+                      color: flipped ? "#a7f3d0" : (dark ? "#9ca3af" : "#4b5563"),
+                      fontWeight: 600,
+                      fontFamily: "'Outfit', sans-serif",
+                    }}
+                  >
+                    {card.tag || "Thẻ học tập"}
+                  </span>
+                  <AudioButton 
+                    isPlaying={isPlaying} 
+                    onClick={playTTS} 
+                    dark={dark || flipped} 
+                  />
+                </div>
+
+                {/* Flip hint */}
+                <span
+                  className="absolute top-4 right-4 text-xs px-2.5 py-1 rounded-lg"
                   style={{
-                    background: btn.color + "18",
-                    border: `2px solid ${btn.color}55`,
-                    color: btn.color,
-                    fontSize: 14,
+                    background: flipped
+                      ? "rgba(52, 211, 153, 0.15)"
+                      : dark
+                      ? "#2a2a2a"
+                      : "#f0f0ec",
+                    color: flipped ? "#34d399" : textSub,
+                    fontWeight: 600,
                     fontFamily: "'Outfit', sans-serif",
                   }}
                 >
-                  {btn.icon}
-                  {btn.label}
-                </button>
+                  {flipped ? "Mặt sau" : "Mặt trước"}
+                </span>
+
+                {!flipped ? (
+                  <div className="text-center w-full px-4">
+                    <div
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 800,
+                        color: textMain,
+                        fontFamily: "'Outfit', sans-serif",
+                        letterSpacing: "-0.5px",
+                        lineHeight: 1.3,
+                      }}
+                      className="break-words"
+                    >
+                      {card.front}
+                    </div>
+                    <p
+                      className="mt-4 text-xs"
+                      style={{ color: textSub, fontFamily: "'Outfit', sans-serif" }}
+                    >
+                      Nhấn để lật xem đáp án
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center w-full px-4">
+                    <div
+                      style={{
+                        fontSize: 24,
+                        fontWeight: 800,
+                        color: "#ffffff",
+                        fontFamily: "'Outfit', sans-serif",
+                        lineHeight: 1.4,
+                      }}
+                      className="break-words whitespace-pre-wrap"
+                    >
+                      {card.back}
+                    </div>
+                    <p
+                      className="mt-4 text-xs"
+                      style={{ color: "rgba(255,255,255,0.6)", fontFamily: "'Outfit', sans-serif" }}
+                    >
+                      Nhấn để lật lại câu hỏi
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Rating buttons — show only when flipped */}
+          <div className="w-full h-14 relative flex justify-center items-center overflow-visible">
+            <AnimatePresence>
+              {flipped && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="w-full flex gap-3"
+                >
+                  {[
+                    { label: "Khó", icon: <X size={16} />, color: "#ef4444", r: "hard" },
+                    { label: "Ổn", icon: <Minus size={16} />, color: "#f59e0b", r: "good" },
+                    { label: "Dễ", icon: <Check size={16} />, color: "#10b981", r: "easy" },
+                  ].map((btn) => (
+                    <button
+                      key={btn.r}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        rate(btn.r as any);
+                      }}
+                      className="flex-1 py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 hover:opacity-90 font-bold"
+                      style={{
+                        background: btn.color + "18",
+                        border: `2px solid ${btn.color}55`,
+                        color: btn.color,
+                        fontSize: 14,
+                        fontFamily: "'Outfit', sans-serif",
+                      }}
+                    >
+                      {btn.icon}
+                      {btn.label}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Navigation */}
+          <div className="w-full flex items-center justify-between mt-2">
+            <button
+              onClick={goPrev}
+              disabled={index === 0}
+              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{
+                background: dark ? "#1e1e1e" : "#fff",
+                border: `2px solid ${border}`,
+                boxShadow: dark
+                  ? "3px 3px 0 rgba(255,255,255,0.03)"
+                  : "3px 3px 0 rgba(26,46,28,0.1)",
+              }}
+            >
+              <ChevronLeft size={18} color={textMain} />
+            </button>
+
+            <button
+              onClick={() => {
+                setFlipped((f) => !f);
+                playFlipSound(muted);
+              }}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all active:scale-95 font-bold"
+              style={{
+                background: primary,
+                color: "#fff",
+                fontSize: 14,
+                fontFamily: "'Outfit', sans-serif",
+                border: "none",
+              }}
+            >
+              <Zap size={15} />
+              {flipped ? "Lật lại" : "Xem đáp án"}
+            </button>
+
+            <button
+              onClick={goNext}
+              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all active:scale-95"
+              style={{
+                background: dark ? "#1e1e1e" : "#fff",
+                border: `2px solid ${border}`,
+                boxShadow: dark
+                  ? "3px 3px 0 rgba(255,255,255,0.03)"
+                  : "3px 3px 0 rgba(26,46,28,0.1)",
+              }}
+            >
+              <ChevronRight size={18} color={textMain} />
+            </button>
+          </div>
+
+          <div className="text-gray-400 text-xs font-semibold text-center mt-2 max-w-sm">
+            {flipped ? (
+              "Sử dụng [1] Khó | [2] Ổn | [3] Dễ để đánh giá thẻ."
+            ) : (
+              "Sử dụng phím Space / Enter hoặc click vào thẻ để xem nghĩa."
+            )}
+          </div>
+        </div>
+
+        {/* === RIGHT COLUMN: KEYBOARD SHORTCUTS & MEMORIZATION TIPS === */}
+        <div className="hidden lg:flex lg:col-span-3 flex-col gap-5">
+          {/* Shortcuts Card */}
+          <div 
+            className="rounded-2xl p-5 border-2 transition-all duration-300"
+            style={{
+              background: dark ? "#1e1e1e" : "#ffffff",
+              borderColor: dark ? "#2a2a2a" : "rgba(26,46,28,0.18)",
+              boxShadow: dark ? "4px 4px 0px 0px rgba(255,255,255,0.03)" : "4px 4px 0px 0px rgba(26,46,28,0.08)",
+            }}
+          >
+            <h3 className="text-sm font-extrabold uppercase tracking-wider mb-4 flex items-center gap-2 text-amber-500">
+              <Zap size={16} className="animate-pulse" />
+              Phím tắt nhanh
+            </h3>
+            <div className="space-y-3">
+              {[
+                { key: "Space / Enter", desc: "Lật thẻ" },
+                { key: "←", desc: "Thẻ trước" },
+                { key: "→", desc: "Thẻ sau" },
+                { key: "1", desc: "Đánh giá Khó" },
+                { key: "2", desc: "Đánh giá Ổn" },
+                { key: "3", desc: "Đánh giá Dễ" },
+                { key: "V", desc: "Đọc âm thanh" }
+              ].map((s, idx) => (
+                <div key={idx} className="flex justify-between items-center text-xs">
+                  <span style={{ color: textSub }} className="font-semibold">{s.desc}:</span>
+                  <span 
+                    className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono font-bold border border-slate-200 dark:border-zinc-700 shadow-sm text-[10px]"
+                    style={{ color: textMain }}
+                  >
+                    {s.key}
+                  </span>
+                </div>
               ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+            </div>
+          </div>
 
-      {/* Navigation */}
-      <div className="w-full max-w-xl flex items-center justify-between mt-2">
-        <button
-          onClick={goPrev}
-          disabled={index === 0}
-          className="w-11 h-11 rounded-xl flex items-center justify-center transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
-          style={{
-            background: dark ? "#1e1e1e" : "#fff",
-            border: `2px solid ${border}`,
-            boxShadow: dark
-              ? "3px 3px 0 rgba(255,255,255,0.03)"
-              : "3px 3px 0 rgba(26,46,28,0.1)",
-          }}
-        >
-          <ChevronLeft size={18} color={textMain} />
-        </button>
+          {/* Memorization Tip Card */}
+          <div 
+            className="rounded-2xl p-5 border-2 transition-all duration-300 relative overflow-hidden"
+            style={{
+              background: dark ? "#1e1e1e" : "#ffffff",
+              borderColor: dark ? "#2a2a2a" : "rgba(26,46,28,0.18)",
+              boxShadow: dark ? "4px 4px 0px 0px rgba(255,255,255,0.03)" : "4px 4px 0px 0px rgba(26,46,28,0.08)",
+            }}
+          >
+            <h3 className="text-sm font-extrabold uppercase tracking-wider mb-2 flex items-center gap-2 text-emerald-500">
+              <Sparkles size={16} />
+              Mẹo học tập
+            </h3>
+            <p style={{ color: textSub }} className="text-xs leading-relaxed italic font-semibold">
+              "Hãy cố gắng tập hồi tưởng (Active Recall) đáp án trước khi lật thẻ. Việc tự suy nghĩ giúp kích thích bộ não ghi nhớ lâu hơn 150%."
+            </p>
+          </div>
+        </div>
 
-        <button
-          onClick={() => {
-            setFlipped((f) => !f);
-            playFlipSound(muted);
-          }}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all active:scale-95 font-bold"
-          style={{
-            background: primary,
-            color: "#fff",
-            fontSize: 14,
-            fontFamily: "'Outfit', sans-serif",
-            border: "none",
-          }}
-        >
-          <Zap size={15} />
-          {flipped ? "Lật lại" : "Xem đáp án"}
-        </button>
-
-        <button
-          onClick={goNext}
-          className="w-11 h-11 rounded-xl flex items-center justify-center transition-all active:scale-95"
-          style={{
-            background: dark ? "#1e1e1e" : "#fff",
-            border: `2px solid ${border}`,
-            boxShadow: dark
-              ? "3px 3px 0 rgba(255,255,255,0.03)"
-              : "3px 3px 0 rgba(26,46,28,0.1)",
-          }}
-        >
-          <ChevronRight size={18} color={textMain} />
-        </button>
-      </div>
-
-      <div className="text-gray-400 text-xs font-semibold text-center mt-2 max-w-sm">
-        {flipped ? (
-          "Sử dụng [1] Khó | [2] Ổn | [3] Dễ để đánh giá thẻ."
-        ) : (
-          "Sử dụng phím Space / Enter hoặc click vào thẻ để xem nghĩa."
-        )}
       </div>
     </div>
   );
@@ -987,7 +1154,7 @@ export default function FlashcardsPage() {
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
-        onDashboardClick={() => router.push('/dashboard')}
+        onDashboardClick={() => router.push('/home')}
         activeUser={activeUser!}
       />
 
@@ -997,7 +1164,7 @@ export default function FlashcardsPage() {
           style={{ borderColor: dark ? "#222" : "rgba(26,46,28,0.08)" }}
         >
           <div className="flex items-center gap-2">
-            <Link href="/dashboard" className="flex items-center gap-1 text-xs font-bold transition-opacity hover:opacity-80"
+            <Link href="/home" className="flex items-center gap-1 text-xs font-bold transition-opacity hover:opacity-80"
               style={{ color: primaryColor }}
             >
               <ArrowLeft size={14} /> Bảng điều khiển
@@ -1078,7 +1245,7 @@ export default function FlashcardsPage() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto w-full px-4 mt-6 flex-1 flex flex-col overflow-x-hidden relative">
+      <div className={`${activeMode === 'study' ? 'max-w-7xl' : 'max-w-4xl'} mx-auto w-full px-4 mt-6 flex-1 flex flex-col overflow-x-hidden relative`}>
         <AnimatePresence mode="wait">
           {activeMode ? (
             <motion.div
@@ -1119,6 +1286,9 @@ export default function FlashcardsPage() {
                   cards={cards}
                   deckTitle={selectedDeck?.name || "Bộ thẻ học tập"}
                   muted={muted}
+                  decks={decks}
+                  onSwitchDeck={handleStartStudy}
+                  currentDeckId={selectedDeck?.id}
                 />
               )}
               {activeMode === 'test' && (
