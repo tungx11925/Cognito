@@ -11,7 +11,7 @@
   }
 
   h1, h2, h3, h4, .font-serif-elegant {
-    font-family: 'Cormorant Garamond', serif;
+    font-family: 'Playfair Display', serif;
   }
 }
 
@@ -55,3 +55,26 @@
 /* Docx Preview Container Override */
 .docx-wrapper { background-color: transparent !important; padding: 24px !important; }
 .docx-wrapper > section.docx { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1) !important; border-radius: 4px; }
+
+/* Scrolling Marquee */
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee-container {
+  display: flex;
+  overflow: hidden;
+  width: 100%;
+}
+
+.animate-marquee-content {
+  display: flex;
+  white-space: nowrap;
+  animation: marquee 35s linear infinite;
+}
+
+.animate-marquee-content:hover {
+  animation-play-state: paused;
+}
+

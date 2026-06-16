@@ -384,7 +384,7 @@ export default function LibraryPage() {
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
-        onDashboardClick={() => router.push('/dashboard')}
+        onDashboardClick={() => router.push('/home')}
         activeUser={activeUser!}
       />
 
@@ -396,7 +396,7 @@ export default function LibraryPage() {
         >
           <div className="flex items-center gap-2">
             <Link
-              href="/dashboard"
+              href="/home"
               className="flex items-center gap-1 text-xs font-bold transition-opacity hover:opacity-80"
               style={{ color: primaryColor }}
             >

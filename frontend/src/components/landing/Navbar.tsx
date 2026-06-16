@@ -68,7 +68,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           <nav className="hidden md:flex items-center gap-7">
             {isLoggedIn ? (
               <>
-                <Link href="/dashboard" className="transition-colors duration-200 text-sm font-bold" style={{ color: "#1a3d28" }}>
+                <Link href="/home" className="transition-colors duration-200 text-sm font-bold" style={{ color: "#1a3d28" }}>
                   Bảng điều khiển
                 </Link>
                 <Link href="/library" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
@@ -159,7 +159,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                           <button
                             onClick={() => {
                               setDropdownOpen(false);
-                              router.push('/dashboard');
+                              router.push('/home');
                             }}
                             className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-left"
                           >
@@ -242,7 +242,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-4">
               {isLoggedIn ? (
                 <>
-                  <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Bảng điều khiển</Link>
+                  <Link href="/home" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Bảng điều khiển</Link>
                   <Link href="/library" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tài liệu</Link>
                   <Link href="/chat" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Trợ lý AI</Link>
                   <Link href="/flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>

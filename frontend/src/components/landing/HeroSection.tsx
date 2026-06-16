@@ -78,19 +78,22 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
         </div>
 
         {/* Center Content */}
-        <div className="relative z-50 max-w-3xl mx-auto flex flex-col items-center">
+        <div className="relative z-50 max-w-4xl mx-auto flex flex-col items-center">
           
           {/* Status Badge */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-full mb-8 shadow-sm backdrop-blur-md"
-            style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(26,61,40,0.1)" }}
+            className="inline-flex items-center gap-2.5 px-6 py-2.5 rounded-full mb-8 shadow-premium backdrop-blur-md border border-[#1a3d28]/10"
+            style={{ background: "rgba(255,255,255,0.75)" }}
           >
-            <span className="w-2 h-2 rounded-full shadow-[0_0_8px_rgba(26,61,40,0.8)]" style={{ background: "#1a3d28" }} />
-            <span style={{ color: "#0d1a14", fontSize: "0.8rem", fontWeight: 600, letterSpacing: "0.02em" }}>
-              EduShare AI — Trợ lý học tập thông minh
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
+            </span>
+            <span style={{ color: "#1a3d28", fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.05em", uppercase: "true" } as any} className="tracking-wider uppercase">
+              EduShare AI • KHÔNG GIAN HỌC THẾ HỆ MỚI
             </span>
           </motion.div>
 
@@ -99,25 +102,30 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.08 }}
-            className="mb-6 max-w-4xl"
+            className="mb-8 max-w-5xl tracking-tight text-center"
             style={{
               fontFamily: "'Playfair Display', 'Merriweather', 'Times New Roman', Times, serif",
-              fontSize: "clamp(2.8rem, 5.5vw, 4.8rem)",
-              fontWeight: 700,
+              fontSize: "clamp(3.2rem, 6.5vw, 5.5rem)",
+              fontWeight: 800,
               lineHeight: 1.05,
               color: "#0d1a14",
             }}
           >
-            Nền tảng học tập cùng <br className="hidden md:block" />
-            <em style={{ 
-              fontStyle: "italic", 
-              color: "#1a3d28",
-              fontWeight: 600,
-              display: "inline-block",
-              transform: "rotate(-1deg)"
-            }}>
-              Trợ lý Thông minh
-            </em>
+            Học tập thông thái cùng <br className="hidden md:block" />
+            <span className="relative inline-block mt-2">
+              <em style={{ 
+                fontStyle: "italic", 
+                color: "#1a3d28",
+                fontWeight: 700,
+                display: "inline-block",
+                transform: "rotate(-1deg)"
+              }}>
+                Trợ lý AI đa năng
+              </em>
+              <svg className="absolute -bottom-2 left-0 w-full h-2 text-emerald-600/30" viewBox="0 0 100 10" preserveAspectRatio="none">
+                <path d="M0,5 Q50,10 100,5" stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" />
+              </svg>
+            </span>
           </motion.h1>
 
           {/* Description */}
@@ -125,10 +133,10 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.15 }}
-            className="mb-10 max-w-xl text-center"
-            style={{ fontSize: "1.1rem", color: "#4a5a52", lineHeight: 1.6, fontWeight: 400 }}
+            className="mb-12 max-w-2xl text-center px-4"
+            style={{ fontSize: "1.15rem", color: "#4a5a52", lineHeight: 1.7, fontWeight: 400 }}
           >
-            Đọc tài liệu, hỏi đáp trực tiếp với AI, tự động tạo Flashcard và duy trì sự tập trung với Pomodoro. Không gian tối ưu cho mọi ý tưởng lớn của bạn.
+            Đồng bộ tài liệu thông minh, đối thoại trực tiếp với AI trợ giúp bài tập, tự sinh flashcard học tập tối ưu hóa và làm chủ thời gian cùng Pomodoro.
           </motion.p>
 
           {/* CTA Buttons */}
@@ -136,23 +144,26 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.22 }}
-            className="flex flex-col sm:flex-row gap-4"
+            className="flex flex-col sm:flex-row gap-5 items-center z-50"
           >
             <button
               onClick={onStartClick}
-              className="group flex items-center justify-center gap-2 px-8 py-4 rounded-full transition-all duration-300 shadow-xl hover:shadow-2xl hover:-translate-y-1"
-              style={{ background: "#1a3d28", color: "#ffffff", fontWeight: 600, fontSize: "1rem" }}
+              className="group flex items-center justify-center gap-2 px-9 py-4.5 rounded-full transition-all duration-300 shadow-premium bg-[#1a3d28] hover:bg-[#112a1b] text-white hover:-translate-y-1 font-bold text-base"
+              style={{ padding: "18px 38px" }}
             >
               Bắt đầu học miễn phí
+              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
             </button>
 
             <button
               onClick={onDemoClick}
-              className="flex items-center justify-center gap-2 px-8 py-4 rounded-full transition-all duration-300 hover:bg-white shadow-sm border border-gray-200"
-              style={{ background: "rgba(255,255,255,0.7)", color: "#0d1a14", fontWeight: 600, fontSize: "1rem", backdropFilter: "blur(10px)" }}
+              className="group flex items-center justify-center gap-2 px-9 py-4.5 rounded-full transition-all duration-300 hover:bg-white shadow-sm border border-slate-200 hover:border-[#1a3d28]/30 hover:-translate-y-1 text-slate-800 font-bold text-base"
+              style={{ background: "rgba(255,255,255,0.75)", backdropFilter: "blur(10px)", padding: "18px 38px" }}
             >
-              <Play size={16} fill="currentColor" />
-              Xem tính năng
+              <span className="w-7 h-7 rounded-full bg-[#1a3d28]/10 text-[#1a3d28] flex items-center justify-center group-hover:bg-[#1a3d28] group-hover:text-white transition-colors duration-300">
+                <Play size={12} fill="currentColor" className="ml-0.5" />
+              </span>
+              Khám phá tính năng
             </button>
           </motion.div>
         </div>

@@ -613,9 +613,9 @@ export default function FlashcardDeckPage() {
                 <div className="flex-1 p-5 flex items-center justify-center md:justify-start">
                   <p className="text-gray-600 whitespace-pre-wrap">{card.back}</p>
                 </div>
-                <div className="flex flex-row md:flex-col items-center justify-center p-3 gap-2 border-t md:border-t-0 md:border-l border-gray-100 bg-white opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => handleEditClick(card)} className="p-2 text-gray-400 hover:text-[#4255FF] hover:bg-blue-50 rounded-lg transition-colors" title="Sửa"><Edit2 size={18}/></button>
-                  <button onClick={() => handleDelete(card.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Xóa vĩnh viễn"><Trash2 size={18}/></button>
+                <div className="flex flex-row md:flex-col items-center justify-center p-3 gap-2 border-t md:border-t-0 md:border-l border-gray-100 bg-white transition-opacity shrink-0">
+                  <button onClick={() => handleEditClick(card)} className="p-2 text-gray-500 hover:text-[#4255FF] hover:bg-blue-50 rounded-lg transition-colors" title="Sửa"><Edit2 size={18}/></button>
+                  <button onClick={() => handleDelete(card.id)} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Xóa vĩnh viễn"><Trash2 size={18}/></button>
                 </div>
               </div>
             )}
