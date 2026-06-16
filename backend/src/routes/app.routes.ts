@@ -9,8 +9,51 @@ import multer from 'multer';
 const pdfParse = require('pdf-parse');
 import xlsx from 'xlsx';
 import { authenticate, AuthRequest } from '../middlewares/auth.middleware';
-
 const router = Router();
+
+// Helper function to update the user's daily study streak
+async function updateUserStreak(userId: number) {
+  try {
+    const userRes = await db.query('SELECT streak, last_study_date FROM users WHERE id = $1', [userId]);
+    if (userRes.rows.length === 0) return 0;
+    const { streak, last_study_date } = userRes.rows[0];
+
+    const today = new Date();
+    // Normalize date to YYYY-MM-DD in UTC/Local representation (safe date comparison)
+    const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+
+    if (!last_study_date) {
+      // First study activity ever
+      await db.query('UPDATE users SET streak = 1, last_study_date = CURRENT_TIMESTAMP WHERE id = $1', [userId]);
+      return 1;
+    }
+
+    const lastStudy = new Date(last_study_date);
+    const lastStudyStr = lastStudy.getFullYear() + '-' + String(lastStudy.getMonth() + 1).padStart(2, '0') + '-' + String(lastStudy.getDate()).padStart(2, '0');
+
+    if (todayStr === lastStudyStr) {
+      // Already studied today, streak remains unchanged
+      return streak || 1;
+    }
+
+    // Check if the last study date was yesterday
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + String(yesterday.getDate()).padStart(2, '0');
+
+    let newStreak = 1;
+    if (lastStudyStr === yesterdayStr) {
+      newStreak = (streak || 0) + 1;
+    }
+
+    await db.query('UPDATE users SET streak = $1, last_study_date = CURRENT_TIMESTAMP WHERE id = $2', [newStreak, userId]);
+    return newStreak;
+  } catch (error) {
+    console.error('Error in updateUserStreak:', error);
+    return 0;
+  }
+}
+
 
 // ==========================================
 // DOCUMENTS ENDPOINTS
@@ -124,6 +167,8 @@ router.get('/study-sessions/stats', authenticate, async (req: AuthRequest, res: 
        JOIN flashcard_decks d ON f.deck_id = d.id
        WHERE d.user_id = $1`, [userId]
     );
+    const userRes = await db.query('SELECT streak FROM users WHERE id = $1', [userId]);
+    const streak = userRes.rows[0]?.streak || 0;
     
     // Mock daily analytics data for chart
     const chartData = [
@@ -141,6 +186,7 @@ router.get('/study-sessions/stats', authenticate, async (req: AuthRequest, res: 
       total_sessions: Number(sessionsCountResult.rows[0].count || 0),
       total_documents: Number(documentCountResult.rows[0].count || 0),
       total_flashcards: Number(flashcardsCountResult.rows[0].count || 0),
+      streak: streak,
       chart_data: chartData
     });
   } catch (error: any) {
@@ -156,7 +202,8 @@ router.post('/study-sessions', authenticate, async (req: AuthRequest, res: Respo
       'INSERT INTO study_sessions (user_id, document_id, duration_seconds) VALUES ($1, $2, $3) RETURNING *',
       [userId, document_id, duration_seconds]
     );
-    res.status(201).json(result.rows[0]);
+    const updatedStreak = await updateUserStreak(userId);
+    res.status(201).json({ ...result.rows[0], updated_streak: updatedStreak });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -593,11 +640,14 @@ router.post('/flashcards/review/:id', authenticate, async (req: AuthRequest, res
        WHERE id = $5 RETURNING *`,
       [ease_factor, repetitions, interval_days, nextReview, id]
     );
+
+    const updatedStreak = await updateUserStreak(userId);
     
     res.status(200).json({
       message: 'Flashcard reviewed successfully',
       card: updateResult.rows[0],
-      next_review_days: interval_days
+      next_review_days: interval_days,
+      updated_streak: updatedStreak
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

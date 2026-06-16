@@ -1,60 +1,166 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { getAllFlashcards, updateFlashcard, deleteFlashcard, getDeckById, updateDeck, deleteDeck } from '@/services/flashcard.service';
-import { ArrowLeft, Loader2, ChevronLeft, ChevronRight, Maximize, RefreshCw, Play, Edit2, Trash2, Check, X, BookOpen, Layers, Settings, Globe, Lock, PenTool, Puzzle, Star, Volume2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toggleStarFlashcard } from '@/services/flashcard.service';
+import { 
+  ArrowLeft, Loader2, ChevronLeft, ChevronRight, RotateCcw, Play, 
+  Edit2, Trash2, Check, X, BookOpen, Layers, Settings, Globe, Lock, 
+  PenTool, Puzzle, Star, Volume2, VolumeX, Sparkles, Palette, EyeOff, Activity, 
+  Flame, Zap, Trophy, Moon, Sun, Minus
+} from 'lucide-react';
+import Link from 'next/link';
+import confetti from 'canvas-confetti';
+
+import { useStudy } from '@/context/StudyContext';
+import { Navbar } from '@/components/landing/Navbar';
+import { Background, BackgroundStyle } from '@/components/flashcards/Background';
+import { useTextToSpeech } from '@/hooks/useTextToSpeech';
+import AudioButton from '@/components/flashcards/AudioButton';
+import { playFlipSound, playSuccessSound, playHardSound, playCompleteSound } from '@/utils/sound';
+
+import { 
+  getAllFlashcards, 
+  updateFlashcard, 
+  deleteFlashcard, 
+  getDeckById, 
+  updateDeck, 
+  deleteDeck, 
+  toggleStarFlashcard, 
+  reviewFlashcard, 
+  createFlashcard,
+  getDecks
+} from '@/services/flashcard.service';
+
 import MatchGameMode from '@/components/flashcards/modes/MatchGameMode';
+import TestMode from '@/components/flashcards/modes/TestMode';
+import LearnMode from '@/components/flashcards/modes/LearnMode';
 import WriteMode from '@/components/flashcards/modes/WriteMode';
+
+// Helper colors for decks
+const COLOR_PALETTE = [
+  "#2d5a3d", // forest
+  "#1a3a5c", // blue
+  "#5c1a1a", // red
+  "#4d1a5c", // purple
+  "#5c451a", // orange/gold
+];
+
+interface Flashcard {
+  id: number;
+  deck_id: number;
+  front: string;
+  back: string;
+  ease_factor: number;
+  repetitions: number;
+  interval_days: number;
+  next_review_at?: string;
+  is_starred?: boolean;
+  tag?: string;
+}
+
+interface Deck {
+  id: number;
+  name: string;
+  description: string;
+  created_at: string;
+  is_public?: boolean;
+}
+
+// ── StatBadge Sub-component ──────────────────────────────────────────────────
+function StatBadge({
+  icon,
+  label,
+  value,
+  dark,
+  border,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  dark: boolean;
+  border: string;
+}) {
+  return (
+    <div
+      className="flex items-center gap-2 px-4 py-2.5 rounded-xl flex-1 min-w-[140px]"
+      style={{
+        background: dark ? "#1e1e1e" : "#ffffff",
+        border: `2px solid ${border}`,
+        boxShadow: dark
+          ? "3px 3px 0 rgba(255,255,255,0.03)"
+          : "3px 3px 0 rgba(26,46,28,0.1)",
+        fontFamily: "'Outfit', sans-serif",
+      }}
+    >
+      {icon}
+      <div>
+        <div style={{ fontSize: 11, color: dark ? "#9ca3af" : "#6b7280" }}>
+          {label}
+        </div>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: dark ? "#f0f0f0" : "#1a2e1c",
+          }}
+        >
+          {value}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function FlashcardDeckPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const deckId = Number(params.deckId);
-  
+
+  const {
+    isAuthenticated,
+    activeUser,
+    triggerMessage,
+    globalMessage
+  } = useStudy();
+
   const [dark, setDark] = useState(false);
-  useEffect(() => {
-    const saved = localStorage.getItem("app-theme");
-    if (saved === "dark") setDark(true);
-  }, []);
+  const [muted, setMuted] = useState(false);
+  const [bgStyle, setBgStyle] = useState<BackgroundStyle>("nebula");
+  const [viewMode, setViewMode] = useState<'dashboard' | 'study' | 'test' | 'match' | 'learn' | 'quiz' | 'write'>('dashboard');
 
-  const [cards, setCards] = useState<any[]>([]);
-  const [deck, setDeck] = useState<any>(null);
+  const [cards, setCards] = useState<Flashcard[]>([]);
+  const [deck, setDeck] = useState<Deck | null>(null);
+  const [decks, setDecks] = useState<Deck[]>([]);
+  const [deckCounts, setDeckCounts] = useState<Record<number, { total: number; mastered: number; due: number }>>({});
   const [loading, setLoading] = useState(true);
-  
-  // Custom Alert & Confirm
-  const [toast, setToast] = useState<{ type: 'success'|'error'|'warning', text: string } | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void, isDestructive?: boolean } | null>(null);
 
-  const showToast = (text: string, type: 'success'|'error'|'warning' = 'success') => {
-    setToast({ text, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  // Settings States
+  // Settings states
   const [showSettings, setShowSettings] = useState(false);
   const [editDeckName, setEditDeckName] = useState('');
   const [editDeckDesc, setEditDeckDesc] = useState('');
   const [editDeckPublic, setEditDeckPublic] = useState(false);
-  
-  // Modes: 'dashboard' | 'study' | 'quiz' | 'match' | 'write'
-  const [viewMode, setViewMode] = useState<'dashboard' | 'study' | 'quiz' | 'match' | 'write'>('dashboard');
-  
-  // Create States
+
+  // Create card states
   const [isAddingCard, setIsAddingCard] = useState(false);
   const [newFront, setNewFront] = useState('');
   const [newBack, setNewBack] = useState('');
 
-  // Edit States
+  // Edit card states
   const [editingCardId, setEditingCardId] = useState<number | null>(null);
   const [editFront, setEditFront] = useState('');
   const [editBack, setEditBack] = useState('');
 
-  // Study States
+  // Study states
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [direction, setDirection] = useState(1);
+  const [ratings, setRatings] = useState<Record<number, string>>({});
+  const [studyFinished, setStudyFinished] = useState(false);
+
+  // Text-To-Speech
+  const { speak, isPlaying } = useTextToSpeech();
 
   // Quiz States
   const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
@@ -63,30 +169,148 @@ export default function FlashcardDeckPage() {
   const [quizScore, setQuizScore] = useState(0);
   const [quizFinished, setQuizFinished] = useState(false);
 
+  // Custom alert & confirm
+  const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void, isDestructive?: boolean } | null>(null);
+
+  // Load configuration & initial values — only run once on mount / deckId change
   useEffect(() => {
-    fetchCards();
+    const savedTheme = localStorage.getItem("app-theme") || "light";
+    setDark(savedTheme === "dark");
+    if (typeof window !== "undefined") {
+      if (savedTheme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    }
+
+    const savedMute = localStorage.getItem("flashcard-muted") === "true";
+    setMuted(savedMute);
+
+    const savedBg = (localStorage.getItem("flashcard-bg") as BackgroundStyle) || "nebula";
+    setBgStyle(savedBg);
+
+    // Determine initial mode from URL param (read once)
+    const modeParam = searchParams.get('mode');
+    const initialMode = (modeParam && ['dashboard', 'study', 'test', 'match', 'learn', 'quiz', 'write'].includes(modeParam))
+      ? (modeParam as 'dashboard' | 'study' | 'test' | 'match' | 'learn' | 'quiz' | 'write')
+      : 'dashboard';
+
+    fetchDeckData(initialMode);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deckId]);
 
-  const fetchCards = async () => {
+  const fetchDeckData = async (initialMode?: 'dashboard' | 'study' | 'test' | 'match' | 'learn' | 'quiz' | 'write') => {
     try {
-      const [allCards, deckInfo] = await Promise.all([
+      setLoading(true);
+      const [allCards, deckInfo, allDecks] = await Promise.all([
         getAllFlashcards(deckId),
-        getDeckById(deckId)
+        getDeckById(deckId),
+        getDecks()
       ]);
-      setCards(allCards || []);
+
+      const loadedCards: Flashcard[] = allCards || [];
+      setCards(loadedCards);
+
+      // ── Restore study progress from localStorage ─────────────────────────
+      // Done here (not in a useEffect) to avoid race conditions between
+      // viewMode state and async card loading.
+      if (initialMode) {
+        setViewMode(initialMode);
+        if (initialMode === 'study' && loadedCards.length > 0) {
+          const savedKey = `flashcards-progress-${deckId}-index`;
+          const savedIndex = localStorage.getItem(savedKey);
+          if (savedIndex !== null) {
+            const parsed = parseInt(savedIndex, 10);
+            if (!isNaN(parsed) && parsed >= 0 && parsed < loadedCards.length) {
+              setCurrentIndex(parsed);
+              setIsFlipped(false);
+            } else {
+              // Saved index out of range (e.g. deck changed), clean up
+              localStorage.removeItem(savedKey);
+              setCurrentIndex(0);
+            }
+          }
+        }
+      }
+
       if (deckInfo) {
         setDeck(deckInfo);
         setEditDeckName(deckInfo.name || '');
         setEditDeckDesc(deckInfo.description || '');
         setEditDeckPublic(deckInfo.is_public || false);
       }
+      if (Array.isArray(allDecks)) {
+        setDecks(allDecks);
+        // Calculate counts
+        const countsMap: Record<number, { total: number; mastered: number; due: number }> = {};
+        await Promise.all(
+          allDecks.map(async (d: Deck) => {
+            try {
+              const cardsList = await getAllFlashcards(d.id);
+              if (Array.isArray(cardsList)) {
+                const total = cardsList.length;
+                // progress/mastered is now based on repetitions > 0 so progress registers immediately
+                const mastered = cardsList.filter((c: any) => c.repetitions > 0).length;
+                const due = cardsList.filter((c: any) => {
+                  if (!c.next_review_at) return true;
+                  return new Date(c.next_review_at) <= new Date();
+                }).length;
+                countsMap[d.id] = { total, mastered, due };
+              } else {
+                countsMap[d.id] = { total: 0, mastered: 0, due: 0 };
+              }
+            } catch (e) {
+              countsMap[d.id] = { total: 0, mastered: 0, due: 0 };
+            }
+          })
+        );
+        setDeckCounts(countsMap);
+      }
     } catch (error) {
-      console.error('Lỗi tải flashcards:', error);
+      console.error('Lỗi tải dữ liệu bộ thẻ:', error);
+      triggerMessage("Không thể tải thông tin bộ thẻ này.", "error");
     } finally {
       setLoading(false);
     }
   };
 
+
+  const saveStudyIndex = (index: number) => {
+    setCurrentIndex(index);
+    if (deckId) {
+      localStorage.setItem(`flashcards-progress-${deckId}-index`, String(index));
+    }
+  };
+
+  const handleToggleMute = () => {
+    const nextMuted = !muted;
+    setMuted(nextMuted);
+    localStorage.setItem("flashcard-muted", String(nextMuted));
+  };
+
+  const handleCycleBg = () => {
+    const bgStyles: BackgroundStyle[] = ["default", "nebula", "geometry"];
+    const nextIdx = (bgStyles.indexOf(bgStyle) + 1) % bgStyles.length;
+    const nextBg = bgStyles[nextIdx];
+    setBgStyle(nextBg);
+    localStorage.setItem("flashcard-bg", nextBg);
+  };
+
+  const handleToggleDark = () => {
+    const nextDark = !dark;
+    setDark(nextDark);
+    localStorage.setItem("app-theme", nextDark ? "dark" : "light");
+    if (typeof window !== "undefined") {
+      if (nextDark) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    }
+  };
+
+  // ── Deck Settings Operations ───────────────────────────────────────────────
   const handleUpdateDeck = async () => {
     try {
       const updated = await updateDeck(deckId, {
@@ -96,43 +320,41 @@ export default function FlashcardDeckPage() {
       });
       setDeck(updated);
       setShowSettings(false);
-      showToast('Đã cập nhật thông tin bộ thẻ!', 'success');
+      triggerMessage('Đã cập nhật thông tin bộ thẻ!', 'success');
+      fetchDeckData();
     } catch (error: any) {
-      showToast("Lỗi cập nhật: " + error.message, 'error');
+      triggerMessage("Lỗi cập nhật: " + error.message, 'error');
     }
   };
 
   const handleDeleteDeck = () => {
     setConfirmDialog({
       title: 'Xóa bộ thẻ',
-      message: 'HÀNH ĐỘNG NGUY HIỂM: Bạn có chắc chắn muốn xóa TOÀN BỘ bộ thẻ này và tất cả thẻ bên trong? Dữ liệu không thể khôi phục!',
+      message: 'HÀNH ĐỘNG NGUY HIỂM: Bạn có chắc chắn muốn xóa bộ thẻ này và tất cả thẻ bên trong? Dữ liệu không thể khôi phục!',
       isDestructive: true,
       onConfirm: async () => {
         try {
           await deleteDeck(deckId);
-          showToast('Đã xóa bộ thẻ!', 'success');
-          router.push('/library');
+          triggerMessage('Đã xóa bộ thẻ thành công!', 'success');
+          router.push('/flashcards');
         } catch (error: any) {
-          showToast("Lỗi khi xóa: " + error.message, 'error');
+          triggerMessage("Lỗi khi xóa: " + error.message, 'error');
         }
       }
     });
   };
 
-  // -------------------------
-  // DASHBOARD & CRUD LOGIC
-  // -------------------------
+  // ── Card CRUD Operations ────────────────────────────────────────────────────
   const handleCreateCard = async () => {
     if (newFront.trim() === '' || newBack.trim() === '') {
-      showToast("Nội dung Front và Back không được để trống!", 'error');
+      triggerMessage("Nội dung Mặt trước và Mặt sau không được để trống!", 'error');
       return;
     }
-
     const isDuplicate = cards.some(c => c.front.toLowerCase() === newFront.toLowerCase().trim());
     if (isDuplicate) {
       setConfirmDialog({
         title: 'Cảnh báo trùng lặp',
-        message: 'Thuật ngữ (Front) này đã tồn tại trong bộ bài! Bạn có chắc chắn muốn tạo thêm thẻ trùng không?',
+        message: 'Khái niệm/Thuật ngữ này đã tồn tại trong bộ bài! Bạn có muốn tiếp tục tạo thẻ trùng?',
         onConfirm: proceedCreateCard
       });
       return;
@@ -142,19 +364,19 @@ export default function FlashcardDeckPage() {
 
   const proceedCreateCard = async () => {
     try {
-      const { createFlashcard } = await import('@/services/flashcard.service');
       const newCard = await createFlashcard(deckId, newFront, newBack);
       setCards([...cards, newCard]);
       setNewFront('');
       setNewBack('');
       setIsAddingCard(false);
-      showToast('Đã thêm thẻ mới!', 'success');
+      triggerMessage('Đã thêm thẻ mới!', 'success');
+      fetchDeckData();
     } catch (error: any) {
-      showToast("Lỗi khi tạo thẻ mới: " + error.message, 'error');
+      triggerMessage("Lỗi khi tạo thẻ mới: " + error.message, 'error');
     }
   };
 
-  const handleEditClick = (card: any) => {
+  const handleEditClick = (card: Flashcard) => {
     setEditingCardId(card.id);
     setEditFront(card.front);
     setEditBack(card.back);
@@ -163,16 +385,14 @@ export default function FlashcardDeckPage() {
   const handleSaveEdit = async () => {
     if (!editingCardId) return;
     if (editFront.trim() === '' || editBack.trim() === '') {
-      showToast("Nội dung Front và Back không được để trống!", 'error');
+      triggerMessage("Nội dung không được để trống!", 'error');
       return;
     }
-    
-    // Ràng buộc (Constraint): Kiểm tra xem có bị trùng với thẻ khác trong bộ bài không
     const isDuplicate = cards.some(c => c.id !== editingCardId && c.front.toLowerCase() === editFront.toLowerCase().trim());
     if (isDuplicate) {
       setConfirmDialog({
         title: 'Cảnh báo trùng lặp',
-        message: 'Thuật ngữ (Front) này đã tồn tại trong bộ bài! Bạn có chắc chắn muốn lưu thẻ trùng không?',
+        message: 'Khái niệm/Thuật ngữ này đã tồn tại! Bạn có muốn tiếp tục lưu?',
         onConfirm: proceedSaveEdit
       });
       return;
@@ -186,13 +406,14 @@ export default function FlashcardDeckPage() {
       await updateFlashcard(editingCardId, editFront, editBack);
       setCards(cards.map(c => c.id === editingCardId ? { ...c, front: editFront, back: editBack } : c));
       setEditingCardId(null);
-      showToast('Đã lưu thay đổi!', 'success');
+      triggerMessage('Đã lưu thay đổi!', 'success');
+      fetchDeckData();
     } catch (error: any) {
-      showToast("Lỗi khi lưu: " + error.message, 'error');
+      triggerMessage("Lỗi khi lưu: " + error.message, 'error');
     }
   };
 
-  const handleDelete = (id: number) => {
+  const handleDeleteCard = (id: number) => {
     setConfirmDialog({
       title: 'Xóa thẻ',
       message: 'Bạn có chắc chắn muốn xóa thẻ này vĩnh viễn?',
@@ -201,29 +422,152 @@ export default function FlashcardDeckPage() {
         try {
           await deleteFlashcard(id);
           setCards(cards.filter(c => c.id !== id));
-          showToast('Đã xóa thẻ', 'success');
+          triggerMessage('Đã xóa thẻ khỏi bộ bài!', 'success');
+          fetchDeckData();
         } catch (error: any) {
-          showToast("Lỗi khi xóa: " + error.message, 'error');
+          triggerMessage("Lỗi khi xóa: " + error.message, 'error');
         }
       }
     });
   };
 
-  // -------------------------
-  // QUIZ LOGIC
-  // -------------------------
-  const generateQuiz = () => {
-    if (cards.length < 4) {
-      showToast('⚠️ Ràng buộc hệ thống: Bộ thẻ của bạn cần tối thiểu 4 thẻ để có đủ đáp án tạo bài trắc nghiệm (Quiz Mode). Hãy thêm thẻ trước!', 'warning');
+  const handleToggleStar = async (card: Flashcard, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      const isStarred = !card.is_starred;
+      await toggleStarFlashcard(card.id, isStarred);
+      setCards(cards.map(c => c.id === card.id ? { ...c, is_starred: isStarred } : c));
+      triggerMessage(isStarred ? 'Đã gắn sao thẻ này!' : 'Đã bỏ gắn sao.', 'success');
+    } catch (err: any) {
+      triggerMessage('Lỗi: ' + err.message, 'error');
+    }
+  };
+
+  // ── Text To Speech ─────────────────────────────────────────────────────────
+  const playTTS = (text: string) => {
+    speak(text);
+  };
+
+  // ── Study Mode Navigation & SuperMemo SM-2 SM-2 inspired calculation ──────
+  const currentCard = cards[currentIndex];
+
+  const goNext = () => {
+    if (currentIndex === cards.length - 1) {
+      setStudyFinished(true);
+      // Reset index back to 0 in storage on completion
+      if (deckId) localStorage.removeItem(`flashcards-progress-${deckId}-index`);
       return;
     }
-    
+    setDirection(1);
+    setIsFlipped(false);
+    setTimeout(() => {
+      saveStudyIndex(currentIndex + 1);
+    }, 50);
+  };
+
+  const goPrev = () => {
+    if (currentIndex === 0) return;
+    setDirection(-1);
+    setIsFlipped(false);
+    setTimeout(() => {
+      saveStudyIndex(currentIndex - 1);
+    }, 50);
+  };
+
+  const handleRateCard = async (rating: "easy" | "good" | "hard") => {
+    if (!currentCard) return;
+    setRatings(prev => ({ ...prev, [currentCard.id]: rating }));
+
+    // Sound effects
+    if (rating === "hard") {
+      playHardSound(muted);
+    } else {
+      playSuccessSound(muted);
+    }
+
+    try {
+      await reviewFlashcard(currentCard.id, rating);
+      // ── Update local card state so masteredCount (yellow bar) refreshes immediately ──
+      setCards(prev => prev.map(c =>
+        c.id === currentCard.id
+          ? { ...c, repetitions: Math.max(c.repetitions + 1, 1) }
+          : c
+      ));
+    } catch (err) {
+      console.error("Lỗi cập nhật tiến trình ôn tập:", err);
+    }
+
+    goNext();
+  };
+
+
+  // Keyboard shortcut listener for study view
+  useEffect(() => {
+    if (viewMode !== 'study' || studyFinished || !currentCard) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      if (e.key === "ArrowRight") {
+        goNext();
+      }
+      if (e.key === "ArrowLeft") {
+        goPrev();
+      }
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        setIsFlipped(prev => !prev);
+        playFlipSound(muted);
+      }
+      // Review ratings keys
+      if (isFlipped) {
+        if (e.key === "1") handleRateCard("hard");
+        if (e.key === "2") handleRateCard("good");
+        if (e.key === "3") handleRateCard("easy");
+      }
+      // Audio hotkey
+      if (e.code === 'KeyV') {
+        e.preventDefault();
+        playTTS(isFlipped ? currentCard.back : currentCard.front);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentIndex, studyFinished, viewMode, isFlipped, muted, currentCard]);
+
+  // Confetti on finished study session
+  useEffect(() => {
+    if (studyFinished) {
+      const duration = 2.5 * 1000;
+      const animationEnd = Date.now() + duration;
+      const defaults = { startVelocity: 25, spread: 360, ticks: 50, zIndex: 999 };
+
+      const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+      const interval: any = setInterval(() => {
+        const timeLeft = animationEnd - Date.now();
+        if (timeLeft <= 0) return clearInterval(interval);
+
+        const particleCount = 50 * (timeLeft / duration);
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+      }, 250);
+
+      playCompleteSound(muted);
+      return () => clearInterval(interval);
+    }
+  }, [studyFinished, muted]);
+
+  // ── Quiz Generation Logic ──────────────────────────────────────────────────
+  const generateQuiz = () => {
+    if (cards.length < 4) {
+      triggerMessage('Cần tối thiểu 4 thẻ ghi nhớ để tạo các đáp án gây nhiễu cho Trắc nghiệm (Quiz). Hãy thêm thẻ trước!', 'error');
+      return;
+    }
     const questions = cards.map(card => {
-      // Get 3 random distinct answers from OTHER cards to act as Distractors
       const otherCards = cards.filter(c => c.id !== card.id);
       const shuffledOthers = [...otherCards].sort(() => 0.5 - Math.random());
       const distractors = shuffledOthers.slice(0, 3).map(c => c.back);
-      
       const options = [card.back, ...distractors].sort(() => 0.5 - Math.random());
       
       return {
@@ -232,8 +576,7 @@ export default function FlashcardDeckPage() {
         options
       };
     });
-    
-    // Shuffle questions order
+
     setQuizQuestions(questions.sort(() => 0.5 - Math.random()));
     setCurrentQuizIndex(0);
     setQuizScore(0);
@@ -243,12 +586,11 @@ export default function FlashcardDeckPage() {
   };
 
   const handleQuizAnswer = (answer: string) => {
-    if (selectedAnswer) return; // Prevent double click
+    if (selectedAnswer) return;
     setSelectedAnswer(answer);
-    
     const isCorrect = answer === quizQuestions[currentQuizIndex].correctAnswer;
     if (isCorrect) setQuizScore(prev => prev + 1);
-    
+
     setTimeout(() => {
       if (currentQuizIndex < quizQuestions.length - 1) {
         setCurrentQuizIndex(prev => prev + 1);
@@ -259,443 +601,527 @@ export default function FlashcardDeckPage() {
     }, 1500);
   };
 
-  const speakText = (text: string, lang = 'en-US') => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang;
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
-  };
+  // ── Render Views ───────────────────────────────────────────────────────────
+  const pageBg = dark ? "#121212" : "#ebe8e0";
+  const textMain = dark ? "#f0f0f0" : "#1a2e1c";
+  const textSub = dark ? "#9ca3af" : "#6b7280";
+  const primaryColor = dark ? "#10b981" : "#1a2e1c";
+  const border = dark ? "#2a2a2a" : "rgba(26,46,28,0.22)";
+  const shadow = dark ? "4px 4px 0px 0px rgba(255,255,255,0.04)" : "4px 4px 0px 0px rgba(26,46,28,0.12)";
 
-  const handleToggleStar = async (card: any, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    try {
-      const isStarred = !card.is_starred;
-      await toggleStarFlashcard(card.id, isStarred);
-      setCards(cards.map(c => c.id === card.id ? { ...c, is_starred: isStarred } : c));
-      showToast(isStarred ? 'Đã gắn sao thẻ này' : 'Đã bỏ gắn sao', 'success');
-    } catch (err: any) {
-      showToast('Lỗi: ' + err.message, 'error');
-    }
-  };
-
-  // -------------------------
-  // STUDY (FLIP) LOGIC
-  // -------------------------
-  const handleNext = (e?: React.MouseEvent) => {
-    if (e?.currentTarget instanceof HTMLElement) e.currentTarget.blur();
-    setIsFlipped(false);
-    setTimeout(() => {
-      setCurrentIndex(prev => (prev < cards.length - 1 ? prev + 1 : prev));
-    }, 150);
-  };
-
-  const handlePrev = (e?: React.MouseEvent) => {
-    if (e?.currentTarget instanceof HTMLElement) e.currentTarget.blur();
-    setIsFlipped(false);
-    setTimeout(() => {
-      setCurrentIndex(prev => (prev > 0 ? prev - 1 : prev));
-    }, 150);
-  };
-
-  useEffect(() => {
-    if (viewMode !== 'study') return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') handleNext();
-      if (e.key === 'ArrowLeft') handlePrev();
-      if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        setIsFlipped(prev => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, cards.length, viewMode]);
-
-
-  if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-[#FAF8F5]">
-        <Loader2 className="w-10 h-10 animate-spin text-[#0D2B24]" />
-      </div>
-    );
-  }
-
-  // ============== RENDERERS ==============
-  const renderSystemUI = () => (
-    <>
-      {/* GLOBAL TOAST NOTIFICATION */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -50 }}
-            className={`fixed top-6 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-2xl font-bold flex items-center gap-2 ${
-              toast.type === 'error' ? 'bg-red-500 text-white' : 
-              toast.type === 'warning' ? 'bg-amber-400 text-amber-950' :
-              'bg-[#0D2B24] text-white'
-            }`}
-          >
-            {toast.type === 'error' && <X size={18} />}
-            {toast.type === 'success' && <Check size={18} />}
-            {toast.text}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* GLOBAL CONFIRM DIALOG */}
-      <AnimatePresence>
-        {confirmDialog && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full text-center"
-            >
-              <h3 className="text-xl font-bold text-gray-900 mb-2">{confirmDialog.title}</h3>
-              <p className="text-gray-500 text-sm mb-6">{confirmDialog.message}</p>
-              <div className="flex gap-3 w-full">
-                <button
-                  onClick={() => setConfirmDialog(null)}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
-                >
-                  Hủy
-                </button>
-                <button
-                  onClick={() => {
-                    confirmDialog.onConfirm();
-                    setConfirmDialog(null);
-                  }}
-                  className={`flex-1 py-2.5 rounded-xl font-bold text-white transition-colors shadow-md ${
-                    confirmDialog.isDestructive ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20' : 'bg-[#4255FF] hover:bg-[#3546DF] shadow-blue-500/20'
-                  }`}
-                >
-                  {confirmDialog.isDestructive ? 'Xác nhận xóa' : 'Đồng ý'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </>
-  );
-
-  const renderDashboard = () => {
+  const renderDashboardMode = () => {
     const cardBg = dark ? "#1e1e1e" : "#ffffff";
-    const border = dark ? "#2a2a2a" : "rgba(26,46,28,0.22)";
-    const shadow = dark
-      ? "4px 4px 0px 0px rgba(255,255,255,0.04)"
-      : "4px 4px 0px 0px rgba(26,46,28,0.12)";
-    const textMain = dark ? "#f0f0f0" : "#1a2e1c";
-    const textSub = dark ? "#9ca3af" : "#6b7280";
-    const primaryColor = "#10b981";
-
     return (
-    <div className="max-w-5xl mx-auto w-full p-6 animate-in fade-in zoom-in-95 duration-300" style={{ fontFamily: "'Outfit', sans-serif" }}>
-      <div className="flex flex-col md:flex-row gap-6 mb-10">
-        {/* Banner/Actions */}
-        <div 
-          className="flex-1 rounded-2xl p-8 flex flex-col justify-center items-center text-center relative overflow-hidden"
-          style={{ background: cardBg, border: `2px solid ${border}`, boxShadow: shadow }}
-        >
-          {deck && deck.is_public && (
-            <div className="absolute top-4 left-4 bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-              <Globe size={12} /> CÔNG KHAI
-            </div>
-          )}
-          {deck && !deck.is_public && (
-            <div className="absolute top-4 left-4 bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-              <Lock size={12} /> RIÊNG TƯ
-            </div>
-          )}
-          
-          <button 
-            onClick={() => setShowSettings(true)}
-            className="absolute top-4 right-4 p-2 rounded-full transition-colors"
-            style={{ color: textSub, background: dark ? "#2a2a2a" : "#f0f0ec" }}
-            title="Cài đặt bộ thẻ"
-          >
-            <Settings size={18} />
-          </button>
-
+      <div className="max-w-4xl mx-auto w-full p-6 animate-in fade-in zoom-in-95 duration-300">
+        <div className="flex flex-col md:flex-row gap-6 mb-10">
           <div 
-            className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
-            style={{ background: primaryColor + "22", color: primaryColor }}
+            className="flex-1 rounded-2xl p-8 flex flex-col justify-center items-center text-center relative overflow-hidden"
+            style={{ background: cardBg, border: `2px solid ${border}`, boxShadow: shadow }}
           >
-            <Layers size={32} />
-          </div>
-          <h2 className="text-2xl font-bold mb-2" style={{ color: textMain }}>{deck ? deck.name : 'Bộ thẻ Flashcards'}</h2>
-          {deck?.description && <p className="mb-2 max-w-lg" style={{ color: textSub }}>{deck.description}</p>}
-          <p className="text-sm mb-8" style={{ color: textSub }}>Tổng cộng {cards.length} thẻ thuật ngữ. Chọn chế độ học bên dưới để bắt đầu luyện tập nâng cao.</p>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-2xl">
+            {deck && deck.is_public && (
+              <div className="absolute top-4 left-4 bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                <Globe size={12} /> CÔNG KHAI
+              </div>
+            )}
+            {deck && !deck.is_public && (
+              <div className="absolute top-4 left-4 bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                <Lock size={12} /> RIÊNG TƯ
+              </div>
+            )}
+            
             <button 
-              onClick={() => { setViewMode('study'); setCurrentIndex(0); setIsFlipped(false); }}
-              className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all"
-              style={{ background: primaryColor, color: "#fff", border: "none" }}
+              onClick={() => setShowSettings(true)}
+              className="absolute top-4 right-4 p-2 rounded-full transition-colors hover:scale-105 active:scale-95"
+              style={{ color: textSub, background: dark ? "#2a2a2a" : "#f0f0ec" }}
+              title="Cài đặt bộ thẻ"
             >
-              <BookOpen size={18} /> Lật thẻ
+              <Settings size={18} />
             </button>
-            <button 
-              onClick={() => { setViewMode('write'); setCurrentIndex(0); }}
-              className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all"
-              style={{ background: dark ? "#2a2a2a" : "#ffffff", border: `2px solid ${border}`, color: textMain }}
-            >
-              <PenTool size={18} /> Chép tả
-            </button>
-            <button 
-              onClick={generateQuiz}
-              className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all"
-              style={{ background: dark ? "#2a2a2a" : "#ffffff", border: `2px solid ${border}`, color: textMain }}
-            >
-              <Play size={18} /> Trắc nghiệm
-            </button>
-            <button 
-              onClick={() => setViewMode('match')}
-              className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all"
-              style={{ background: dark ? "#2a2a2a" : "#ffffff", border: `2px solid ${border}`, color: textMain }}
-            >
-              <Puzzle size={18} /> Ghép thẻ
-            </button>
+
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: primaryColor + "22", color: primaryColor }}>
+              <Layers size={32} />
+            </div>
+            <h2 className="text-2xl font-bold mb-2" style={{ color: textMain }}>{deck ? deck.name : 'Bộ thẻ Flashcards'}</h2>
+            {deck?.description && <p className="mb-2 max-w-lg text-sm" style={{ color: textSub }}>{deck.description}</p>}
+            <p className="text-xs mb-8 font-semibold" style={{ color: textSub }}>Tổng cộng {cards.length} thẻ thuật ngữ. Chọn một phương pháp học bên dưới.</p>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-2xl">
+              <button 
+                onClick={() => { setViewMode('study'); setStudyFinished(false); setIsFlipped(false); }}
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 text-xs text-white"
+                style={{ background: "#10b981", border: "none" }}
+              >
+                <BookOpen size={15} /> Lật thẻ
+              </button>
+              <button 
+                onClick={() => { setViewMode('write'); }}
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 text-xs"
+                style={{ background: dark ? "#2a2a2a" : "#ffffff", border: `2px solid ${border}`, color: textMain }}
+              >
+                <PenTool size={15} /> Chép tả
+              </button>
+              <button 
+                onClick={generateQuiz}
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 text-xs"
+                style={{ background: dark ? "#2a2a2a" : "#ffffff", border: `2px solid ${border}`, color: textMain }}
+              >
+                <Play size={15} /> Trắc nghiệm
+              </button>
+              <button 
+                onClick={() => setViewMode('match')}
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 text-xs"
+                style={{ background: dark ? "#2a2a2a" : "#ffffff", border: `2px solid ${border}`, color: textMain }}
+              >
+                <Puzzle size={15} /> Ghép thẻ
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-xl font-bold flex items-center gap-2" style={{ color: textMain }}>
-            Danh sách thuật ngữ ({cards.length})
-          </h3>
-          <p className="text-sm mt-1" style={{ color: textSub }}>Ấn để xem, hoặc nhấn nút sửa/xóa.</p>
-        </div>
-        <button 
-          onClick={() => setIsAddingCard(!isAddingCard)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-colors"
-          style={{ background: primaryColor + "22", color: primaryColor }}
-        >
-          {isAddingCard ? <X size={18} /> : <Check size={18} className="opacity-0 w-0 hidden" />} 
-          {isAddingCard ? 'Hủy' : '+ Thêm thẻ mới'}
-        </button>
-      </div>
-      
-      {/* CÀI ĐẶT BỘ THẺ MODAL */}
-      <AnimatePresence>
-        {showSettings && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold flex items-center gap-2" style={{ color: textMain }}>
+              Danh sách thuật ngữ ({cards.length})
+            </h3>
+            <p className="text-xs" style={{ color: textSub }}>Sửa đổi hoặc xóa các thẻ đã tạo.</p>
+          </div>
+          <button 
+            onClick={() => setIsAddingCard(!isAddingCard)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-colors hover:opacity-90"
+            style={{ background: "#10b98122", color: "#10b981" }}
           >
-            <motion.div 
-              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
-            >
-              <div className="flex items-center justify-between p-5 border-b border-gray-100">
-                <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                  <Settings size={18} /> Cài đặt Bộ thẻ
-                </h3>
-                <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-red-500 p-1">
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="p-5 flex flex-col gap-4">
-                <div>
-                  <label className="text-sm font-semibold text-gray-700 block mb-1">Tên bộ thẻ</label>
-                  <input type="text" value={editDeckName} onChange={e => setEditDeckName(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4255FF] focus:outline-none" />
-                </div>
-                <div>
-                  <label className="text-sm font-semibold text-gray-700 block mb-1">Mô tả ngắn</label>
-                  <textarea value={editDeckDesc} onChange={e => setEditDeckDesc(e.target.value)} rows={2} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4255FF] focus:outline-none resize-none" />
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex flex-col">
-                    <span className="font-bold text-gray-800 text-sm">Công khai bộ thẻ</span>
-                    <span className="text-xs text-gray-500">Cho phép người khác xem bộ thẻ này</span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" checked={editDeckPublic} onChange={e => setEditDeckPublic(e.target.checked)} className="sr-only peer" />
-                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                  </label>
-                </div>
-              </div>
-              <div className="p-5 border-t border-gray-100 flex items-center justify-between bg-gray-50">
-                <button onClick={handleDeleteDeck} className="text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors">
-                  <Trash2 size={16} /> Xóa bộ thẻ
-                </button>
-                <div className="flex gap-2">
-                  <button onClick={() => setShowSettings(false)} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-semibold text-sm hover:bg-gray-50">Hủy</button>
-                  <button onClick={handleUpdateDeck} className="px-4 py-2 bg-[#4255FF] text-white rounded-lg font-bold text-sm hover:bg-[#3546DF] shadow-md">Lưu thay đổi</button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            {isAddingCard ? 'Hủy' : '+ Thêm thẻ mới'}
+          </button>
+        </div>
 
-      <div className="flex flex-col gap-4 pb-20">
-        {/* ADD NEW CARD FORM */}
+        {/* ADD CARD INLINE */}
         {isAddingCard && (
-          <div className="bg-white rounded-xl shadow-md border-2 border-[#4255FF] overflow-hidden mb-4 animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="p-5 flex flex-col gap-4 bg-blue-50/20">
-              <h4 className="font-bold text-[#4255FF] flex items-center gap-2">
-                <Check size={18} /> Tạo thẻ thuật ngữ mới
+          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-md border-2 border-emerald-500 overflow-hidden mb-6 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="p-5 flex flex-col gap-4">
+              <h4 className="font-bold text-emerald-600 flex items-center gap-2 text-sm">
+                <Check size={18} /> Tạo thẻ ghi nhớ mới
               </h4>
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Thuật ngữ (Front)</label>
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 block">Mặt trước (Khái niệm)</label>
                   <textarea 
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4255FF] focus:border-transparent outline-none resize-none bg-white shadow-inner" 
+                    className="w-full p-3 border border-gray-300 dark:border-zinc-700 rounded-lg outline-none resize-none bg-white dark:bg-zinc-800 text-sm" 
                     rows={2}
-                    placeholder="Nhập khái niệm, từ vựng, câu hỏi..."
+                    placeholder="VD: Artificial Intelligence"
                     value={newFront}
                     onChange={(e) => setNewFront(e.target.value)}
                   />
                 </div>
                 <div className="flex-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Định nghĩa (Back)</label>
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 block">Mặt sau (Định nghĩa)</label>
                   <textarea 
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4255FF] focus:border-transparent outline-none resize-none bg-white shadow-inner" 
+                    className="w-full p-3 border border-gray-300 dark:border-zinc-700 rounded-lg outline-none resize-none bg-white dark:bg-zinc-800 text-sm" 
                     rows={2}
-                    placeholder="Nhập định nghĩa, câu trả lời, ví dụ..."
+                    placeholder="VD: Trí tuệ nhân tạo..."
                     value={newBack}
                     onChange={(e) => setNewBack(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="flex justify-end gap-2 border-t border-blue-100 pt-3">
-                <button onClick={() => setIsAddingCard(false)} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Hủy</button>
-                <button onClick={handleCreateCard} className="px-5 py-2 text-sm font-bold bg-[#4255FF] text-white rounded-lg hover:bg-[#3546DF] flex items-center gap-2 transition-all shadow-md hover:-translate-y-0.5">
-                  Lưu thẻ mới
-                </button>
+              <div className="flex justify-end gap-2 border-t border-gray-100 dark:border-zinc-800 pt-3">
+                <button onClick={() => setIsAddingCard(false)} className="px-4 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg">Hủy</button>
+                <button onClick={handleCreateCard} className="px-5 py-2 text-xs font-bold bg-[#10b981] text-white rounded-lg hover:opacity-90">Lưu thẻ</button>
               </div>
             </div>
           </div>
         )}
 
-        {cards.map((card) => (
+        {/* LIST CARDS */}
+        <div className="space-y-4 pb-20">
+          {cards.map((card) => (
             <div 
-              className="p-5 rounded-2xl mb-4 border-2 shadow-sm transition-all relative group"
+              key={card.id}
+              className="rounded-2xl border-2 transition-all relative overflow-hidden"
               style={{ background: cardBg, borderColor: border }}
-            >{editingCardId === card.id ? (
-              <div className="p-5 flex flex-col gap-4 bg-blue-50/50">
-                <div className="flex flex-col md:flex-row gap-4">
-                  <div className="flex-1">
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Thuật ngữ (Front)</label>
-                    <textarea 
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4255FF] focus:border-transparent outline-none resize-none bg-white shadow-inner" 
-                      rows={2}
-                      value={editFront}
-                      onChange={(e) => setEditFront(e.target.value)}
-                    />
+            >
+              {editingCardId === card.id ? (
+                <div className="p-5 flex flex-col gap-4 bg-emerald-50/10">
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase mb-2 block">Mặt trước</label>
+                      <textarea 
+                        className="w-full p-3 border border-gray-300 dark:border-zinc-700 rounded-lg outline-none resize-none bg-white dark:bg-zinc-800 text-sm" 
+                        rows={2}
+                        value={editFront}
+                        onChange={(e) => setEditFront(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase mb-2 block">Mặt sau</label>
+                      <textarea 
+                        className="w-full p-3 border border-gray-300 dark:border-zinc-700 rounded-lg outline-none resize-none bg-white dark:bg-zinc-800 text-sm" 
+                        rows={2}
+                        value={editBack}
+                        onChange={(e) => setEditBack(e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Định nghĩa (Back)</label>
-                    <textarea 
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4255FF] focus:border-transparent outline-none resize-none bg-white shadow-inner" 
-                      rows={2}
-                      value={editBack}
-                      onChange={(e) => setEditBack(e.target.value)}
-                    />
+                  <div className="flex justify-end gap-2 border-t border-gray-100 dark:border-zinc-800 pt-3">
+                    <button onClick={() => setEditingCardId(null)} className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg">Hủy</button>
+                    <button onClick={handleSaveEdit} className="px-4 py-2 text-xs font-bold bg-[#10b981] text-white rounded-lg">Lưu</button>
                   </div>
                 </div>
-                <div className="flex justify-end gap-2 border-t border-gray-200 pt-3">
-                  <button onClick={() => setEditingCardId(null)} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">Hủy</button>
-                  <button onClick={handleSaveEdit} className="px-4 py-2 text-sm font-semibold bg-[#4255FF] text-white rounded-lg hover:bg-[#3546DF] flex items-center gap-1 transition-colors"><Check size={16}/> Lưu thay đổi</button>
+              ) : (
+                <div className="flex flex-col md:flex-row min-h-[80px]">
+                  <div className="md:w-1/3 p-4 bg-gray-50/50 dark:bg-zinc-900/20 flex items-center border-b md:border-b-0 md:border-r border-gray-100 dark:border-zinc-800">
+                    <p className="text-gray-900 dark:text-gray-100 font-semibold text-sm whitespace-pre-wrap">{card.front}</p>
+                  </div>
+                  <div className="flex-1 p-4 flex items-center justify-between">
+                    <p className="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap">{card.back}</p>
+                    <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity ml-4">
+                      <button onClick={(e) => handleToggleStar(card, e)} className={`p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 ${card.is_starred ? 'text-yellow-500' : 'text-gray-400'}`}>
+                        <Star size={16} fill={card.is_starred ? "currentColor" : "none"} />
+                      </button>
+                      <button onClick={() => handleEditClick(card)} className="p-1.5 text-gray-500 hover:text-emerald-500 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800"><Edit2 size={16} /></button>
+                      <button onClick={() => handleDeleteCard(card.id)} className="p-1.5 text-gray-500 hover:text-red-500 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800"><Trash2 size={16} /></button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="flex flex-col md:flex-row min-h-[80px]">
-                <div className="md:w-1/3 p-5 border-b md:border-b-0 md:border-r border-gray-100 bg-gray-50 flex items-center justify-center md:justify-start">
-                  <p className="text-gray-900 font-semibold whitespace-pre-wrap">{card.front}</p>
-                </div>
-                <div className="flex-1 p-5 flex items-center justify-center md:justify-start">
-                  <p className="text-gray-600 whitespace-pre-wrap">{card.back}</p>
-                </div>
-                <div className="flex flex-row md:flex-col items-center justify-center p-3 gap-2 border-t md:border-t-0 md:border-l border-gray-100 bg-white transition-opacity shrink-0">
-                  <button onClick={() => handleEditClick(card)} className="p-2 text-gray-500 hover:text-[#4255FF] hover:bg-blue-50 rounded-lg transition-colors" title="Sửa"><Edit2 size={18}/></button>
-                  <button onClick={() => handleDelete(card.id)} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Xóa vĩnh viễn"><Trash2 size={18}/></button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
     );
   };
 
   const renderStudyMode = () => {
-    const progressPercent = cards.length > 0 ? ((currentIndex + 1) / cards.length) * 100 : 0;
+    if (studyFinished) {
+      const easy = Object.values(ratings).filter((r) => r === "easy").length;
+      const ok = Object.values(ratings).filter((r) => r === "good").length;
+      const hard = Object.values(ratings).filter((r) => r === "hard").length;
+
+      return (
+        <div className="flex-1 flex items-center justify-center p-6 animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-md rounded-2xl p-8 text-center border-2" style={{ background: dark ? "#1e1e1e" : "#ffffff", borderColor: border, boxShadow: shadow }}>
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "#10b98122" }}>
+              <Trophy size={28} color="#10b981" />
+            </div>
+            <h2 style={{ fontWeight: 800, color: textMain, fontSize: 22 }} className="mb-1">Hoàn thành bộ thẻ!</h2>
+            <p style={{ color: textSub, fontSize: 13 }} className="mb-6">Bạn đã xem và ôn tập tất cả {cards.length} thẻ.</p>
+            <div className="flex gap-3 mb-6">
+              {[
+                { label: "Dễ", count: easy, color: "#10b981" },
+                { label: "Ổn", count: ok, color: "#f59e0b" },
+                { label: "Khó", count: hard, color: "#ef4444" },
+              ].map((s) => (
+                <div key={s.label} className="flex-1 rounded-xl py-3 border" style={{ background: s.color + "18", borderColor: s.color + "33" }}>
+                  <div style={{ fontWeight: 800, color: s.color, fontSize: 20 }}>{s.count}</div>
+                  <div style={{ color: textSub, fontSize: 11 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => { setStudyFinished(false); saveStudyIndex(0); setIsFlipped(false); setRatings({}); }}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-bold rounded-xl text-gray-700 dark:text-gray-200"
+              >
+                Học lại
+              </button>
+              <button onClick={() => setViewMode('dashboard')} className="flex-1 py-2.5 bg-[#10b981] hover:opacity-90 text-xs font-bold rounded-xl text-white">Quản lý thẻ</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (cards.length === 0) return null;
+    // progress based on cards SEEN (currentIndex+1), consistent with text display
+    const progress = cards.length > 0 ? ((currentIndex + 1) / cards.length) * 100 : 0;
+    // DB-backed mastered count (repetitions > 0)
+    const masteredCount = cards.filter((c: any) => c.repetitions > 0).length;
+    const masteredPct = cards.length > 0 ? Math.round((masteredCount / cards.length) * 100) : 0;
+    
+    // Warm card backgrounds
+    const currentCardBg = isFlipped ? (dark ? "#0e2317" : "#1a3d28") : (dark ? "#1e1e1e" : "#fffdf0");
+    const currentCardBorder = isFlipped ? (dark ? "#10b981" : "#1a3d28") : border;
+    const currentCardShadow = isFlipped ? (dark ? "8px 8px 0px 0px rgba(16,185,129,0.15)" : "8px 8px 0px 0px rgba(26,61,40,0.35)") : shadow;
+
     return (
-      <div className="flex-1 flex flex-col items-center p-4 relative overflow-hidden animate-in slide-in-from-right duration-300 w-full">
-        {/* Top Progress */}
-        <div className="w-full max-w-4xl flex items-center gap-4 mb-8 mt-4">
-          <div className="text-sm font-bold text-gray-500 w-12 text-right">{currentIndex + 1} / {cards.length}</div>
-          <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
-            <motion.div 
-              className="h-full bg-[#4255FF]"
-              initial={{ width: 0 }}
-              animate={{ width: `${progressPercent}%` }}
-              transition={{ duration: 0.3 }}
-            />
+      <div className="w-full max-w-7xl mx-auto px-4 py-4 z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-in slide-in-from-right duration-300">
+        {/* LEFT COLUMN: PROGRESS */}
+        <div className="hidden lg:flex lg:col-span-3 flex-col gap-5">
+          <div 
+            className="rounded-2xl p-5 border-2 transition-all duration-300"
+            style={{ background: dark ? "#1e1e1e" : "#ffffff", borderColor: border, boxShadow: shadow }}
+          >
+            <h3 className="text-sm font-extrabold uppercase tracking-wider mb-4 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <Activity size={16} />
+              Tiến trình học
+            </h3>
+            <div className="space-y-5">
+              {/* Session position */}
+              <div>
+                <div className="flex justify-between items-center text-xs font-bold mb-2">
+                  <span style={{ color: textSub }}>Thẻ hiện tại:</span>
+                  <span style={{ color: textMain }}>{currentIndex + 1} / {cards.length}</span>
+                </div>
+                <div className="w-full bg-slate-100 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: dark ? "#10b981" : "#1a2e1c" }} />
+                </div>
+                <div className="flex justify-between items-center text-xs font-bold pt-1">
+                  <span style={{ color: textSub }}>Tiến trình:</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{Math.round(progress)}%</span>
+                </div>
+              </div>
+
+              {/* DB mastered count */}
+              <div className="pt-2 border-t" style={{ borderColor: dark ? "#2a2a2a" : "rgba(26,46,28,0.1)" }}>
+                <div className="flex justify-between items-center text-xs font-bold mb-2">
+                  <span style={{ color: textSub }}>Đã thuộc:</span>
+                  <span style={{ color: textMain }}>{masteredCount} / {cards.length} thẻ</span>
+                </div>
+                <div className="w-full bg-slate-100 dark:bg-zinc-800 h-2 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${masteredPct}%`, background: "#f59e0b" }} />
+                </div>
+                <div className="flex justify-between items-center text-xs font-bold pt-1">
+                  <span style={{ color: textSub }}>SM-2:</span>
+                  <span style={{ color: "#f59e0b" }} className="font-extrabold">{masteredPct}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick switcher to other decks */}
+          {decks.length > 1 && (
+            <div 
+              className="rounded-2xl p-5 border-2 transition-all duration-300 flex flex-col"
+              style={{ background: dark ? "#1e1e1e" : "#ffffff", borderColor: border, boxShadow: shadow }}
+            >
+              <h3 className="text-sm font-extrabold uppercase tracking-wider mb-3 flex items-center gap-2 text-[#1a3d28] dark:text-emerald-400">
+                <Layers size={16} />
+                Bộ thẻ khác
+              </h3>
+              <div className="overflow-y-auto pr-1 space-y-2 max-h-[200px] scrollbar-hide">
+                {decks.filter(d => d.id !== deckId).slice(0, 5).map((d, idx) => (
+                  <button
+                    key={d.id}
+                    onClick={() => router.push(`/flashcards/${d.id}?mode=study`)}
+                    className="w-full text-left p-3 rounded-xl border border-dashed transition-all hover:-translate-y-0.5 flex flex-col gap-1 text-xs"
+                    style={{
+                      background: dark ? "#2a2a2a" : "#fbfbfa",
+                      borderColor: dark ? "#3a3a3a" : "rgba(26,46,28,0.12)",
+                      color: textMain
+                    }}
+                  >
+                    <span className="font-bold truncate w-full">{d.name}</span>
+                    <span style={{ color: textSub }} className="text-[10px] truncate w-full">{d.description || "Không có mô tả."}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* CENTER COLUMN: PLAYER */}
+        <div className="col-span-1 lg:col-span-6 flex flex-col items-center gap-6">
+          {/* Top control bar */}
+          <div className="w-full flex items-center justify-between">
+            <button
+              onClick={() => setViewMode('dashboard')}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all active:scale-95 bg-white dark:bg-zinc-900 border text-xs font-bold"
+              style={{ borderColor: border, color: textSub }}
+            >
+              <ChevronLeft size={14} /> Danh sách
+            </button>
+            <span className="text-xs font-bold px-3 py-1 bg-emerald-500/10 text-emerald-600 rounded-lg max-w-[200px] truncate">
+              {deck ? deck.name : "Bộ thẻ"}
+            </span>
+            <span className="text-sm font-bold" style={{ color: textMain }}>
+              {currentIndex + 1} / {cards.length}
+            </span>
+          </div>
+
+          {/* Flashcard container */}
+          <div className="w-full relative" style={{ perspective: 1200 }}>
+            <AnimatePresence mode="wait">
+              {currentCard && (
+                <motion.div
+                  key={`${currentCard.id}-${isFlipped}`}
+                  initial={{ rotateY: isFlipped ? -90 : 90, opacity: 0 }}
+                  animate={{ rotateY: 0, opacity: 1 }}
+                  exit={{ rotateY: isFlipped ? 90 : -90, opacity: 0 }}
+                  transition={{ duration: 0.28, ease: "easeInOut" }}
+                  onClick={() => {
+                    setIsFlipped((f) => !f);
+                    playFlipSound(muted);
+                  }}
+                  className="rounded-2xl cursor-pointer select-none"
+                  style={{
+                    background: currentCardBg,
+                    border: `2px solid ${currentCardBorder}`,
+                    boxShadow: currentCardShadow,
+                    minHeight: 320,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "2.5rem 2rem",
+                    position: "relative",
+                  }}
+                >
+                  {/* Tag and TTS */}
+                  <div className="absolute top-4 left-4 flex gap-2 z-20">
+                    <span
+                      className="text-xs px-2.5 py-1.5 rounded-lg font-bold"
+                      style={{
+                        background: isFlipped ? "rgba(255,255,255,0.12)" : (dark ? "#2a2a2a" : "#f0f0ec"),
+                        color: isFlipped ? "#a7f3d0" : (dark ? "#9ca3af" : "#4b5563"),
+                      }}
+                    >
+                      {currentCard.tag || "Thẻ học tập"}
+                    </span>
+                    <AudioButton 
+                      isPlaying={isPlaying} 
+                      onClick={() => playTTS(isFlipped ? currentCard.back : currentCard.front)} 
+                      dark={dark || isFlipped} 
+                    />
+                  </div>
+
+                  {/* Flip hint */}
+                  <span
+                    className="absolute top-4 right-4 text-xs px-2.5 py-1 rounded-lg font-bold"
+                    style={{
+                      background: isFlipped ? "rgba(52, 211, 153, 0.15)" : (dark ? "#2a2a2a" : "#f0f0ec"),
+                      color: isFlipped ? "#34d399" : textSub,
+                    }}
+                  >
+                    {isFlipped ? "Mặt sau (Định nghĩa)" : "Mặt trước (Khái niệm)"}
+                  </span>
+
+                  {!isFlipped ? (
+                    <div className="text-center w-full px-4">
+                      <div className="break-words text-2xl md:text-3xl font-bold" style={{ color: textMain, lineHeight: 1.3 }}>
+                        {currentCard.front}
+                      </div>
+                      <p className="mt-4 text-[10px]" style={{ color: textSub }}>Nhấn để lật xem đáp án</p>
+                    </div>
+                  ) : (
+                    <div className="text-center w-full px-4">
+                      <div className="break-words text-xl md:text-2xl font-bold text-white whitespace-pre-wrap" style={{ lineHeight: 1.4 }}>
+                        {currentCard.back}
+                      </div>
+                      <p className="mt-4 text-[10px] text-white/60">Nhấn để lật lại câu hỏi</p>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* SM-2 Rating Buttons (Show only when card flipped) */}
+          <div className="w-full h-14 relative flex justify-center items-center overflow-visible">
+            <AnimatePresence>
+              {isFlipped && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="w-full flex gap-3"
+                >
+                  {[
+                    { label: "Khó", icon: <X size={16} />, color: "#ef4444", r: "hard" },
+                    { label: "Ổn", icon: <Minus size={16} />, color: "#f59e0b", r: "good" },
+                    { label: "Dễ", icon: <Check size={16} />, color: "#10b981", r: "easy" },
+                  ].map((btn) => (
+                    <button
+                      key={btn.r}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRateCard(btn.r as any);
+                      }}
+                      className="flex-1 py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 hover:opacity-90 font-bold"
+                      style={{
+                        background: btn.color + "18",
+                        border: `2px solid ${btn.color}55`,
+                        color: btn.color,
+                        fontSize: 14,
+                      }}
+                    >
+                      {btn.icon}
+                      {btn.label}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Lower arrows navigation */}
+          <div className="w-full flex items-center justify-between mt-2">
+            <button
+              onClick={goPrev}
+              disabled={currentIndex === 0}
+              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed bg-white dark:bg-zinc-900 border"
+              style={{ borderColor: border }}
+            >
+              <ChevronLeft size={18} color={textMain} />
+            </button>
+            <button
+              onClick={() => { setIsFlipped((f) => !f); playFlipSound(muted); }}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all active:scale-95 font-bold text-white"
+              style={{ background: dark ? "#10b981" : "#1a2e1c", border: "none", fontSize: 13 }}
+            >
+              <Zap size={14} />
+              {isFlipped ? "Mặt trước" : "Đáp án"}
+            </button>
+            <button
+              onClick={goNext}
+              disabled={currentIndex === cards.length - 1}
+              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed bg-white dark:bg-zinc-900 border"
+              style={{ borderColor: border }}
+            >
+              <ChevronRight size={18} color={textMain} />
+            </button>
           </div>
         </div>
 
-        <div className="w-full max-w-4xl flex flex-col items-center">
+        {/* RIGHT COLUMN: TIPS */}
+        <div className="hidden lg:flex lg:col-span-3 flex-col gap-5">
           <div 
-            className="w-full aspect-[16/9] md:aspect-[21/9] max-h-[500px] perspective-1000 relative cursor-pointer group mb-8"
-            onClick={() => setIsFlipped(!isFlipped)}
+            className="rounded-2xl p-5 border-2 transition-all duration-300"
+            style={{ background: dark ? "#1e1e1e" : "#ffffff", borderColor: border, boxShadow: shadow }}
           >
-            <motion.div
-              className="w-full h-full relative preserve-3d transition-all duration-500 ease-out shadow-[0_0.25rem_1rem_rgba(0,0,0,0.08)] rounded-2xl"
-              animate={{ rotateX: isFlipped ? 180 : 0 }}
-            >
-              {/* Front */}
-              <div className="absolute inset-0 backface-hidden bg-white rounded-2xl p-8 flex flex-col justify-center items-center text-center">
-                <h2 className="text-3xl md:text-4xl font-normal text-gray-800 leading-snug">
-                  {cards[currentIndex]?.front}
-                </h2>
-                <div className="absolute top-6 flex w-full justify-between px-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="text-gray-400 text-sm font-semibold uppercase tracking-wider">Thuật ngữ (Mặt trước)</span>
-                  <div className="flex gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); speakText(cards[currentIndex]?.front); }} className="text-gray-400 hover:text-blue-500"><Volume2 size={20} /></button>
-                    <button onClick={(e) => handleToggleStar(cards[currentIndex], e)} className={`hover:text-yellow-500 ${cards[currentIndex]?.is_starred ? 'text-yellow-500' : 'text-gray-400'}`}>
-                      <Star size={20} fill={cards[currentIndex]?.is_starred ? "currentColor" : "none"} />
-                    </button>
-                  </div>
+            <h3 className="text-xs font-extrabold uppercase tracking-wider mb-4 flex items-center gap-2 text-amber-500">
+              <Zap size={14} className="animate-pulse" />
+              Phím tắt nhanh
+            </h3>
+            <div className="space-y-3">
+              {[
+                { key: "Space / Enter", desc: "Lật thẻ" },
+                { key: "←", desc: "Thẻ trước" },
+                { key: "→", desc: "Thẻ sau" },
+                { key: "1", desc: "Đánh giá Khó" },
+                { key: "2", desc: "Đánh giá Ổn" },
+                { key: "3", desc: "Đánh giá Dễ" },
+                { key: "Phím V", desc: "Đọc phát âm" }
+              ].map((s, idx) => (
+                <div key={idx} className="flex justify-between items-center text-[11px] font-semibold">
+                  <span style={{ color: textSub }}>{s.desc}:</span>
+                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-[9px] border" style={{ color: textMain }}>
+                    {s.key}
+                  </span>
                 </div>
-              </div>
-
-              {/* Back */}
-              <div className="absolute inset-0 backface-hidden bg-white rounded-2xl p-8 flex flex-col justify-center items-center text-center rotate-x-180">
-                <div className="prose prose-lg md:prose-xl prose-emerald">
-                  <p className="text-2xl md:text-3xl font-normal text-gray-800 leading-relaxed whitespace-pre-wrap">
-                    {cards[currentIndex]?.back}
-                  </p>
-                </div>
-                <div className="absolute top-6 flex w-full justify-between px-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="text-gray-400 text-sm font-semibold uppercase tracking-wider">Định nghĩa (Mặt sau)</span>
-                  <div className="flex gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); speakText(cards[currentIndex]?.back); }} className="text-gray-400 hover:text-blue-500"><Volume2 size={20} /></button>
-                    <button onClick={(e) => handleToggleStar(cards[currentIndex], e)} className={`hover:text-yellow-500 ${cards[currentIndex]?.is_starred ? 'text-yellow-500' : 'text-gray-400'}`}>
-                      <Star size={20} fill={cards[currentIndex]?.is_starred ? "currentColor" : "none"} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+              ))}
+            </div>
           </div>
 
-          <div className="flex items-center justify-between w-full max-w-sm mt-4">
-            <button onClick={handlePrev} disabled={currentIndex === 0} className="w-14 h-14 rounded-full border-2 border-gray-200 flex items-center justify-center text-gray-600 hover:border-[#4255FF] hover:text-[#4255FF] hover:bg-white shadow-sm bg-white disabled:opacity-30 transition-all hover:-translate-y-1">
-              <ChevronLeft size={28} />
-            </button>
-            <div className="text-lg font-bold text-gray-700">{currentIndex + 1} / {cards.length}</div>
-            <button onClick={handleNext} disabled={currentIndex === cards.length - 1} className="w-14 h-14 rounded-full border-2 border-gray-200 flex items-center justify-center text-gray-600 hover:border-[#4255FF] hover:text-[#4255FF] hover:bg-white shadow-sm bg-white disabled:opacity-30 transition-all hover:-translate-y-1">
-              <ChevronRight size={28} />
-            </button>
+          <div 
+            className="rounded-2xl p-5 border-2 transition-all duration-300"
+            style={{ background: dark ? "#1e1e1e" : "#ffffff", borderColor: border, boxShadow: shadow }}
+          >
+            <h3 className="text-xs font-extrabold uppercase tracking-wider mb-2 flex items-center gap-2 text-emerald-500">
+              <Sparkles size={14} />
+              Mẹo học tập
+            </h3>
+            <p style={{ color: textSub }} className="text-[11px] leading-relaxed italic font-semibold">
+              "Hãy cố gắng tập hồi tưởng (Active Recall) đáp án trước khi lật thẻ. Việc tự suy nghĩ giúp kích thích bộ não ghi nhớ lâu hơn 150%."
+            </p>
           </div>
         </div>
       </div>
@@ -707,19 +1133,15 @@ export default function FlashcardDeckPage() {
       const percentage = Math.round((quizScore / quizQuestions.length) * 100);
       return (
         <div className="flex-1 flex items-center justify-center p-6 animate-in zoom-in duration-300">
-          <div className="bg-white p-10 rounded-3xl shadow-xl max-w-md w-full text-center border border-gray-100">
-            <div className="w-24 h-24 bg-blue-50 text-[#4255FF] rounded-full flex items-center justify-center mx-auto mb-6">
-              <span className="text-3xl font-bold">{percentage}%</span>
+          <div className="bg-white dark:bg-zinc-900 p-8 rounded-3xl shadow-xl max-w-md w-full text-center border border-gray-100 dark:border-zinc-800">
+            <div className="w-20 h-20 bg-emerald-50 dark:bg-emerald-950/20 text-[#10b981] rounded-full flex items-center justify-center mx-auto mb-6">
+              <span className="text-2xl font-bold">{percentage}%</span>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Kết thúc bài kiểm tra!</h2>
-            <p className="text-gray-500 mb-8">Bạn đã trả lời đúng <span className="font-bold text-gray-800">{quizScore}</span> trên tổng số <span className="font-bold text-gray-800">{quizQuestions.length}</span> thuật ngữ.</p>
-            <div className="flex flex-col gap-3">
-              <button onClick={generateQuiz} className="w-full bg-[#4255FF] text-white py-3.5 rounded-xl font-bold hover:bg-[#3546DF] transition-colors shadow-md">
-                Làm lại bài Quiz
-              </button>
-              <button onClick={() => setViewMode('dashboard')} className="w-full bg-gray-100 text-gray-700 py-3.5 rounded-xl font-bold hover:bg-gray-200 transition-colors">
-                Trở về Dashboard
-              </button>
+            <h2 className="text-xl font-bold mb-2" style={{ color: textMain }}>Kết thúc bài kiểm tra!</h2>
+            <p className="text-sm mb-8" style={{ color: textSub }}>Bạn đã trả lời đúng <span className="font-bold">{quizScore}</span> trên tổng số <span className="font-bold">{quizQuestions.length}</span> câu.</p>
+            <div className="flex flex-col gap-2">
+              <button onClick={generateQuiz} className="w-full bg-[#10b981] text-white py-3 rounded-xl font-bold text-xs hover:opacity-95">Làm lại bài Quiz</button>
+              <button onClick={() => setViewMode('dashboard')} className="w-full bg-gray-100 dark:bg-zinc-800 py-3 rounded-xl font-bold text-xs" style={{ color: textMain }}>Trở về quản lý thẻ</button>
             </div>
           </div>
         </div>
@@ -728,52 +1150,62 @@ export default function FlashcardDeckPage() {
 
     const currentQ = quizQuestions[currentQuizIndex];
     if (!currentQ) return null;
-
-    const progressPercent = ((currentQuizIndex) / quizQuestions.length) * 100;
+    const progressPercent = (currentQuizIndex / quizQuestions.length) * 100;
 
     return (
-      <div className="flex-1 flex flex-col items-center p-4 max-w-4xl mx-auto w-full animate-in slide-in-from-right duration-300">
-        <div className="w-full flex justify-between items-center mb-6 mt-4">
-          <span className="text-sm font-bold text-gray-500">Câu hỏi {currentQuizIndex + 1} / {quizQuestions.length}</span>
-          <span className="text-sm font-bold text-[#4255FF] bg-blue-50 px-4 py-1.5 rounded-full border border-blue-100">Điểm: {quizScore}</span>
+      <div className="max-w-4xl mx-auto w-full p-6 animate-in slide-in-from-right duration-300">
+        <div className="flex justify-between items-center mb-6">
+          <span className="text-xs font-bold" style={{ color: textSub }}>Câu hỏi {currentQuizIndex + 1} / {quizQuestions.length}</span>
+          <span className="text-xs font-bold bg-[#10b98122] text-[#10b981] px-4 py-1.5 rounded-full">Điểm: {quizScore}</span>
         </div>
         
-        <div className="w-full h-1.5 bg-gray-200 rounded-full mb-8 overflow-hidden">
-          <motion.div className="h-full bg-[#4255FF]" animate={{ width: `${progressPercent}%` }} />
+        <div className="w-full h-1.5 bg-gray-200 dark:bg-zinc-800 rounded-full mb-8 overflow-hidden">
+          <div className="h-full bg-[#10b981]" style={{ width: `${progressPercent}%` }} />
         </div>
 
-        <div className="bg-white w-full p-8 md:p-12 rounded-2xl shadow-sm border border-gray-200 mb-8 text-center min-h-[200px] flex items-center justify-center">
-          <h2 className="text-2xl md:text-3xl font-semibold text-gray-800 leading-relaxed whitespace-pre-wrap">
-            {currentQ.question}
-          </h2>
+        <div className="bg-white dark:bg-zinc-900 w-full p-8 md:p-12 rounded-2xl shadow-sm border border-gray-200 dark:border-zinc-800 mb-8 text-center min-h-[160px] flex items-center justify-center">
+          <h2 className="text-xl font-bold leading-relaxed whitespace-pre-wrap" style={{ color: textMain }}>{currentQ.question}</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
           {currentQ.options.map((opt: string, i: number) => {
             const isSelected = selectedAnswer === opt;
             const isCorrect = opt === currentQ.correctAnswer;
-            
-            let btnClass = "p-5 md:p-6 text-left rounded-xl border-2 transition-all duration-200 font-medium text-gray-700 text-base md:text-lg ";
-            
+            let btnStyle: React.CSSProperties = {
+              padding: "1.25rem",
+              borderRadius: "0.75rem",
+              borderWidth: "2px",
+              textAlign: "left",
+              fontWeight: 600,
+              fontSize: "15px",
+              transition: "all 0.2s"
+            };
+
             if (!selectedAnswer) {
-              btnClass += "border-gray-200 bg-white hover:border-[#4255FF] hover:shadow-md hover:-translate-y-1 cursor-pointer";
+              btnStyle = {
+                ...btnStyle,
+                background: dark ? "#1e1e1e" : "#ffffff",
+                borderColor: border,
+                color: textMain,
+                cursor: "pointer"
+              };
             } else {
               if (isCorrect) {
-                btnClass += "border-green-500 bg-green-50 text-green-800 shadow-inner";
+                btnStyle = { ...btnStyle, background: "#10b98115", borderColor: "#10b981", color: "#10b981" };
               } else if (isSelected && !isCorrect) {
-                btnClass += "border-red-500 bg-red-50 text-red-800 shadow-inner";
+                btnStyle = { ...btnStyle, background: "#ef444415", borderColor: "#ef4444", color: "#ef4444" };
               } else {
-                btnClass += "border-gray-200 bg-gray-50 opacity-50";
+                btnStyle = { ...btnStyle, background: dark ? "#121212" : "#f9f9f9", borderColor: border, color: textSub, opacity: 0.4 };
               }
-              btnClass += " cursor-default";
             }
 
             return (
               <button 
-                key={i}
-                onClick={() => handleQuizAnswer(opt)}
-                disabled={!!selectedAnswer}
-                className={btnClass}
+                key={i} 
+                onClick={() => handleQuizAnswer(opt)} 
+                disabled={!!selectedAnswer} 
+                style={btnStyle}
+                className="hover:-translate-y-0.5 active:translate-y-0 shadow-sm"
               >
                 {opt}
               </button>
@@ -784,61 +1216,234 @@ export default function FlashcardDeckPage() {
     );
   };
 
-  return (
-    <div className="min-h-screen bg-[#F6F7FB] flex flex-col font-sans">
-      {/* App Header */}
-      <header className="h-16 bg-white border-b border-gray-200 px-6 flex items-center justify-between shrink-0 shadow-sm z-10 sticky top-0">
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => viewMode === 'dashboard' ? router.back() : setViewMode('dashboard')} 
-            className="text-gray-500 hover:text-[#4255FF] transition-colors p-2 -ml-2 rounded-full hover:bg-gray-100"
-          >
-            <ArrowLeft size={24} />
-          </button>
-          <h1 className="font-bold text-gray-800 text-lg">
-            {viewMode === 'dashboard' ? 'Quản lý Bộ thẻ' : viewMode === 'study' ? 'Học Lật Thẻ' : 'Trắc Nghiệm (Quiz)'}
-          </h1>
+  const renderSystemUI = () => (
+    <>
+      {/* Toast Notification */}
+      {globalMessage && globalMessage.text && (
+        <div className={`fixed top-5 right-5 z-[9999] px-5 py-3 rounded-xl shadow-lg flex items-center gap-3 border ${
+          globalMessage.type === 'success' ? 'bg-white text-emerald-700 border-emerald-200' : 'bg-white text-rose-700 border-rose-200'
+        }`}>
+          <div className={`w-2 h-2 rounded-full animate-ping ${globalMessage.type === 'success' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+          <span className="font-semibold text-sm">{globalMessage.text}</span>
         </div>
-      </header>
+      )}
 
-      {/* Main Container */}
-      <main className="flex-1 flex flex-col relative overflow-hidden">
-        {cards.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center p-6">
-            <div className="text-center bg-white p-10 rounded-2xl shadow-sm border border-gray-200 max-w-sm w-full">
-              <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <BookOpen className="w-8 h-8 text-[#4255FF]" />
+      {/* Confirmation modal */}
+      <AnimatePresence>
+        {confirmDialog && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white dark:bg-zinc-950 rounded-2xl p-6 shadow-2xl max-w-sm w-full text-center border dark:border-zinc-800">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">{confirmDialog.title}</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-xs mb-6 leading-relaxed">{confirmDialog.message}</p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmDialog(null)} className="flex-1 py-2 rounded-xl text-xs font-bold text-gray-600 bg-gray-100 dark:bg-zinc-800 dark:text-gray-300 hover:bg-gray-200">Hủy</button>
+                <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }} className={`flex-1 py-2 rounded-xl text-xs font-bold text-white ${confirmDialog.isDestructive ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-600 hover:bg-emerald-700'}`}>Đồng ý</button>
               </div>
-              <h2 className="text-xl font-bold text-gray-800 mb-2">Bộ thẻ rỗng</h2>
-              <p className="text-gray-500 mb-6">Chưa có thẻ nào trong bộ này. Hãy tạo từ Ghi chú để bắt đầu học.</p>
-              <button onClick={() => router.back()} className="w-full bg-[#4255FF] text-white py-3 rounded-xl font-bold hover:bg-[#3546DF] transition-colors shadow-md hover:-translate-y-0.5">
-                Quay lại Workspace
-              </button>
-            </div>
+            </motion.div>
           </div>
-        ) : (
-          <>
-            {renderSystemUI()}
-            {viewMode === 'dashboard' && renderDashboard()}
-            {viewMode === 'study' && renderStudyMode()}
-            {viewMode === 'quiz' && renderQuizMode()}
-            {viewMode === 'match' && <MatchGameMode cards={cards} deckId={deckId} onBack={() => setViewMode('dashboard')} />}
-            {viewMode === 'write' && <WriteMode cards={cards} onBack={() => setViewMode('dashboard')} />}
-          </>
         )}
-      </main>
+      </AnimatePresence>
 
-      {/* Global CSS for 3D Transform */}
+      {/* Deck Settings Modal */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-zinc-800">
+              <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-zinc-800">
+                <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 text-sm">
+                  <Settings size={18} /> Cài đặt Bộ thẻ
+                </h3>
+                <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-red-500 p-1"><X size={20} /></button>
+              </div>
+              <div className="p-5 flex flex-col gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">Tên bộ thẻ</label>
+                  <input type="text" value={editDeckName} onChange={e => setEditDeckName(e.target.value)} className="w-full p-2 text-sm border dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100 outline-none" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">Mô tả bộ thẻ</label>
+                  <textarea value={editDeckDesc} onChange={e => setEditDeckDesc(e.target.value)} rows={2} className="w-full p-2 text-sm border dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100 outline-none resize-none" />
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-zinc-950 rounded-lg border dark:border-zinc-800">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-gray-800 dark:text-gray-200 text-xs">Công khai bộ thẻ</span>
+                    <span className="text-[10px] text-gray-500">Người khác có thể tìm thấy bộ thẻ này</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked={editDeckPublic} onChange={e => setEditDeckPublic(e.target.checked)} className="sr-only peer" />
+                    <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                  </label>
+                </div>
+              </div>
+              <div className="p-5 border-t border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-gray-50 dark:bg-zinc-950">
+                <button onClick={handleDeleteDeck} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors">
+                  <Trash2 size={16} /> Xóa bộ thẻ
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => setShowSettings(false)} className="px-4 py-2 bg-white dark:bg-zinc-800 border dark:border-zinc-700 text-gray-700 dark:text-gray-300 rounded-lg font-semibold text-xs hover:bg-gray-50">Hủy</button>
+                  <button onClick={handleUpdateDeck} className="px-4 py-2 bg-[#10b981] text-white rounded-lg font-bold text-xs hover:opacity-90">Lưu</button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[#FAF8F5] dark:bg-[#121212]">
+        <Loader2 className="w-10 h-10 animate-spin text-emerald-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="min-h-screen flex flex-col transition-colors duration-300 pb-10 relative overflow-x-hidden"
+      style={{ background: bgStyle === "default" ? pageBg : "transparent", fontFamily: "'Outfit', sans-serif" }}
+    >
+      <Background styleType={bgStyle} dark={dark} />
+      {renderSystemUI()}
+
+      <Navbar
+        isLoggedIn={isAuthenticated}
+        onSignInClick={() => {}}
+        onDashboardClick={() => router.push('/home')}
+        activeUser={activeUser!}
+      />
+
+      {/* Secondary toolbar sub-navbar */}
+      <div className="pt-20">
+        <div 
+          className="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center border-b"
+          style={{ borderColor: dark ? "#222" : "rgba(26,46,28,0.08)" }}
+        >
+          <div className="flex items-center gap-2">
+            <Link href="/flashcards" className="flex items-center gap-1 text-xs font-bold transition-opacity hover:opacity-80"
+              style={{ color: primaryColor }}
+            >
+              <ArrowLeft size={14} /> Thẻ ghi nhớ
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-4 z-10">
+            <div className="flex items-center gap-1.5 font-sans">
+              <Flame size={16} color="#f97316" className="animate-pulse" />
+              <span style={{ fontWeight: 700, color: dark ? "#d1d5db" : "#374151", fontSize: 13 }}>
+                {activeUser?.streak || 0} ngày Streak
+              </span>
+            </div>
+
+            <button
+              onClick={handleToggleMute}
+              className="w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-95 hover:opacity-80"
+              style={{
+                background: dark ? "#2a2a2a" : "#f3f3f0",
+                border: `2px solid ${dark ? "#3a3a3a" : "rgba(26,46,28,0.18)"}`,
+                color: dark ? "#f0f0f0" : "#1a2e1c",
+              }}
+              title={muted ? "Bật âm thanh" : "Tắt âm thanh"}
+            >
+              {muted ? <VolumeX size={15} strokeWidth={2.75} /> : <Volume2 size={15} strokeWidth={2.75} />}
+            </button>
+
+            <button
+              onClick={handleCycleBg}
+              className="px-3 h-9 rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-95 hover:opacity-80 text-xs font-bold font-sans"
+              style={{
+                background: dark ? "#2a2a2a" : "#f3f3f0",
+                border: `2px solid ${dark ? "#3a3a3a" : "rgba(26,46,28,0.18)"}`,
+                color: dark ? "#f0f0f0" : "#1a2e1c",
+              }}
+              title="Đổi kiểu hình nền"
+            >
+              {bgStyle === "default" && <><EyeOff size={14} strokeWidth={2.75} /> Tối giản</>}
+              {bgStyle === "nebula" && <><Palette size={14} className="text-emerald-500" strokeWidth={2.75} /> Tinh vân</>}
+              {bgStyle === "geometry" && <><Activity size={14} className="text-blue-500" strokeWidth={2.75} /> Hình học</>}
+            </button>
+
+            <button
+              onClick={handleToggleDark}
+              className="w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-95"
+              style={{
+                background: dark ? "#2a2a2a" : "#f3f3f0",
+                border: `2px solid ${dark ? "#3a3a3a" : "rgba(26,46,28,0.18)"}`,
+              }}
+            >
+              {dark ? <Sun size={15} color="#10b981" strokeWidth={2.75} /> : <Moon size={15} color="#1a2e1c" strokeWidth={2.75} />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs navigation list */}
+      <div className={`${(viewMode === 'study' || viewMode === 'test' || viewMode === 'match' || viewMode === 'learn') ? 'max-w-7xl' : 'max-w-4xl'} mx-auto w-full px-4 mt-6 flex-1 flex flex-col overflow-x-hidden relative`}>
+        <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide px-2">
+          {[
+            { id: 'dashboard', label: 'Quản lý thẻ' },
+            { id: 'study', label: 'Lật thẻ' },
+            { id: 'quiz', label: 'Trắc nghiệm' },
+            { id: 'match', label: 'Ghép thẻ' },
+            { id: 'learn', label: 'Học cuốn chiếu' },
+            { id: 'write', label: 'Chép tả' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => { setViewMode(tab.id as any); setStudyFinished(false); }}
+              className={`px-4 py-2 font-bold rounded-xl whitespace-nowrap text-xs transition-colors hover:scale-105 active:scale-95 ${
+                viewMode === tab.id 
+                  ? 'bg-[#10b981] text-white' 
+                  : dark ? 'bg-[#2a2a2a] text-gray-300' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={viewMode}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.15 }}
+            className="flex-1 flex flex-col w-full relative"
+          >
+            {cards.length === 0 && viewMode !== 'dashboard' ? (
+              <div className="flex-1 flex items-center justify-center py-20">
+                <div className="text-center p-8 rounded-2xl bg-white dark:bg-zinc-900 border max-w-sm w-full" style={{ borderColor: border, boxShadow: shadow }}>
+                  <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <h3 className="text-base font-bold text-gray-800 dark:text-gray-200">Bộ thẻ rỗng</h3>
+                  <p className="text-xs text-gray-500 mt-2 mb-6">Không có thẻ nào trong bộ này để ôn tập. Hãy thêm thẻ tại tab Quản lý thẻ trước!</p>
+                  <button onClick={() => setViewMode('dashboard')} className="w-full bg-[#10b981] text-white py-2.5 rounded-xl font-bold text-xs hover:opacity-90">
+                    Thêm thẻ mới
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {viewMode === 'dashboard' && renderDashboardMode()}
+                {viewMode === 'study' && renderStudyMode()}
+                {viewMode === 'quiz' && renderQuizMode()}
+                {viewMode === 'match' && <MatchGameMode cards={cards} deckId={deckId} onBack={() => setViewMode('dashboard')} />}
+                {viewMode === 'learn' && <LearnMode cards={cards} deckId={deckId} onBack={() => setViewMode('dashboard')} />}
+                {viewMode === 'write' && <WriteMode cards={cards} onBack={() => setViewMode('dashboard')} />}
+              </>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
       <style dangerouslySetInnerHTML={{__html: `
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
         .backface-hidden { backface-visibility: hidden; }
         .rotate-x-180 { transform: rotateX(180deg); }
-        
-        /* Custom scrollbar for textarea */
-        textarea::-webkit-scrollbar { width: 6px; }
-        textarea::-webkit-scrollbar-track { background: transparent; }
-        textarea::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}} />
     </div>
   );
