@@ -11,43 +11,70 @@ import xlsx from 'xlsx';
 import { authenticate, AuthRequest } from '../middlewares/auth.middleware';
 const router = Router();
 
-// Helper function to update the user's daily study streak
-async function updateUserStreak(userId: number) {
+export function getVietnamDateString(date: Date): string {
+  const vnTime = new Date(date.getTime() + 7 * 60 * 60 * 1000);
+  const year = vnTime.getUTCFullYear();
+  const month = String(vnTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(vnTime.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Helper function to update the user's daily study streak using user_study_dates database table
+export async function updateUserStreak(userId: number) {
   try {
-    const userRes = await db.query('SELECT streak, last_study_date FROM users WHERE id = $1', [userId]);
-    if (userRes.rows.length === 0) return 0;
-    const { streak, last_study_date } = userRes.rows[0];
-
     const today = new Date();
-    // Normalize date to YYYY-MM-DD in UTC/Local representation (safe date comparison)
-    const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    const todayStr = getVietnamDateString(today);
 
-    if (!last_study_date) {
-      // First study activity ever
-      await db.query('UPDATE users SET streak = 1, last_study_date = CURRENT_TIMESTAMP WHERE id = $1', [userId]);
-      return 1;
+    // 1. Log today's study date into user_study_dates (prevents duplicates via ON CONFLICT)
+    await db.query(
+      'INSERT INTO user_study_dates (user_id, study_date) VALUES ($1, $2) ON CONFLICT (user_id, study_date) DO NOTHING',
+      [userId, todayStr]
+    );
+
+    // 2. Fetch all study dates of the user to calculate the consecutive streak in VN timezone
+    const datesRes = await db.query(
+      'SELECT study_date FROM user_study_dates WHERE user_id = $1 ORDER BY study_date DESC',
+      [userId]
+    );
+
+    const dates: string[] = datesRes.rows.map(row => {
+      const d = new Date(row.study_date);
+      return getVietnamDateString(d);
+    });
+
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    const yesterdayStr = getVietnamDateString(yesterday);
+
+    let streak = 0;
+    let checkDate = new Date(); // Start checking from today
+
+    if (!dates.includes(todayStr)) {
+      if (dates.includes(yesterdayStr)) {
+        checkDate = yesterday;
+      } else {
+        // No study today or yesterday
+        await db.query('UPDATE users SET streak = 0 WHERE id = $1', [userId]);
+        return 0;
+      }
     }
 
-    const lastStudy = new Date(last_study_date);
-    const lastStudyStr = lastStudy.getFullYear() + '-' + String(lastStudy.getMonth() + 1).padStart(2, '0') + '-' + String(lastStudy.getDate()).padStart(2, '0');
-
-    if (todayStr === lastStudyStr) {
-      // Already studied today, streak remains unchanged
-      return streak || 1;
+    while (true) {
+      const checkStr = getVietnamDateString(checkDate);
+      if (dates.includes(checkStr)) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
     }
 
-    // Check if the last study date was yesterday
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + String(yesterday.getDate()).padStart(2, '0');
+    // 3. Cache the calculated streak back in the user record
+    await db.query(
+      'UPDATE users SET streak = $1, last_study_date = CURRENT_TIMESTAMP WHERE id = $2',
+      [streak, userId]
+    );
 
-    let newStreak = 1;
-    if (lastStudyStr === yesterdayStr) {
-      newStreak = (streak || 0) + 1;
-    }
-
-    await db.query('UPDATE users SET streak = $1, last_study_date = CURRENT_TIMESTAMP WHERE id = $2', [newStreak, userId]);
-    return newStreak;
+    return streak;
   } catch (error) {
     console.error('Error in updateUserStreak:', error);
     return 0;
@@ -79,6 +106,10 @@ router.get('/documents/:id', authenticate, async (req: AuthRequest, res: Respons
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Document not found' });
     }
+    
+    // Log study activity and update streak
+    await updateUserStreak(userId);
+    
     res.status(200).json(result.rows[0]);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -170,16 +201,29 @@ router.get('/study-sessions/stats', authenticate, async (req: AuthRequest, res: 
     const userRes = await db.query('SELECT streak FROM users WHERE id = $1', [userId]);
     const streak = userRes.rows[0]?.streak || 0;
     
-    // Mock daily analytics data for chart
-    const chartData = [
-      { day: 'Thứ 2', minutes: 30 },
-      { day: 'Thứ 3', minutes: 45 },
-      { day: 'Thứ 4', minutes: 20 },
-      { day: 'Thứ 5', minutes: 60 },
-      { day: 'Thứ 6', minutes: 15 },
-      { day: 'Thứ 7', minutes: 40 },
-      { day: 'Chủ Nhật', minutes: 50 },
-    ];
+    // Past 7 days calculation in VN timezone from user_daily_activity table
+    const chartData = [];
+    const dayNames = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+    
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(Date.now() + 7 * 60 * 60 * 1000); // VN time (UTC+7)
+      d.setUTCDate(d.getUTCDate() - i);
+      const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      
+      const activityRes = await db.query(
+        'SELECT active_seconds FROM user_daily_activity WHERE user_id = $1 AND activity_date = $2',
+        [userId, dateStr]
+      );
+      
+      const activeSeconds = activityRes.rows[0]?.active_seconds || 0;
+      const minutes = Math.round(activeSeconds / 60);
+      const dayName = dayNames[d.getUTCDay()];
+      
+      chartData.push({
+        day: dayName,
+        minutes: minutes
+      });
+    }
 
     res.status(200).json({
       total_study_minutes: Math.round(Number(totalTimeResult.rows[0].total_seconds || 0) / 60),
@@ -189,6 +233,34 @@ router.get('/study-sessions/stats', authenticate, async (req: AuthRequest, res: 
       streak: streak,
       chart_data: chartData
     });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/study-sessions/active-ping', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { seconds } = req.body;
+    const userId = req.user!.id;
+    
+    if (!seconds || typeof seconds !== 'number' || seconds <= 0) {
+      return res.status(400).json({ error: 'Số giây không hợp lệ' });
+    }
+
+    // Determine VN timezone date (UTC+7)
+    const d = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+    const result = await db.query(
+      `INSERT INTO user_daily_activity (user_id, activity_date, active_seconds)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, activity_date)
+       DO UPDATE SET active_seconds = user_daily_activity.active_seconds + $3
+       RETURNING active_seconds`,
+      [userId, dateStr, seconds]
+    );
+
+    res.status(200).json({ active_seconds: result.rows[0].active_seconds });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

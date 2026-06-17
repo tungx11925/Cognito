@@ -6,6 +6,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
 import { sendVerificationEmail } from '../utils/mailer';
+import { updateUserStreak } from '../routes/app.routes';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -18,6 +19,25 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phoneRegex = /^(03|05|07|08|09)\d{8}$/;
+
+async function getUserStudyDates(userId: number): Promise<string[]> {
+  try {
+    const datesRes = await db.query(
+      'SELECT study_date FROM user_study_dates WHERE user_id = $1 ORDER BY study_date DESC',
+      [userId]
+    );
+    return datesRes.rows.map(row => {
+      const d = new Date(row.study_date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    });
+  } catch (err) {
+    console.error('Error in getUserStudyDates:', err);
+    return [];
+  }
+}
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -84,7 +104,7 @@ export const register = async (req: Request, res: Response) => {
       maxAge: 24 * 60 * 60 * 1000
     });
 
-    res.status(201).json({ message: 'Đăng ký thành công', token, user });
+    res.status(201).json({ message: 'Đăng ký thành công', token, user: { ...user, study_dates: [] } });
   } catch (error: any) {
     console.error('Register error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
@@ -149,6 +169,13 @@ export const login = async (req: Request, res: Response) => {
       { expiresIn: '24h' }
     );
 
+    // Update login study activity streak
+    const updatedStreak = await updateUserStreak(user.id);
+    const userRes = await db.query('SELECT streak, last_study_date FROM users WHERE id = $1', [user.id]);
+    const finalStreak = userRes.rows[0]?.streak ?? user.streak;
+    const finalLastStudyDate = userRes.rows[0]?.last_study_date ?? user.last_study_date;
+    const studyDates = await getUserStudyDates(user.id);
+
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -168,8 +195,9 @@ export const login = async (req: Request, res: Response) => {
         website: user.website, 
         avatar_url: user.avatar_url,
         is_verified: user.is_verified,
-        streak: user.streak,
-        last_study_date: user.last_study_date
+        streak: finalStreak,
+        last_study_date: finalLastStudyDate,
+        study_dates: studyDates
       } 
     });
   } catch (error: any) {
@@ -204,6 +232,13 @@ export const verify2FA = async (req: Request, res: Response) => {
     // Reset verification details
     await db.query('UPDATE users SET verification_code = null, code_expires_at = null WHERE id = $1', [user.id]);
 
+    // Update login study activity streak
+    const updatedStreak = await updateUserStreak(user.id);
+    const userRes = await db.query('SELECT streak, last_study_date FROM users WHERE id = $1', [user.id]);
+    const finalStreak = userRes.rows[0]?.streak ?? user.streak;
+    const finalLastStudyDate = userRes.rows[0]?.last_study_date ?? user.last_study_date;
+    const studyDates = await getUserStudyDates(user.id);
+
     const token = jwt.sign(
       { id: user.id, email: user.email }, 
       process.env.JWT_SECRET_KEY || 'your_64_character_secret_key_here', 
@@ -229,8 +264,9 @@ export const verify2FA = async (req: Request, res: Response) => {
         website: user.website,
         avatar_url: user.avatar_url,
         is_verified: user.is_verified,
-        streak: user.streak,
-        last_study_date: user.last_study_date
+        streak: finalStreak,
+        last_study_date: finalLastStudyDate,
+        study_dates: studyDates
       }
     });
   } catch (error: any) {
@@ -253,9 +289,14 @@ export const toggleVerification = async (req: any, res: Response) => {
       return res.status(404).json({ error: 'Người dùng không tồn tại' });
     }
 
+    const studyDates = await getUserStudyDates(userId);
+
     res.status(200).json({
       message: enable ? 'Kích hoạt xác thực tài khoản thành công' : 'Đã tắt xác thực tài khoản',
-      user: result.rows[0]
+      user: {
+        ...result.rows[0],
+        study_dates: studyDates
+      }
     });
   } catch (error: any) {
     console.error('ToggleVerification error:', error);
@@ -301,6 +342,13 @@ export const googleLogin = async (req: Request, res: Response) => {
       { expiresIn: '24h' }
     );
 
+    // Update login study activity streak
+    const updatedStreak = await updateUserStreak(user.id);
+    const userRes = await db.query('SELECT streak, last_study_date FROM users WHERE id = $1', [user.id]);
+    const finalStreak = userRes.rows[0]?.streak ?? user.streak;
+    const finalLastStudyDate = userRes.rows[0]?.last_study_date ?? user.last_study_date;
+    const studyDates = await getUserStudyDates(user.id);
+
     res.cookie('token', authToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -320,8 +368,9 @@ export const googleLogin = async (req: Request, res: Response) => {
         website: user.website, 
         avatar_url: user.avatar_url,
         is_verified: user.is_verified,
-        streak: user.streak,
-        last_study_date: user.last_study_date
+        streak: finalStreak,
+        last_study_date: finalLastStudyDate,
+        study_dates: studyDates
       }
     });
   } catch (error: any) {
@@ -333,13 +382,24 @@ export const googleLogin = async (req: Request, res: Response) => {
 export const getMe = async (req: any, res: Response) => {
   try {
     const userId = req.user.id;
+    
+    // Automatically update/calculate streak on session check
+    await updateUserStreak(userId);
+    
     const result = await db.query('SELECT id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date FROM users WHERE id = $1', [userId]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Người dùng không tồn tại' });
     }
+
+    const studyDates = await getUserStudyDates(userId);
     
-    res.status(200).json({ user: result.rows[0] });
+    res.status(200).json({
+      user: {
+        ...result.rows[0],
+        study_dates: studyDates
+      }
+    });
   } catch (error: any) {
     console.error('GetMe error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
@@ -426,10 +486,14 @@ export const updateAvatar = async (req: any, res: Response) => {
     );
 
     const user = dbResult.rows[0];
+    const studyDates = await getUserStudyDates(userId);
 
     res.status(200).json({
       message: 'Cập nhật ảnh đại diện thành công',
-      user,
+      user: {
+        ...user,
+        study_dates: studyDates
+      },
       avatarUrl
     });
   } catch (error: any) {
@@ -466,10 +530,14 @@ export const updateProfile = async (req: any, res: Response) => {
     );
 
     const user = dbResult.rows[0];
+    const studyDates = await getUserStudyDates(userId);
 
     res.status(200).json({
       message: 'Cập nhật thông tin cá nhân thành công',
-      user
+      user: {
+        ...user,
+        study_dates: studyDates
+      }
     });
   } catch (error: any) {
     console.error('Update profile error:', error);

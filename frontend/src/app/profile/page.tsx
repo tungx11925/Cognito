@@ -127,7 +127,7 @@ const getDocType = (docUrl: string) => {
 
 
 
-function StreakCard({ streak = 0, lastStudyDate }: { streak?: number; lastStudyDate?: string }) {
+function StreakCard({ streak = 0, lastStudyDate, studyDates = [] }: { streak?: number; lastStudyDate?: string; studyDates?: string[] }) {
   const streakTarget = 100;
   const currentStreak = streak;
   const progressPct = Math.min((currentStreak / streakTarget) * 100, 100);
@@ -139,7 +139,7 @@ function StreakCard({ streak = 0, lastStudyDate }: { streak?: number; lastStudyD
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
   const todayStr = toLocalDateStr(today);
-  const studiedToday = lastStudyDate ? lastStudyDate.split('T')[0] === todayStr : false;
+  const studiedToday = lastStudyDate ? toLocalDateStr(new Date(lastStudyDate)) === todayStr : studyDates.includes(todayStr);
 
   // Real-time date display in Vietnamese
   const dayNames = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
@@ -159,11 +159,14 @@ function StreakCard({ streak = 0, lastStudyDate }: { streak?: number; lastStudyD
     const cellDate = new Date(gridStart);
     cellDate.setDate(gridStart.getDate() + i);
     const cellStr = toLocalDateStr(cellDate);
-    if (cellStr === todayStr) return studiedToday ? 'today' : 'today-empty';
+    
+    // Check if user has studied on this date
+    const hasStudied = studyDates.includes(cellStr);
+
+    if (cellStr === todayStr) return hasStudied ? 'today' : 'today-empty';
     if (cellDate > today) return 'future';
-    const daysAgo = Math.round((today.getTime() - cellDate.getTime()) / (1000 * 60 * 60 * 24));
-    if (daysAgo > 0 && daysAgo < currentStreak) return 'streak';
-    return 'inactive';
+    
+    return hasStudied ? 'streak' : 'inactive';
   });
 
   return (
@@ -649,7 +652,7 @@ export default function UserProfile() {
 
           {/* LEFT SIDEBAR */}
           <div className="space-y-5">
-            <StreakCard streak={activeUser?.streak ?? 0} lastStudyDate={activeUser?.last_study_date} />
+            <StreakCard streak={activeUser?.streak ?? 0} lastStudyDate={activeUser?.last_study_date} studyDates={activeUser?.study_dates} />
 
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-3">
