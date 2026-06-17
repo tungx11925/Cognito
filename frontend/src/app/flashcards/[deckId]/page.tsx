@@ -489,7 +489,13 @@ export default function FlashcardDeckPage() {
     try {
       const res = await reviewFlashcard(currentCard.id, rating);
       if (res && res.updated_streak !== undefined) {
-        setActiveUser(prev => prev ? { ...prev, streak: res.updated_streak, last_study_date: new Date().toISOString() } : null);
+        if (activeUser) {
+          setActiveUser({
+            ...activeUser,
+            streak: res.updated_streak,
+            last_study_date: new Date().toISOString()
+          });
+        }
       }
       // ── Update local card state so masteredCount (yellow bar) refreshes immediately ──
       setCards(prev => prev.map(c =>
