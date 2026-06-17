@@ -171,9 +171,22 @@ interface StudyContextType {
     total_documents: number;
     total_flashcards: number;
     streak?: number;
+    total_reviews?: number;
+    total_notes?: number;
     chart_data: { day: string; minutes: number }[];
   };
   fetchAnalytics: () => Promise<void>;
+
+  // Tasks & Friends
+  tasks: any[];
+  friends: any[];
+  fetchTasks: () => Promise<void>;
+  fetchFriends: () => Promise<void>;
+  triggerTaskProgress: (taskType: string, increment?: number) => Promise<void>;
+  taskCompletionToast: { type: string; title: string } | null;
+  setTaskCompletionToast: (toast: { type: string; title: string } | null) => void;
+  showDailyRecommendModal: boolean;
+  setShowDailyRecommendModal: (show: boolean) => void;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -302,6 +315,8 @@ const MOCK_ANALYTICS = {
   total_documents: 3,
   total_flashcards: 5,
   streak: 12,
+  total_reviews: 0,
+  total_notes: 0,
   chart_data: [
     { day: 'Thứ 2', minutes: 30 },
     { day: 'Thứ 3', minutes: 45 },
@@ -384,8 +399,16 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     total_documents: 0,
     total_flashcards: 0,
     streak: 0,
+    total_reviews: 0,
+    total_notes: 0,
     chart_data: [] as { day: string; minutes: number }[]
   });
+
+  // Tasks & Friends states
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [friends, setFriends] = useState<any[]>([]);
+  const [taskCompletionToast, setTaskCompletionToast] = useState<{ type: string; title: string } | null>(null);
+  const [showDailyRecommendModal, setShowDailyRecommendModal] = useState<boolean>(false);
 
   // Toast message trigger helper
   const triggerMessage = (text: string, type: 'success' | 'error' = 'success') => {
@@ -770,6 +793,57 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/tasks`, {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data);
+      }
+    } catch (e) {
+      console.error("Error fetching tasks:", e);
+    }
+  };
+
+  const fetchFriends = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/friends`, {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFriends(data);
+      }
+    } catch (e) {
+      console.error("Error fetching friends:", e);
+    }
+  };
+
+  const triggerTaskProgress = async (taskType: string, increment: number = 1) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/tasks/progress`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({ task_type: taskType, increment })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(prev => prev.map(t => t.task_type === taskType ? data.task : t));
+        if (data.justCompleted) {
+          setTaskCompletionToast({ type: taskType, title: data.task.title });
+          triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${data.task.title}"! 🎉`, "success");
+        }
+      }
+    } catch (e) {
+      console.error("Error updating task progress:", e);
+    }
+  };
+
   // API Call: Add Document
   const handleAddDocumentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1033,6 +1107,17 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (data.updated_streak !== undefined) {
           setActiveUser(prev => prev ? { ...prev, streak: data.updated_streak } : null);
         }
+
+        if (data.task_update) {
+          const { task, justCompleted } = data.task_update;
+          if (task) {
+            setTasks(prev => prev.map(t => t.task_type === task.task_type ? task : t));
+            if (justCompleted) {
+              setTaskCompletionToast({ type: task.task_type, title: task.title });
+              triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${task.title}"! 🎉`, "success");
+            }
+          }
+        }
         
         setIsCardFlipped(false);
         setTimeout(() => {
@@ -1058,6 +1143,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setTimerSeconds(0);
     setTimerMaxMinutes(25);
     setElapsedStudyTime(0);
+    
+    triggerTaskProgress('read_document', 1);
   };
 
   const handleTimerComplete = async () => {
@@ -1115,6 +1202,11 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     fetchDocuments();
     fetchFlashcardDecks();
     fetchAnalytics();
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetchTasks();
+      fetchFriends();
+    }
   }, []);
 
   // Refetch data when user logs in/authenticates
@@ -1123,6 +1215,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       fetchDocuments();
       fetchFlashcardDecks();
       fetchAnalytics();
+      fetchTasks();
+      fetchFriends();
+      setShowDailyRecommendModal(true);
     }
   }, [isAuthenticated]);
 
@@ -1194,7 +1289,23 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
           ...getAuthHeaders()
         },
         body: JSON.stringify({ seconds })
-      }).catch(err => console.error("Error pinging activity:", err));
+      })
+      .then(res => {
+        if (res.ok) return res.json();
+      })
+      .then(data => {
+        if (data && data.task_update) {
+          const { task, justCompleted } = data.task_update;
+          if (task) {
+            setTasks(prev => prev.map(t => t.task_type === task.task_type ? task : t));
+            if (justCompleted) {
+              setTaskCompletionToast({ type: task.task_type, title: task.title });
+              triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${task.title}"! 🎉`, "success");
+            }
+          }
+        }
+      })
+      .catch(err => console.error("Error pinging activity:", err));
     };
 
     const sendBeaconPing = (seconds: number) => {
@@ -1410,7 +1521,17 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       getQuizScore,
 
       analyticsData,
-      fetchAnalytics
+      fetchAnalytics,
+
+      tasks,
+      friends,
+      fetchTasks,
+      fetchFriends,
+      triggerTaskProgress,
+      taskCompletionToast,
+      setTaskCompletionToast,
+      showDailyRecommendModal,
+      setShowDailyRecommendModal
     }}>
       {children}
     </StudyContext.Provider>

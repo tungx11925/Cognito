@@ -82,6 +82,167 @@ export async function updateUserStreak(userId: number) {
 }
 
 
+export async function getOrCreateDailyTasks(userId: number) {
+  try {
+    const todayStr = getVietnamDateString(new Date());
+    
+    // Check if today's tasks already exist
+    const checkRes = await db.query(
+      'SELECT * FROM user_daily_tasks WHERE user_id = $1 AND task_date = $2',
+      [userId, todayStr]
+    );
+    
+    if (checkRes.rows.length > 0) {
+      return checkRes.rows;
+    }
+    
+    // Insert default tasks
+    const defaultTasks = [
+      {
+        type: 'study_flashcards',
+        title: 'Ôn tập Flashcards',
+        description: 'Luyện tập ôn tập ít nhất 5 thẻ ghi nhớ trong ngày hôm nay.',
+        target: 5
+      },
+      {
+        type: 'read_document',
+        title: 'Đọc tài liệu',
+        description: 'Mở xem hoặc tải lên đọc ít nhất 1 tài liệu học tập.',
+        target: 1
+      },
+      {
+        type: 'practice_quiz',
+        title: 'Luyện tập AI Quiz',
+        description: 'Hoàn thành ít nhất 1 bộ trắc nghiệm tạo bởi AI trợ lý.',
+        target: 1
+      },
+      {
+        type: 'study_time',
+        title: 'Thời gian học tập',
+        description: 'Tích lũy tối thiểu 5 phút hoạt động học tập trên hệ thống.',
+        target: 300
+      }
+    ];
+    
+    const insertedTasks = [];
+    for (const task of defaultTasks) {
+      try {
+        const res = await db.query(
+          `INSERT INTO user_daily_tasks (user_id, task_date, task_type, title, description, target_value, current_value, is_completed, is_notified)
+           VALUES ($1, $2, $3, $4, $5, $6, 0, false, false)
+           ON CONFLICT (user_id, task_date, task_type) DO NOTHING
+           RETURNING *`,
+          [userId, todayStr, task.type, task.title, task.description, task.target]
+        );
+        if (res.rows[0]) {
+          insertedTasks.push(res.rows[0]);
+        }
+      } catch (err) {
+        console.error('Error inserting default task:', err);
+      }
+    }
+    
+    // Re-fetch in case ON CONFLICT triggered DO NOTHING
+    if (insertedTasks.length === 0) {
+      const finalRes = await db.query(
+        'SELECT * FROM user_daily_tasks WHERE user_id = $1 AND task_date = $2',
+        [userId, todayStr]
+      );
+      return finalRes.rows;
+    }
+    
+    return insertedTasks;
+  } catch (error) {
+    console.error('Error in getOrCreateDailyTasks:', error);
+    return [];
+  }
+}
+
+export async function incrementTaskProgress(userId: number, taskType: string, incrementValue: number) {
+  try {
+    const todayStr = getVietnamDateString(new Date());
+    
+    // First, ensure tasks exist for today
+    await getOrCreateDailyTasks(userId);
+    
+    // Increment the progress
+    const res = await db.query(
+      `UPDATE user_daily_tasks
+       SET current_value = LEAST(current_value + $1, target_value)
+       WHERE user_id = $2 AND task_date = $3 AND task_type = $4
+       RETURNING *`,
+      [incrementValue, userId, todayStr, taskType]
+    );
+    
+    if (res.rows.length > 0) {
+      const task = res.rows[0];
+      // If completed, update is_completed
+      if (task.current_value >= task.target_value && !task.is_completed) {
+        const completedRes = await db.query(
+          `UPDATE user_daily_tasks
+           SET is_completed = true
+           WHERE id = $1
+           RETURNING *`,
+          [task.id]
+        );
+        return { task: completedRes.rows[0], justCompleted: true };
+      }
+      return { task, justCompleted: false };
+    }
+  } catch (error) {
+    console.error('Error in incrementTaskProgress:', error);
+  }
+  return null;
+}
+
+
+// ==========================================
+// TASKS & FRIENDS ENDPOINTS
+// ==========================================
+
+// Get all tasks for today
+router.get('/tasks', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const tasks = await getOrCreateDailyTasks(userId);
+    res.status(200).json(tasks);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update progress of a task manually (e.g. from quiz)
+router.post('/tasks/progress', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { task_type, increment } = req.body;
+    const userId = req.user!.id;
+    
+    const result = await incrementTaskProgress(userId, task_type, increment || 1);
+    res.status(200).json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get connected friends
+router.get('/friends', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const result = await db.query(
+      `SELECT u.id, u.name, u.email, u.phone, u.education, u.address, u.avatar_url, u.streak
+       FROM friendships f
+       JOIN users u ON f.friend_id = u.id
+       WHERE f.user_id = $1 AND f.status = 'accepted'
+       ORDER BY u.name ASC`,
+      [userId]
+    );
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // ==========================================
 // DOCUMENTS ENDPOINTS
 // ==========================================
@@ -109,6 +270,7 @@ router.get('/documents/:id', authenticate, async (req: AuthRequest, res: Respons
     
     // Log study activity and update streak
     await updateUserStreak(userId);
+    await incrementTaskProgress(userId, 'read_document', 1);
     
     res.status(200).json(result.rows[0]);
   } catch (error: any) {
@@ -201,6 +363,14 @@ router.get('/study-sessions/stats', authenticate, async (req: AuthRequest, res: 
     const userRes = await db.query('SELECT streak FROM users WHERE id = $1', [userId]);
     const streak = userRes.rows[0]?.streak || 0;
     
+    // Additional real-time stats
+    const totalReviewsResult = await db.query(
+      `SELECT COALESCE(SUM(repetitions), 0) as count FROM flashcards f
+       JOIN flashcard_decks d ON f.deck_id = d.id
+       WHERE d.user_id = $1`, [userId]
+    );
+    const totalNotesResult = await db.query('SELECT COUNT(*) as count FROM notes WHERE user_id = $1', [userId]);
+    
     // Past 7 days calculation in VN timezone from user_daily_activity table
     const chartData = [];
     const dayNames = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
@@ -231,6 +401,8 @@ router.get('/study-sessions/stats', authenticate, async (req: AuthRequest, res: 
       total_documents: Number(documentCountResult.rows[0].count || 0),
       total_flashcards: Number(flashcardsCountResult.rows[0].count || 0),
       streak: streak,
+      total_reviews: Number(totalReviewsResult.rows[0].count || 0),
+      total_notes: Number(totalNotesResult.rows[0].count || 0),
       chart_data: chartData
     });
   } catch (error: any) {
@@ -260,7 +432,12 @@ router.post('/study-sessions/active-ping', authenticate, async (req: AuthRequest
       [userId, dateStr, seconds]
     );
 
-    res.status(200).json({ active_seconds: result.rows[0].active_seconds });
+    const taskResult = await incrementTaskProgress(userId, 'study_time', seconds);
+
+    res.status(200).json({ 
+      active_seconds: result.rows[0].active_seconds,
+      task_update: taskResult 
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -714,12 +891,14 @@ router.post('/flashcards/review/:id', authenticate, async (req: AuthRequest, res
     );
 
     const updatedStreak = await updateUserStreak(userId);
+    const taskResult = await incrementTaskProgress(userId, 'study_flashcards', 1);
     
     res.status(200).json({
       message: 'Flashcard reviewed successfully',
       card: updateResult.rows[0],
       next_review_days: interval_days,
-      updated_streak: updatedStreak
+      updated_streak: updatedStreak,
+      task_update: taskResult
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
