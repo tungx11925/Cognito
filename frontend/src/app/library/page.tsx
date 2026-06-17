@@ -6,7 +6,7 @@ import {
   Search, Plus, BookOpen, Calendar, Trash2, Loader2, ArrowLeft,
   Moon, Sun, Flame, EyeOff, Palette, Activity,
   Grid3X3, List, FolderOpen, Star, FileText, ChevronDown, X,
-  SlidersHorizontal, Edit2
+  SlidersHorizontal, Edit2, Share2
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -14,6 +14,7 @@ import { useStudy } from "@/context/StudyContext";
 import { Navbar } from "@/components/landing/Navbar";
 import RegisterModal from "@/components/auth/RegisterModal";
 import UploadDocumentModal from "@/components/documents/UploadDocumentModal";
+import ShareModal from "@/components/documents/ShareModal";
 import { Background, BackgroundStyle } from "@/components/flashcards/Background";
 
 // Category tag colors matching the mockup
@@ -92,6 +93,7 @@ function DocCard({
   onStar,
   onDelete,
   onEdit,
+  onShare,
   onSelect
 }: {
   doc: any;
@@ -100,6 +102,7 @@ function DocCard({
   onStar: (id: number) => void;
   onDelete: (id: number) => void;
   onEdit: (doc: any) => void;
+  onShare: (doc: any) => void;
   onSelect: () => void;
 }) {
   const type = getDocType(doc);
@@ -143,6 +146,14 @@ function DocCard({
             <Edit2 size={13} />
           </button>
           <button
+            onClick={(e) => { e.stopPropagation(); onShare(doc); }}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}
+            className="text-gray-400 hover:text-emerald-500 transition-colors"
+            title="Chia sẻ tài liệu"
+          >
+            <Share2 size={14} />
+          </button>
+          <button
             onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
             style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}
             className="text-gray-400 hover:text-rose-500 transition-colors"
@@ -184,6 +195,7 @@ function DocRow({
   onStar,
   onDelete,
   onEdit,
+  onShare,
   onSelect
 }: {
   doc: any;
@@ -192,6 +204,7 @@ function DocRow({
   onStar: (id: number) => void;
   onDelete: (id: number) => void;
   onEdit: (doc: any) => void;
+  onShare: (doc: any) => void;
   onSelect: () => void;
 }) {
   const type = getDocType(doc);
@@ -242,6 +255,14 @@ function DocRow({
           <Edit2 size={12} />
         </button>
         <button
+          onClick={(e) => { e.stopPropagation(); onShare(doc); }}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}
+          className="text-gray-400 hover:text-emerald-500 transition-colors"
+          title="Chia sẻ tài liệu"
+        >
+          <Share2 size={13} />
+        </button>
+        <button
           onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
           style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}
           className="text-gray-400 hover:text-rose-500 transition-colors"
@@ -283,11 +304,18 @@ export default function LibraryPage() {
   const [editingDoc, setEditingDoc] = useState<any | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareDoc, setShareDoc] = useState<any | null>(null);
 
   const handleStartEdit = (doc: any) => {
     setEditingDoc(doc);
     setEditTitle(doc.title || "");
     setEditCategory(doc.category || "");
+  };
+
+  const handleShareClick = (doc: any) => {
+    setShareDoc(doc);
+    setIsShareModalOpen(true);
   };
 
   // Load configuration and starred lists on mount
@@ -384,23 +412,23 @@ export default function LibraryPage() {
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
-        onDashboardClick={() => router.push('/home')}
+        onDashboardClick={() => router.push('/library')}
         activeUser={activeUser!}
       />
 
       {/* Toolbar Sub-navbar */}
       <div className="pt-20">
         <div
-          className="max-w-5xl mx-auto px-6 py-3 flex justify-between items-center border-b"
+          className="max-w-5xl mx-auto px-4 md:px-6 py-3 flex justify-between items-center border-b"
           style={{ borderColor: dark ? "#222" : "rgba(26,46,28,0.08)" }}
         >
           <div className="flex items-center gap-2">
             <Link
-              href="/home"
+              href="/"
               className="flex items-center gap-1 text-xs font-bold transition-opacity hover:opacity-80"
               style={{ color: primaryColor }}
             >
-              <ArrowLeft size={14} /> Bảng điều khiển
+              <ArrowLeft size={14} /> Trang chủ
             </Link>
           </div>
 
@@ -466,7 +494,7 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto w-full px-6 mt-6 flex-1 flex flex-col overflow-x-hidden relative z-10">
+      <div className="max-w-5xl mx-auto w-full px-4 md:px-6 mt-6 flex-1 flex flex-col overflow-x-hidden relative z-10">
         <div className="flex-1 flex flex-col space-y-6 w-full">
           
           {/* Page Heading Section */}
@@ -676,6 +704,7 @@ export default function LibraryPage() {
                     onStar={handleToggleStar}
                     onDelete={handleDeleteDocument}
                     onEdit={handleStartEdit}
+                    onShare={handleShareClick}
                     onSelect={() => handleDocSelect(doc)}
                   />
                 </motion.div>
@@ -719,6 +748,7 @@ export default function LibraryPage() {
                     onStar={handleToggleStar}
                     onDelete={handleDeleteDocument}
                     onEdit={handleStartEdit}
+                    onShare={handleShareClick}
                     onSelect={() => handleDocSelect(doc)}
                   />
                 </motion.div>
@@ -868,6 +898,14 @@ export default function LibraryPage() {
           </div>
         )}
       </AnimatePresence>
+
+      <ShareModal 
+        isOpen={isShareModalOpen} 
+        onClose={() => setIsShareModalOpen(false)} 
+        resourceId={shareDoc?.id} 
+        resourceType="document" 
+        triggerMessage={triggerMessage} 
+      />
     </div>
   );
 }

@@ -82,7 +82,7 @@ export default function AIFlashcardLab({ onClose, onSaveDeck }: AIFlashcardLabPr
 
     try {
       // Lấy URL backend (API_BASE_URL)
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
       
       // Gọi API Backend Node.js
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;

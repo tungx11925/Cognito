@@ -479,7 +479,7 @@ export default function SettingsPage() {
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
-        onDashboardClick={() => router.push('/home')}
+        onDashboardClick={() => router.push('/library')}
         activeUser={activeUser!}
       />
 
