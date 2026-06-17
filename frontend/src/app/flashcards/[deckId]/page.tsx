@@ -123,7 +123,9 @@ export default function FlashcardDeckPage() {
     activeUser,
     setActiveUser,
     triggerMessage,
-    globalMessage
+    globalMessage,
+    setTasks,
+    setTaskCompletionToast
   } = useStudy();
 
   const [dark, setDark] = useState(false);
@@ -497,6 +499,19 @@ export default function FlashcardDeckPage() {
           });
         }
       }
+      
+      // Update task progress from response
+      if (res && res.task_update) {
+        const { task, justCompleted } = res.task_update;
+        if (task) {
+          setTasks((prev: any[]) => prev.map(t => t.task_type === task.task_type ? task : t));
+          if (justCompleted) {
+            setTaskCompletionToast({ type: task.task_type, title: task.title });
+            triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${task.title}"! 🎉`, "success");
+          }
+        }
+      }
+
       // ── Update local card state so masteredCount (yellow bar) refreshes immediately ──
       setCards(prev => prev.map(c =>
         c.id === currentCard.id

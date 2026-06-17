@@ -179,6 +179,7 @@ interface StudyContextType {
 
   // Tasks & Friends
   tasks: any[];
+  setTasks: React.Dispatch<React.SetStateAction<any[]>>;
   friends: any[];
   fetchTasks: () => Promise<void>;
   fetchFriends: () => Promise<void>;
@@ -1526,6 +1527,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       fetchAnalytics,
 
       tasks,
+      setTasks,
       friends,
       fetchTasks,
       fetchFriends,
