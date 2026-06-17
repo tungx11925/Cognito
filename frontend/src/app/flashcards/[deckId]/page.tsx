@@ -121,8 +121,13 @@ export default function FlashcardDeckPage() {
   const {
     isAuthenticated,
     activeUser,
+    setActiveUser,
     triggerMessage,
-    globalMessage
+    globalMessage,
+    tasks,
+    setTasks,
+    setTaskCompletionToast,
+    setTaskProgressToast
   } = useStudy();
 
   const [dark, setDark] = useState(false);
@@ -486,7 +491,41 @@ export default function FlashcardDeckPage() {
     }
 
     try {
-      await reviewFlashcard(currentCard.id, rating);
+      const res = await reviewFlashcard(currentCard.id, rating);
+      if (res && res.updated_streak !== undefined) {
+        if (activeUser) {
+          setActiveUser({
+            ...activeUser,
+            streak: res.updated_streak,
+            last_study_date: new Date().toISOString()
+          });
+        }
+      }
+      // Update task progress from response
+      if (res && res.task_update) {
+        const { task, justCompleted } = res.task_update;
+        if (task) {
+          const prevTask = tasks.find((t: any) => t.task_type === task.task_type);
+          const previousValue = prevTask ? prevTask.current_value : 0;
+
+          setTasks((prev: any[]) => prev.map(t => t.task_type === task.task_type ? task : t));
+
+          setTaskProgressToast({
+            type: task.task_type,
+            title: task.title,
+            description: task.description,
+            previousValue,
+            currentValue: task.current_value,
+            targetValue: task.target_value
+          });
+
+          if (justCompleted) {
+            setTaskCompletionToast({ type: task.task_type, title: task.title });
+            triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${task.title}"! 🎉`, "success");
+          }
+        }
+      }
+
       // ── Update local card state so masteredCount (yellow bar) refreshes immediately ──
       setCards(prev => prev.map(c =>
         c.id === currentCard.id

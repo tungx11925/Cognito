@@ -44,15 +44,29 @@ docker-compose exec backend npm run migrate:up
 
 ---
 
+## 🔑 Tài Khoản Đăng Nhập Mặc Định (Demo Accounts)
+
+Dưới đây là thông tin các tài khoản demo đã được cấu hình sẵn trong cơ sở dữ liệu:
+
+* **Tài khoản Học viên (Student):**
+  * **Email:** `hocvien@edushare.com`
+  * **Mật khẩu:** `user123`
+
+* **Tài khoản Quản trị viên (Admin):**
+  * **Email:** `admin@edushare.com`
+  * **Mật khẩu:** `admin123`
+
+---
+
 ## 🌐 Các Đường Dẫn Quan Trọng Sau Khi Chạy
 
-- **Trang chủ Frontend:** [http://localhost:3000](http://localhost:3000)
+- **Trang chủ Frontend:** [http://localhost:3000](http://localhost:3000) (hoặc [http://localhost:3001](http://localhost:3001) nếu cổng 3000 đã bị chiếm)
 - **Backend API:** [http://localhost:5000](http://localhost:5000)
 - **Quản lý Database (pgAdmin):** [http://localhost:5050](http://localhost:5050)
   - Đăng nhập: Dùng email/password khai báo ở file `.env` root (vd: `admin@example.com` / `admin`).
   - Kết nối DB: Chọn Add New Server, khai báo Host name là `postgres`, Username & Password theo file `.env` root.
 
 -
-- **Nếu muốn tắt hẳn dự án:**  Gõ lệnh docker-compose down vào Terminal.
+- **Nếu muốn tắt hẳn dự án:**  Gõ lệnh `docker-compose down` vào Terminal.
 
-- **Lần tới muốn bật lại dự án** : Chỉ cần mở Docker Desktop lên và gõ docker-compose up -d.
+- **Lần tới muốn bật lại dự án:** Chỉ cần mở Docker Desktop lên và gõ `docker-compose up -d`.

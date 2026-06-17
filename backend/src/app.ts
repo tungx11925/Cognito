@@ -6,7 +6,13 @@ import documentRoutes from './routes/document.routes';
 import path from 'path';
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    callback(null, origin);
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 app.get('/health', (req, res) => {

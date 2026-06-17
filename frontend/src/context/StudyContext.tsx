@@ -63,8 +63,8 @@ interface StudyContextType {
   setShowLanding: (show: boolean) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  activeUser: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string } | null;
-  setActiveUser: (user: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string } | null) => void;
+  activeUser: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[] } | null;
+  setActiveUser: (user: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[] } | null) => void;
   updateAvatar: (file: File) => Promise<boolean>;
   updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string }) => Promise<boolean>;
   toggleVerification: (enable: boolean) => Promise<boolean>;
@@ -171,9 +171,25 @@ interface StudyContextType {
     total_documents: number;
     total_flashcards: number;
     streak?: number;
+    total_reviews?: number;
+    total_notes?: number;
     chart_data: { day: string; minutes: number }[];
   };
   fetchAnalytics: () => Promise<void>;
+
+  // Tasks & Friends
+  tasks: any[];
+  setTasks: React.Dispatch<React.SetStateAction<any[]>>;
+  friends: any[];
+  fetchTasks: () => Promise<void>;
+  fetchFriends: () => Promise<void>;
+  triggerTaskProgress: (taskType: string, increment?: number) => Promise<void>;
+  taskCompletionToast: { type: string; title: string } | null;
+  setTaskCompletionToast: (toast: { type: string; title: string } | null) => void;
+  taskProgressToast: { type: string; title: string; description: string; previousValue: number; currentValue: number; targetValue: number } | null;
+  setTaskProgressToast: (toast: { type: string; title: string; description: string; previousValue: number; currentValue: number; targetValue: number } | null) => void;
+  showDailyRecommendModal: boolean;
+  setShowDailyRecommendModal: (show: boolean) => void;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -302,6 +318,8 @@ const MOCK_ANALYTICS = {
   total_documents: 3,
   total_flashcards: 5,
   streak: 12,
+  total_reviews: 0,
+  total_notes: 0,
   chart_data: [
     { day: 'Thứ 2', minutes: 30 },
     { day: 'Thứ 3', minutes: 45 },
@@ -321,7 +339,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string } | null>(null);
+  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[] } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -367,6 +385,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [timerMaxMinutes, setTimerMaxMinutes] = useState(25);
   const [elapsedStudyTime, setElapsedStudyTime] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const activeTrackerLastActiveTimeRef = useRef<number>(Date.now());
+  const activeTrackerUnsentSecondsRef = useRef<number>(0);
+  const activeTrackerIsUserActiveRef = useRef<boolean>(false);
 
   // AI Quiz states
   const [quizzes, setQuizzes] = useState<QuizQuestion[]>([]);
@@ -381,8 +402,17 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     total_documents: 0,
     total_flashcards: 0,
     streak: 0,
+    total_reviews: 0,
+    total_notes: 0,
     chart_data: [] as { day: string; minutes: number }[]
   });
+
+  // Tasks & Friends states
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [friends, setFriends] = useState<any[]>([]);
+  const [taskCompletionToast, setTaskCompletionToast] = useState<{ type: string; title: string } | null>(null);
+  const [taskProgressToast, setTaskProgressToast] = useState<{ type: string; title: string; description: string; previousValue: number; currentValue: number; targetValue: number } | null>(null);
+  const [showDailyRecommendModal, setShowDailyRecommendModal] = useState<boolean>(false);
 
   // Toast message trigger helper
   const triggerMessage = (text: string, type: 'success' | 'error' = 'success') => {
@@ -409,6 +439,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         localStorage.setItem('token', data.token);
         setActiveUser(data.user);
         setIsAuthenticated(true);
+        setShowDailyRecommendModal(true);
         triggerMessage(data.message || 'Đăng nhập thành công', 'success');
         return { success: true };
       } else {
@@ -433,6 +464,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         localStorage.setItem('token', data.token);
         setActiveUser(data.user);
         setIsAuthenticated(true);
+        setShowDailyRecommendModal(true);
         triggerMessage(data.message || 'Đăng ký thành công', 'success');
         return { success: true };
       } else {
@@ -446,6 +478,33 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const logout = async () => {
+    // 1. Flush any active time BEFORE removing the token!
+    if (activeTrackerUnsentSecondsRef.current > 0 || activeTrackerIsUserActiveRef.current) {
+      const token = localStorage.getItem('token');
+      if (token) {
+        let elapsed = 0;
+        if (activeTrackerIsUserActiveRef.current) {
+          elapsed = (Date.now() - activeTrackerLastActiveTimeRef.current) / 1000;
+        }
+        const totalToSend = Math.floor(activeTrackerUnsentSecondsRef.current + elapsed);
+        if (totalToSend >= 1) {
+          activeTrackerUnsentSecondsRef.current = 0;
+          try {
+            await fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ seconds: totalToSend })
+            });
+          } catch (e) {
+            console.error("Error flushing active time in logout:", e);
+          }
+        }
+      }
+    }
+
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST' });
     } catch (e) {}
@@ -596,6 +655,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         localStorage.setItem('token', data.token);
         setActiveUser(data.user);
         setIsAuthenticated(true);
+        setShowDailyRecommendModal(true);
         triggerMessage(data.message || 'Đăng nhập thành công', 'success');
         return true;
       } else {
@@ -737,6 +797,74 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } catch (e) {
       console.error("Error fetching stats:", e);
       setAnalyticsData(MOCK_ANALYTICS);
+    }
+  };
+
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/tasks`, {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data);
+      }
+    } catch (e) {
+      console.error("Error fetching tasks:", e);
+    }
+  };
+
+  const fetchFriends = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/friends`, {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFriends(data);
+      }
+    } catch (e) {
+      console.error("Error fetching friends:", e);
+    }
+  };
+
+  const triggerTaskProgress = async (taskType: string, increment: number = 1) => {
+    try {
+      const prevTask = tasks.find(t => t.task_type === taskType);
+      const previousValue = prevTask ? prevTask.current_value : 0;
+
+      const res = await fetch(`${API_BASE_URL}/tasks/progress`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({ task_type: taskType, increment })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const updatedTask = data.task;
+        if (updatedTask) {
+          setTasks(prev => prev.map(t => t.task_type === taskType ? updatedTask : t));
+          
+          // Trigger progress update toast
+          setTaskProgressToast({
+            type: taskType,
+            title: updatedTask.title,
+            description: updatedTask.description,
+            previousValue,
+            currentValue: updatedTask.current_value,
+            targetValue: updatedTask.target_value
+          });
+
+          if (data.justCompleted) {
+            setTaskCompletionToast({ type: taskType, title: updatedTask.title });
+            triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${updatedTask.title}"! 🎉`, "success");
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error updating task progress:", e);
     }
   };
 
@@ -1003,6 +1131,17 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (data.updated_streak !== undefined) {
           setActiveUser(prev => prev ? { ...prev, streak: data.updated_streak } : null);
         }
+
+        if (data.task_update) {
+          const { task, justCompleted } = data.task_update;
+          if (task) {
+            setTasks(prev => prev.map(t => t.task_type === task.task_type ? task : t));
+            if (justCompleted) {
+              setTaskCompletionToast({ type: task.task_type, title: task.title });
+              triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${task.title}"! 🎉`, "success");
+            }
+          }
+        }
         
         setIsCardFlipped(false);
         setTimeout(() => {
@@ -1028,6 +1167,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setTimerSeconds(0);
     setTimerMaxMinutes(25);
     setElapsedStudyTime(0);
+    
+    triggerTaskProgress('read_document', 1);
   };
 
   const handleTimerComplete = async () => {
@@ -1085,6 +1226,11 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     fetchDocuments();
     fetchFlashcardDecks();
     fetchAnalytics();
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetchTasks();
+      fetchFriends();
+    }
   }, []);
 
   // Refetch data when user logs in/authenticates
@@ -1093,6 +1239,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       fetchDocuments();
       fetchFlashcardDecks();
       fetchAnalytics();
+      fetchTasks();
+      fetchFriends();
     }
   }, [isAuthenticated]);
 
@@ -1142,6 +1290,150 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [timerActive, timerMinutes, timerSeconds]);
+
+  // Active User precise time tracking using Page Visibility API and Idle Detection
+  useEffect(() => {
+    if (!isAuthenticated || !activeUser) {
+      activeTrackerIsUserActiveRef.current = false;
+      return;
+    }
+
+    activeTrackerLastActiveTimeRef.current = Date.now();
+    activeTrackerUnsentSecondsRef.current = 0;
+    activeTrackerIsUserActiveRef.current = document.visibilityState === 'visible';
+    const IDLE_TIMEOUT_MS = 60 * 1000; // 60 seconds
+    let idleTimer: NodeJS.Timeout | null = null;
+
+    const sendPing = (seconds: number) => {
+      fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({ seconds })
+      })
+      .then(res => {
+        if (res.ok) return res.json();
+      })
+      .then(data => {
+        if (data && data.task_update) {
+          const { task, justCompleted } = data.task_update;
+          if (task) {
+            setTasks(prev => prev.map(t => t.task_type === task.task_type ? task : t));
+            if (justCompleted) {
+              setTaskCompletionToast({ type: task.task_type, title: task.title });
+              triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${task.title}"! 🎉`, "success");
+            }
+          }
+        }
+      })
+      .catch(err => console.error("Error pinging activity:", err));
+    };
+
+    const sendBeaconPing = (seconds: number) => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const url = `${API_BASE_URL}/study-sessions/active-ping?token=${encodeURIComponent(token)}`;
+      const blob = new Blob([JSON.stringify({ seconds })], {
+        type: 'application/json'
+      });
+      navigator.sendBeacon(url, blob);
+    };
+
+    const flushActiveTime = (isUnloading = false) => {
+      if (activeTrackerIsUserActiveRef.current) {
+        const elapsedMs = Date.now() - activeTrackerLastActiveTimeRef.current;
+        activeTrackerUnsentSecondsRef.current += elapsedMs / 1000;
+        activeTrackerLastActiveTimeRef.current = Date.now();
+      }
+      
+      const secondsToSend = Math.floor(activeTrackerUnsentSecondsRef.current);
+      if (secondsToSend >= 1) {
+        activeTrackerUnsentSecondsRef.current -= secondsToSend;
+        if (isUnloading) {
+          sendBeaconPing(secondsToSend);
+        } else {
+          sendPing(secondsToSend);
+        }
+      }
+    };
+
+    const resetIdleTimer = () => {
+      if (!activeTrackerIsUserActiveRef.current && document.visibilityState === 'visible') {
+        activeTrackerIsUserActiveRef.current = true;
+        activeTrackerLastActiveTimeRef.current = Date.now();
+      }
+      
+      if (idleTimer) clearTimeout(idleTimer);
+      
+      idleTimer = setTimeout(() => {
+        flushActiveTime();
+        activeTrackerIsUserActiveRef.current = false;
+      }, IDLE_TIMEOUT_MS);
+    };
+
+    // Initialize idle timer
+    resetIdleTimer();
+
+    // 1. Page Visibility API & Unload listeners
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushActiveTime(true);
+        activeTrackerIsUserActiveRef.current = false;
+        if (idleTimer) clearTimeout(idleTimer);
+      } else {
+        activeTrackerIsUserActiveRef.current = true;
+        activeTrackerLastActiveTimeRef.current = Date.now();
+        resetIdleTimer();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const handlePageHide = () => {
+      flushActiveTime(true);
+    };
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('beforeunload', handlePageHide);
+
+    // 2. Custom Activity (Idle Detection) listeners
+    const activityEvents = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    const handleUserActivity = () => {
+      resetIdleTimer();
+    };
+    activityEvents.forEach(evt => {
+      window.addEventListener(evt, handleUserActivity, { passive: true });
+    });
+
+    // 3. Periodic heartbeat accumulator checker (every 1 second, pinging at 30 seconds)
+    const interval = setInterval(() => {
+      if (activeTrackerIsUserActiveRef.current && document.visibilityState === 'visible') {
+        const elapsedMs = Date.now() - activeTrackerLastActiveTimeRef.current;
+        activeTrackerUnsentSecondsRef.current += elapsedMs / 1000;
+        activeTrackerLastActiveTimeRef.current = Date.now();
+
+        // Send a heartbeat ping every 30 seconds of accumulated activity
+        if (activeTrackerUnsentSecondsRef.current >= 30) {
+          flushActiveTime();
+        }
+      }
+    }, 1000);
+
+    // Cleanup when component unmounts or user logs out
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('beforeunload', handlePageHide);
+      activityEvents.forEach(evt => {
+        window.removeEventListener(evt, handleUserActivity);
+      });
+      if (idleTimer) clearTimeout(idleTimer);
+      clearInterval(interval);
+      
+      // Flush remaining active seconds using beacon
+      flushActiveTime(true);
+    };
+  }, [isAuthenticated, activeUser?.id]);
 
   return (
     <StudyContext.Provider value={{
@@ -1252,7 +1544,20 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       getQuizScore,
 
       analyticsData,
-      fetchAnalytics
+      fetchAnalytics,
+
+      tasks,
+      setTasks,
+      friends,
+      fetchTasks,
+      fetchFriends,
+      triggerTaskProgress,
+      taskCompletionToast,
+      setTaskCompletionToast,
+      taskProgressToast,
+      setTaskProgressToast,
+      showDailyRecommendModal,
+      setShowDailyRecommendModal
     }}>
       {children}
     </StudyContext.Provider>

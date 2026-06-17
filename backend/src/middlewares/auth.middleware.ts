@@ -9,6 +9,10 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
   try {
     let token = req.cookies?.token;
     
+    if (!token && req.query?.token) {
+      token = req.query.token as string;
+    }
+    
     if (!token) {
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {

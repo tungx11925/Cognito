@@ -1,5 +1,6 @@
 import './globals.css';
 import { StudyContextProvider } from '../context/StudyContext';
+import { TaskNotifications } from '@/components/TaskNotifications';
 import Script from 'next/script';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -10,6 +11,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <StudyContextProvider>
+          <TaskNotifications />
           {children}
         </StudyContextProvider>
       </body>

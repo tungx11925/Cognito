@@ -127,7 +127,7 @@ const getDocType = (docUrl: string) => {
 
 
 
-function StreakCard({ streak = 0, lastStudyDate }: { streak?: number; lastStudyDate?: string }) {
+function StreakCard({ streak = 0, lastStudyDate, studyDates = [] }: { streak?: number; lastStudyDate?: string; studyDates?: string[] }) {
   const streakTarget = 100;
   const currentStreak = streak;
   const progressPct = Math.min((currentStreak / streakTarget) * 100, 100);
@@ -139,7 +139,7 @@ function StreakCard({ streak = 0, lastStudyDate }: { streak?: number; lastStudyD
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
   const todayStr = toLocalDateStr(today);
-  const studiedToday = lastStudyDate ? lastStudyDate.split('T')[0] === todayStr : false;
+  const studiedToday = lastStudyDate ? toLocalDateStr(new Date(lastStudyDate)) === todayStr : studyDates.includes(todayStr);
 
   // Real-time date display in Vietnamese
   const dayNames = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
@@ -159,11 +159,14 @@ function StreakCard({ streak = 0, lastStudyDate }: { streak?: number; lastStudyD
     const cellDate = new Date(gridStart);
     cellDate.setDate(gridStart.getDate() + i);
     const cellStr = toLocalDateStr(cellDate);
-    if (cellStr === todayStr) return studiedToday ? 'today' : 'today-empty';
+    
+    // Check if user has studied on this date
+    const hasStudied = studyDates.includes(cellStr);
+
+    if (cellStr === todayStr) return hasStudied ? 'today' : 'today-empty';
     if (cellDate > today) return 'future';
-    const daysAgo = Math.round((today.getTime() - cellDate.getTime()) / (1000 * 60 * 60 * 24));
-    if (daysAgo > 0 && daysAgo < currentStreak) return 'streak';
-    return 'inactive';
+    
+    return hasStudied ? 'streak' : 'inactive';
   });
 
   return (
@@ -303,7 +306,9 @@ export default function UserProfile() {
     decks,
     fetchFlashcardDecks,
     analyticsData,
-    fetchAnalytics
+    fetchAnalytics,
+    tasks,
+    friends
   } = useStudy();
 
   const [deckCounts, setDeckCounts] = useState<Record<number, { total: number; mastered: number }>>({});
@@ -649,7 +654,7 @@ export default function UserProfile() {
 
           {/* LEFT SIDEBAR */}
           <div className="space-y-5">
-            <StreakCard streak={activeUser?.streak ?? 0} lastStudyDate={activeUser?.last_study_date} />
+            <StreakCard streak={activeUser?.streak ?? 0} lastStudyDate={activeUser?.last_study_date} studyDates={activeUser?.study_dates} />
 
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-3">
@@ -671,9 +676,9 @@ export default function UserProfile() {
                     return [
                       { label: "Tổng thời gian học", value: `${studyHours} giờ`, color: "text-emerald-700", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
                       { label: "Phiên Pomodoro", value: `${sessions} phiên`, color: "text-blue-700", bg: "bg-[#edf4fc]", border: "border-blue-200" },
-                      { label: "Câu hỏi đã trả lời", value: "12,400", color: "text-purple-700", bg: "bg-[#f5ecfc]", border: "border-purple-200" },
+                      { label: "Lượt ôn tập thẻ", value: `${analyticsData?.total_reviews || 0} lượt`, color: "text-purple-700", bg: "bg-[#f5ecfc]", border: "border-purple-200" },
                       { label: "Tài liệu học tập", value: `${docsCount} tài liệu`, color: "text-amber-700", bg: "bg-[#fcf8ec]", border: "border-amber-200" },
-                      { label: "Phiên với AI", value: "184 phiên", color: "text-indigo-700", bg: "bg-[#eceffc]", border: "border-indigo-200" },
+                      { label: "Ghi chú học tập", value: `${analyticsData?.total_notes || 0} ghi chú`, color: "text-indigo-700", bg: "bg-[#eceffc]", border: "border-indigo-200" },
                       { label: "Flashcard đã tạo", value: `${flashcardsCount} thẻ`, color: "text-rose-700", bg: "bg-[#fcecef]", border: "border-rose-200" },
                     ].map((item) => (
                       <div key={item.label} className={`flex justify-between items-center p-2.5 rounded-xl ${item.bg} border ${item.border} shadow-2xs`}>
@@ -693,25 +698,33 @@ export default function UserProfile() {
                     <Users className="w-4.5 h-4.5 text-[#2d5a3d]" />
                     Bạn bè học cùng
                   </CardTitle>
-                  <Badge variant="outline" className="text-xs border-[#2d5a3d]/30 text-[#2d5a3d]">12 bạn</Badge>
+                  <Badge variant="outline" className="text-xs border-[#2d5a3d]/30 text-[#2d5a3d]">{friends.length} bạn</Badge>
                 </div>
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="grid grid-cols-1 gap-2.5">
-                  {friends.map((f) => (
-                    <div key={f.name} className="flex items-center gap-3 p-3 bg-[#f4f7f4] border border-[#2d5a3d]/20 rounded-xl transition-all duration-200 hover:bg-emerald-50/30 hover:border-[#2d5a3d]/35 group cursor-pointer shadow-2xs">
-                      <div className="w-9 h-9 rounded-xl bg-[#2d5a3d]/15 text-[#2d5a3d] text-xs font-bold flex items-center justify-center shrink-0">
-                        {f.avatar.slice(0, 2)}
+                  {friends.length > 0 ? (
+                    friends.map((f) => (
+                      <div key={f.id} className="flex items-center gap-3 p-3 bg-[#f4f7f4] border border-[#2d5a3d]/20 rounded-xl transition-all duration-200 hover:bg-emerald-50/30 hover:border-[#2d5a3d]/35 group cursor-pointer shadow-2xs">
+                        <div className="w-9 h-9 rounded-xl bg-[#2d5a3d]/15 text-[#2d5a3d] text-xs font-bold flex items-center justify-center shrink-0">
+                          {f.avatar_url ? (
+                            <img src={f.avatar_url} alt={f.name} className="w-full h-full object-cover rounded-xl" />
+                          ) : (
+                            f.name.slice(0, 2).toUpperCase()
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-gray-800 truncate group-hover:text-[#1a2e1c]">{f.name}</p>
+                          <p className="text-[10px] text-gray-400 font-medium mt-0.5">{f.education || 'Học viên'} · {f.streak || 0} ngày streak</p>
+                        </div>
+                        <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-white shadow-2xs hover:bg-[#eaf0eb] border border-gray-100">
+                          <MessageSquare className="w-3.5 h-3.5 text-[#4a7c59]" />
+                        </button>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-gray-800 truncate group-hover:text-[#1a2e1c]">{f.name}</p>
-                        <p className="text-[10px] text-gray-400 font-medium mt-0.5">{f.subject} · {f.streak} ngày streak</p>
-                      </div>
-                      <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-white shadow-2xs hover:bg-[#eaf0eb] border border-gray-100">
-                        <MessageSquare className="w-3.5 h-3.5 text-[#4a7c59]" />
-                      </button>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <div className="text-center py-6 text-xs text-gray-400 font-medium">Chưa có bạn bè nào được kết nối.</div>
+                  )}
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-3 border-2 border-dashed border-[#2d5a3d]/20 text-[#2d5a3d] hover:bg-[#2d5a3d]/5 hover:border-[#2d5a3d]/40 rounded-xl py-2 font-semibold text-xs">
                   Xem tất cả bạn bè →
@@ -837,22 +850,28 @@ export default function UserProfile() {
                           <Lightbulb className="w-4.5 h-4.5 text-[#2d5a3d]" />
                           Nhiệm vụ hôm nay
                         </CardTitle>
-                        <span className="text-xs text-gray-400">3/5 hoàn thành</span>
+                        <span className="text-xs text-gray-400">
+                          {tasks.filter(t => t.is_completed).length}/{tasks.length} hoàn thành
+                        </span>
                       </div>
                     </CardHeader>
                     <CardContent className="pt-0 space-y-2.5">
-                      {[
-                        { task: "Ôn tập 50 thẻ Flashcard IELTS", done: true, bg: "bg-[#eaf8f0] border-[#2d5a3d]/20 text-[#2d5a3d]" },
-                        { task: "Học 30 phút với Trợ lý AI", done: true, bg: "bg-[#eaf8f0] border-[#2d5a3d]/20 text-[#2d5a3d]" },
-                        { task: "Hoàn thành 2 phiên Pomodoro", done: true, bg: "bg-[#eaf8f0] border-[#2d5a3d]/20 text-[#2d5a3d]" },
-                        { task: "Làm bài kiểm tra Grammar", done: false, bg: "bg-[#fafaf9] border-gray-300 text-gray-700" },
-                        { task: "Đọc 10 trang tài liệu Cambridge", done: false, bg: "bg-[#fafaf9] border-gray-300 text-gray-700" },
-                      ].map((t, i) => (
-                        <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border shadow-2xs ${t.bg} transition-all duration-200 hover:translate-x-0.5`}>
-                          <CheckCircle2 className={`w-5 h-5 shrink-0 ${t.done ? "text-[#2d5a3d]" : "text-gray-300"}`} />
-                          <span className={`text-sm font-semibold ${t.done ? "line-through opacity-75" : ""}`}>{t.task}</span>
-                        </div>
-                      ))}
+                      {tasks.map((t) => {
+                        const isDone = t.is_completed;
+                        const bg = isDone ? "bg-[#eaf8f0] border-[#2d5a3d]/20 text-[#2d5a3d]" : "bg-[#fafaf9] border-gray-300 text-gray-700";
+                        const formatVal = t.task_type === 'study_time' 
+                          ? `${Math.round(t.current_value / 60)}/${Math.round(t.target_value / 60)} phút` 
+                          : `${t.current_value}/${t.target_value}`;
+                        return (
+                          <div key={t.id} className={`flex items-center justify-between p-3 rounded-xl border shadow-2xs ${bg} transition-all duration-200 hover:translate-x-0.5`}>
+                            <div className="flex items-center gap-3">
+                              <CheckCircle2 className={`w-5 h-5 shrink-0 ${isDone ? "text-[#2d5a3d]" : "text-gray-300"}`} />
+                              <span className={`text-sm font-semibold ${isDone ? "line-through opacity-75" : ""}`}>{t.title}</span>
+                            </div>
+                            <span className="text-xs font-black shrink-0">{formatVal}</span>
+                          </div>
+                        );
+                      })}
                     </CardContent>
                   </Card>
                 </div>
