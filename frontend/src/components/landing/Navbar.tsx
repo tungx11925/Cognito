@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown, User, Settings, LogOut, Layout } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown, User, Settings, LogOut, Layout, Trophy, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
@@ -17,7 +17,32 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const router = useRouter();
-  const { logout } = useStudy();
+  const { logout, taskCompletionToast, setTaskCompletionToast } = useStudy();
+  const [toastProgress, setToastProgress] = useState(60);
+  const [showToast, setShowToast] = useState(false);
+
+  useEffect(() => {
+    if (taskCompletionToast) {
+      setToastProgress(50);
+      setShowToast(true);
+      
+      const timer1 = setTimeout(() => {
+        setToastProgress(100);
+      }, 400);
+
+      const timer2 = setTimeout(() => {
+        setShowToast(false);
+        setTimeout(() => {
+          setTaskCompletionToast(null);
+        }, 400);
+      }, 5500);
+
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
+    }
+  }, [taskCompletionToast, setTaskCompletionToast]);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
@@ -207,6 +232,59 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                             Đăng xuất
                           </button>
                         </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Task completed toast bubble underneath avatar */}
+                  <AnimatePresence>
+                    {showToast && taskCompletionToast && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9, y: -10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                        transition={{ duration: 0.25 }}
+                        className="absolute right-0 mt-3 w-80 bg-white border-2 border-[#1a2e1c] rounded-2xl shadow-[4px_4px_0px_0px_rgba(26,46,28,1)] overflow-hidden z-[120] text-gray-800"
+                      >
+                        <div className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0 animate-bounce">
+                              <Trophy className="w-5 h-5 text-amber-500 fill-amber-300" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-[10px] font-black text-amber-600 tracking-wide uppercase flex items-center gap-1">
+                                <Sparkles className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                                Nhiệm vụ hoàn thành!
+                              </h4>
+                              <p className="text-xs font-bold text-gray-800 truncate mt-0.5">
+                                {taskCompletionToast.title}
+                              </p>
+                            </div>
+                            <button 
+                              onClick={() => setShowToast(false)}
+                              className="text-gray-400 hover:text-gray-600 p-0.5 rounded transition-colors"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div className="mt-3.5 space-y-2">
+                            <div className="flex justify-between text-[10px] font-bold text-gray-700">
+                              <span>Tiến độ</span>
+                              <span className={`transition-all duration-300 ${toastProgress === 100 ? "text-emerald-600 scale-105 font-black" : ""}`}>
+                                {toastProgress === 100 ? "100% Hoàn thành! 🎉" : `${toastProgress}%`}
+                              </span>
+                            </div>
+                            <div className="h-2.5 bg-gray-100 rounded-full border border-gray-200 overflow-hidden relative">
+                              <div 
+                                className="h-full rounded-full transition-all duration-1000 ease-out bg-gradient-to-r from-emerald-500 via-teal-500 to-amber-400"
+                                style={{ width: `${toastProgress}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-amber-400" />
                       </motion.div>
                     )}
                   </AnimatePresence>

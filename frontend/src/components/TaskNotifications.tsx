@@ -17,36 +17,6 @@ export const TaskNotifications: React.FC = () => {
     isAuthenticated
   } = useStudy();
 
-  const [toastProgress, setToastProgress] = useState(70);
-  const [showToast, setShowToast] = useState(false);
-
-  // Trigger Toast animation when taskCompletionToast changes
-  useEffect(() => {
-    if (taskCompletionToast) {
-      setToastProgress(50);
-      setShowToast(true);
-      
-      // Animate progress bar to 100% after opening
-      const timer1 = setTimeout(() => {
-        setToastProgress(100);
-      }, 300);
-
-      // Hide toast after 5 seconds
-      const timer2 = setTimeout(() => {
-        setShowToast(false);
-        // Clear global state after slide-out animation finishes
-        setTimeout(() => {
-          setTaskCompletionToast(null);
-        }, 500);
-      }, 5500);
-
-      return () => {
-        clearTimeout(timer1);
-        clearTimeout(timer2);
-      };
-    }
-  }, [taskCompletionToast, setTaskCompletionToast]);
-
   if (!isAuthenticated) return null;
 
   // Helper to get task icon
@@ -81,61 +51,6 @@ export const TaskNotifications: React.FC = () => {
 
   return (
     <>
-      {/* ── 1. COMPLETED TASK TOAST (SLIDES IN FROM RIGHT) ── */}
-      <div 
-        className={`fixed top-20 right-5 z-[9999] w-80 bg-white border-2 border-[#1a2e1c] rounded-2xl shadow-[4px_4px_0px_0px_rgba(26,46,28,1)] overflow-hidden transition-all duration-500 ease-out transform ${
-          showToast ? "translate-x-0 opacity-100" : "translate-x-[120%] opacity-0"
-        }`}
-      >
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0 animate-bounce">
-              <Trophy className="w-6 h-6 text-amber-500 fill-amber-300" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h4 className="text-xs font-bold text-amber-600 tracking-wide uppercase flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                Nhiệm vụ hoàn thành!
-              </h4>
-              <p className="text-sm font-bold text-gray-800 truncate mt-0.5">
-                {taskCompletionToast?.title}
-              </p>
-            </div>
-            <button 
-              onClick={() => setShowToast(false)}
-              className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1 rounded-lg transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Progress bar animation */}
-          <div className="mt-4 space-y-2">
-            <div className="flex justify-between text-xs font-bold text-gray-700">
-              <span className="flex items-center gap-1">
-                {taskCompletionToast && getTaskIcon(taskCompletionToast.type)}
-                Tiến độ
-              </span>
-              <span className={`transition-all duration-500 ${toastProgress === 100 ? "text-emerald-600 scale-110" : "text-[#2d5a3d]"}`}>
-                {toastProgress === 100 ? "100% Hoàn thành! 🎉" : `${toastProgress}%`}
-              </span>
-            </div>
-            
-            <div className="h-3 bg-gray-100 rounded-full border border-gray-200 overflow-hidden relative">
-              <div 
-                className="h-full rounded-full transition-all duration-1000 ease-out bg-gradient-to-r from-emerald-500 via-teal-500 to-amber-400"
-                style={{ width: `${toastProgress}%` }}
-              />
-              {toastProgress === 100 && (
-                <div className="absolute inset-0 bg-white/20 animate-pulse" />
-              )}
-            </div>
-          </div>
-        </div>
-        
-        {/* Glow accent bottom */}
-        <div className="h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-amber-400" />
-      </div>
 
 
       {/* ── 2. DAILY RECOMMENDED TASKS MODAL (ON LOGIN) ── */}

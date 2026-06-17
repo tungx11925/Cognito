@@ -435,6 +435,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         localStorage.setItem('token', data.token);
         setActiveUser(data.user);
         setIsAuthenticated(true);
+        setShowDailyRecommendModal(true);
         triggerMessage(data.message || 'Đăng nhập thành công', 'success');
         return { success: true };
       } else {
@@ -459,6 +460,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         localStorage.setItem('token', data.token);
         setActiveUser(data.user);
         setIsAuthenticated(true);
+        setShowDailyRecommendModal(true);
         triggerMessage(data.message || 'Đăng ký thành công', 'success');
         return { success: true };
       } else {
@@ -649,6 +651,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         localStorage.setItem('token', data.token);
         setActiveUser(data.user);
         setIsAuthenticated(true);
+        setShowDailyRecommendModal(true);
         triggerMessage(data.message || 'Đăng nhập thành công', 'success');
         return true;
       } else {
@@ -1217,7 +1220,6 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       fetchAnalytics();
       fetchTasks();
       fetchFriends();
-      setShowDailyRecommendModal(true);
     }
   }, [isAuthenticated]);
 
