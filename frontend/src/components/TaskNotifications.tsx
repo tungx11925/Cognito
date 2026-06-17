@@ -12,10 +12,42 @@ export const TaskNotifications: React.FC = () => {
     tasks,
     taskCompletionToast,
     setTaskCompletionToast,
+    taskProgressToast,
+    setTaskProgressToast,
     showDailyRecommendModal,
     setShowDailyRecommendModal,
     isAuthenticated
   } = useStudy();
+
+  const [progressWidth, setProgressWidth] = useState(0);
+  const [showProgressToast, setShowProgressToast] = useState(false);
+
+  useEffect(() => {
+    if (taskProgressToast) {
+      // Set to previous progress first
+      const prevPct = Math.min((taskProgressToast.previousValue / taskProgressToast.targetValue) * 100, 100);
+      setProgressWidth(prevPct);
+      setShowProgressToast(true);
+
+      // Animate to new progress after a slight delay
+      const animTimer = setTimeout(() => {
+        const nextPct = Math.min((taskProgressToast.currentValue / taskProgressToast.targetValue) * 100, 100);
+        setProgressWidth(nextPct);
+      }, 150);
+
+      // Auto dismiss
+      const dismissTimer = setTimeout(() => {
+        setShowProgressToast(false);
+        // Clean up state in context after transition ends
+        setTimeout(() => setTaskProgressToast(null), 500);
+      }, 4500);
+
+      return () => {
+        clearTimeout(animTimer);
+        clearTimeout(dismissTimer);
+      };
+    }
+  }, [taskProgressToast, setTaskProgressToast]);
 
   if (!isAuthenticated) return null;
 
@@ -45,13 +77,79 @@ export const TaskNotifications: React.FC = () => {
     return `${task.current_value}/${task.target_value}`;
   };
 
+  // Helper to format values for task progress toast
+  const formatToastProgressText = (type: string, current: number, target: number) => {
+    if (type === "study_time") {
+      const currentMin = Math.round(current / 60);
+      const targetMin = Math.round(target / 60);
+      return `${currentMin}/${targetMin} phút`;
+    }
+    return `${current}/${target}`;
+  };
+
   const getTaskProgressPct = (task: any) => {
     return Math.min((task.current_value / task.target_value) * 100, 100);
   };
 
   return (
     <>
+      {/* ── 1. RIGHT-SIDE FLOATING TASK PROGRESS TOAST ── */}
+      {taskProgressToast && (
+        <div 
+          className={`fixed bottom-6 right-6 z-[9999] w-80 bg-[#ebe8e0] border-3 border-[#1a2e1c] rounded-2xl p-4 shadow-[5px_5px_0px_0px_rgba(26,46,28,1)] transition-all duration-500 transform ${
+            showProgressToast ? "translate-x-0 opacity-100" : "translate-x-12 opacity-0 pointer-events-none"
+          }`}
+        >
+          {/* Header */}
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[10px] font-black tracking-wider text-[#2d5a3d] uppercase flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 fill-[#2d5a3d]/20 animate-pulse" /> Cập nhật tiến độ
+            </span>
+            <button 
+              onClick={() => {
+                setShowProgressToast(false);
+                setTimeout(() => setTaskProgressToast(null), 500);
+              }}
+              className="text-[#1a2e1c]/60 hover:text-[#1a2e1c] bg-[#1a2e1c]/5 hover:bg-[#1a2e1c]/10 p-1 rounded-lg transition-all"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
+          {/* Body */}
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 p-2 bg-white border-2 border-[#1a2e1c] rounded-xl shadow-[2px_2px_0px_0px_rgba(26,46,28,0.1)]">
+              {getTaskIcon(taskProgressToast.type)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-start gap-1">
+                <span className="text-xs sm:text-sm font-black text-gray-800 truncate">
+                  {taskProgressToast.title}
+                </span>
+                <span className="text-[10px] font-black text-[#2d5a3d] shrink-0">
+                  {formatToastProgressText(taskProgressToast.type, taskProgressToast.currentValue, taskProgressToast.targetValue)}
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-400 font-semibold mt-0.5 truncate">
+                {taskProgressToast.description}
+              </p>
+              
+              {/* Animated Progress bar */}
+              <div className="mt-3 h-2 bg-white rounded-full overflow-hidden border-2 border-[#1a2e1c]">
+                <div 
+                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-1000 ease-out rounded-full"
+                  style={{ width: `${progressWidth}%` }}
+                />
+              </div>
+              
+              {/* Percentage loading display */}
+              <div className="mt-1 text-right text-[9px] font-black text-[#2d5a3d]/80">
+                {Math.round(progressWidth)}% hoàn thành
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 2. DAILY RECOMMENDED TASKS MODAL (ON LOGIN) ── */}
       {showDailyRecommendModal && (

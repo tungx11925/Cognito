@@ -186,6 +186,8 @@ interface StudyContextType {
   triggerTaskProgress: (taskType: string, increment?: number) => Promise<void>;
   taskCompletionToast: { type: string; title: string } | null;
   setTaskCompletionToast: (toast: { type: string; title: string } | null) => void;
+  taskProgressToast: { type: string; title: string; description: string; previousValue: number; currentValue: number; targetValue: number } | null;
+  setTaskProgressToast: (toast: { type: string; title: string; description: string; previousValue: number; currentValue: number; targetValue: number } | null) => void;
   showDailyRecommendModal: boolean;
   setShowDailyRecommendModal: (show: boolean) => void;
 }
@@ -409,6 +411,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [tasks, setTasks] = useState<any[]>([]);
   const [friends, setFriends] = useState<any[]>([]);
   const [taskCompletionToast, setTaskCompletionToast] = useState<{ type: string; title: string } | null>(null);
+  const [taskProgressToast, setTaskProgressToast] = useState<{ type: string; title: string; description: string; previousValue: number; currentValue: number; targetValue: number } | null>(null);
   const [showDailyRecommendModal, setShowDailyRecommendModal] = useState<boolean>(false);
 
   // Toast message trigger helper
@@ -827,6 +830,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const triggerTaskProgress = async (taskType: string, increment: number = 1) => {
     try {
+      const prevTask = tasks.find(t => t.task_type === taskType);
+      const previousValue = prevTask ? prevTask.current_value : 0;
+
       const res = await fetch(`${API_BASE_URL}/tasks/progress`, {
         method: 'POST',
         headers: {
@@ -837,10 +843,24 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       if (res.ok) {
         const data = await res.json();
-        setTasks(prev => prev.map(t => t.task_type === taskType ? data.task : t));
-        if (data.justCompleted) {
-          setTaskCompletionToast({ type: taskType, title: data.task.title });
-          triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${data.task.title}"! 🎉`, "success");
+        const updatedTask = data.task;
+        if (updatedTask) {
+          setTasks(prev => prev.map(t => t.task_type === taskType ? updatedTask : t));
+          
+          // Trigger progress update toast
+          setTaskProgressToast({
+            type: taskType,
+            title: updatedTask.title,
+            description: updatedTask.description,
+            previousValue,
+            currentValue: updatedTask.current_value,
+            targetValue: updatedTask.target_value
+          });
+
+          if (data.justCompleted) {
+            setTaskCompletionToast({ type: taskType, title: updatedTask.title });
+            triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${updatedTask.title}"! 🎉`, "success");
+          }
         }
       }
     } catch (e) {
@@ -1534,6 +1554,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       triggerTaskProgress,
       taskCompletionToast,
       setTaskCompletionToast,
+      taskProgressToast,
+      setTaskProgressToast,
       showDailyRecommendModal,
       setShowDailyRecommendModal
     }}>

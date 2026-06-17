@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { chatWithAI, generateQuiz } from '@/services/ai.service';
 import { Send, Bot, User, Brain, AlertCircle, PlayCircle, Loader2, Trash2 } from 'lucide-react';
+import { useStudy } from '@/context/StudyContext';
 
 interface Props {
   documentId: number;
@@ -258,11 +259,13 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
 function QuizComponent({ quiz, index }: { quiz: any, index: number }) {
   const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
+  const { triggerTaskProgress } = useStudy();
 
   const handleSelect = (idx: number) => {
     if (selectedOpt !== null) return; // Prevent changing answer
     setSelectedOpt(idx);
     setShowExplanation(true);
+    triggerTaskProgress('practice_quiz', 1);
   };
 
   const isCorrect = selectedOpt === quiz.correctAnswer;
