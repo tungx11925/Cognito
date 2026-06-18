@@ -25,6 +25,7 @@ interface FloatingInputProps {
   placeholder: string;
   icon: React.ReactNode;
   error?: string;
+  isValid?: boolean;
   rightElement?: React.ReactNode;
 }
 
@@ -37,6 +38,7 @@ function FloatingInput({
   placeholder,
   icon,
   error,
+  isValid,
   rightElement,
 }: FloatingInputProps) {
   const [isFocused, setIsFocused] = useState(false);
@@ -75,9 +77,11 @@ function FloatingInput({
             if (onBlur) onBlur(e);
           }}
           placeholder={placeholder}
-          className={`w-full pl-11 ${rightElement ? 'pr-12' : 'pr-4'} py-3 bg-transparent border ${
+          className={`w-full pl-11 pr-12 py-3 bg-transparent border ${
             error
               ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500'
+              : isValid
+              ? 'border-[#00c495] ring-1 ring-[#00c495]'
               : isFocused
               ? 'border-[#00c495] ring-1 ring-[#00c495]'
               : 'border-gray-200 hover:border-gray-300'
@@ -85,14 +89,14 @@ function FloatingInput({
           style={{ fontFamily: "'Outfit', sans-serif" }}
         />
 
-        {/* Right Element */}
-        {rightElement && (
-          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 z-10 flex items-center">
-            {rightElement}
-          </div>
-        )}
+        {/* Right Element & Validation Icons */}
+        <div className="absolute right-3.5 top-1/2 -translate-y-1/2 z-10 flex items-center gap-2">
+          {rightElement}
+          {error && <XCircle className="w-5 h-5 text-red-500" />}
+          {isValid && !error && <CheckCircle2 className="w-5 h-5 text-[#00c495]" />}
+        </div>
       </div>
-      {error && <p className="text-[10px] text-red-500 pl-1">{error}</p>}
+      {error && <p className="text-[12px] text-red-500 pl-1 mt-1 font-medium">{error}</p>}
     </div>
   );
 }
@@ -116,6 +120,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [errors, setErrors] = useState({ name: '', phone: '', email: '', password: '', confirmPassword: '' });
+  const [touched, setTouched] = useState({ name: false, phone: false, email: false, password: false, confirmPassword: false });
 
   // Custom states for styling compliance
   const [isRobotChecked, setIsRobotChecked] = useState(false);
@@ -127,6 +132,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const phoneRegex = /^(03|05|07|08|09)\d{8}$/;
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
   const hasLetter = /(?=.*[a-zA-Z])/.test(password);
   const hasNumberOrSymbol = /(?=.*[\d#?!&@$%*])/.test(password);
@@ -213,37 +219,104 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     setIsForgotPasswordMode(false);
   };
 
-  const handleBlur = async (field: string, value: string) => {
-    if (!isRegisterMode || !value.trim()) return;
+  const validateField = async (field: string, val: string, currentData: any) => {
+    let errorMsg = '';
     
-    if (field === 'email' && !emailRegex.test(value)) return;
-    if (field === 'phone' && !phoneRegex.test(value)) return;
-    if (field === 'name' && value.trim().length < 2) return;
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/check-availability`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field, value })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (!data.isAvailable) {
-          setErrors(prev => ({ ...prev, [field]: data.error }));
-        } else {
-          setErrors(prev => {
-            if (prev[field as keyof typeof prev] === 'Email đã được sử dụng' || 
-                prev[field as keyof typeof prev] === 'Số điện thoại đã được sử dụng' ||
-                prev[field as keyof typeof prev] === 'Tên người dùng đã được sử dụng') {
-              return { ...prev, [field]: '' };
-            }
-            return prev;
-          });
+    switch (field) {
+      case 'name':
+        if (!val.trim()) {
+          errorMsg = 'Họ và tên không được để trống';
+        } else if (/[0-9!@#$%^&*()_+={}[\]:;"'<>,.?/\\|`~]/.test(val)) {
+          errorMsg = 'Họ và tên không được chứa số hoặc ký tự đặc biệt';
         }
-      }
-    } catch (e) {
-      console.error('Check availability error', e);
+        break;
+      case 'email':
+        if (!emailRegex.test(val)) {
+          errorMsg = 'Email không hợp lệ';
+        } else {
+          try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/auth/check-availability`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ field, value: val })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (!data.isAvailable) errorMsg = 'Email này đã được sử dụng';
+            }
+          } catch (e) {}
+        }
+        break;
+      case 'phone':
+        if (!phoneRegex.test(val)) {
+          errorMsg = 'Số điện thoại phải đủ 10 số và bắt đầu bằng số 0';
+        } else {
+          try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/auth/check-availability`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ field, value: val })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (!data.isAvailable) errorMsg = 'Số điện thoại đã tồn tại';
+            }
+          } catch (e) {}
+        }
+        break;
+      case 'password':
+        if (!passwordRegex.test(val)) {
+          errorMsg = 'Mật khẩu tối thiểu 8 ký tự, gồm ít nhất 1 chữ hoa, 1 chữ thường và 1 số';
+        }
+        break;
+      case 'confirmPassword':
+        if (!val) {
+          errorMsg = 'Vui lòng xác nhận mật khẩu';
+        } else if (val !== currentData.password) {
+          errorMsg = 'Mật khẩu xác nhận không trùng khớp';
+        }
+        break;
     }
+    return errorMsg;
+  };
+
+  const handleRealtimeChange = async (field: string, val: string) => {
+    if (field === 'name') setName(val);
+    else if (field === 'phone') setPhone(val);
+    else if (field === 'email') setEmail(val);
+    else if (field === 'password') setPassword(val);
+    else if (field === 'confirmPassword') setConfirmPassword(val);
+
+    const currentData = {
+      name: field === 'name' ? val : name,
+      phone: field === 'phone' ? val : phone,
+      email: field === 'email' ? val : email,
+      password: field === 'password' ? val : password,
+      confirmPassword: field === 'confirmPassword' ? val : confirmPassword,
+    };
+
+    if (isRegisterMode && touched[field as keyof typeof touched]) {
+      const errorMsg = await validateField(field, val, currentData);
+      setErrors(prev => ({ ...prev, [field]: errorMsg }));
+      
+      if (field === 'password' && touched.confirmPassword) {
+         const confirmError = await validateField('confirmPassword', currentData.confirmPassword, currentData);
+         setErrors(prev => ({ ...prev, confirmPassword: confirmError }));
+      }
+    } else if (!isRegisterMode) {
+      if (errors[field as keyof typeof errors]) {
+        setErrors(prev => ({ ...prev, [field]: '' }));
+      }
+    }
+  };
+
+  const handleBlurValidation = async (field: string, val: string) => {
+    if (!isRegisterMode) return;
+    setTouched(prev => ({ ...prev, [field]: true }));
+    
+    const currentData = { name, phone, email, password, confirmPassword };
+    const errorMsg = await validateField(field, val, currentData);
+    setErrors(prev => ({ ...prev, [field]: errorMsg }));
   };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -306,6 +379,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
       const result = await contextRegister(name, phone, email, password);
       if (result.success) {
         setIsRegisterMode(false);
+        setTouched({name:false, phone:false, email:false, password:false, confirmPassword:false});
         setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''});
         setEmail('');
         setPassword('');
@@ -459,7 +533,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
             <div className="flex gap-6 border-b border-gray-100 mb-6 flex-shrink-0">
               <button 
                 type="button"
-                onClick={() => { setIsRegisterMode(false); setIsForgotPasswordMode(false); setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''}); }}
+                onClick={() => { setIsRegisterMode(false); setIsForgotPasswordMode(false); setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''}); setTouched({name:false, phone:false, email:false, password:false, confirmPassword:false}); }}
                 className={`pb-3 text-sm font-bold transition-all relative focus:outline-none ${!isRegisterMode ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
                 style={{ fontFamily: "'Outfit', sans-serif" }}
               >
@@ -470,7 +544,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
               </button>
               <button 
                 type="button"
-                onClick={() => { setIsRegisterMode(true); setIsForgotPasswordMode(false); setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''}); }}
+                onClick={() => { setIsRegisterMode(true); setIsForgotPasswordMode(false); setErrors({name:'', phone:'', email:'', password:'', confirmPassword:''}); setTouched({name:false, phone:false, email:false, password:false, confirmPassword:false}); }}
                 className={`pb-3 text-sm font-bold transition-all relative focus:outline-none ${isRegisterMode ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
                 style={{ fontFamily: "'Outfit', sans-serif" }}
               >
@@ -630,14 +704,12 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                           id="register-name"
                           type="text"
                           value={name}
-                          onChange={(e) => {
-                            setName(e.target.value);
-                            if(errors.name) setErrors({...errors, name: ''});
-                          }}
-                          onBlur={(e) => handleBlur('name', e.target.value)}
+                          onChange={(e) => handleRealtimeChange('name', e.target.value)}
+                          onBlur={(e) => handleBlurValidation('name', e.target.value)}
                           placeholder="Tên người dùng"
                           icon={<User className="w-4 h-4" />}
                           error={errors.name}
+                          isValid={isRegisterMode && touched.name && !errors.name && name.length > 0}
                         />
 
                         {/* Phone Input */}
@@ -645,14 +717,12 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                           id="register-phone"
                           type="tel"
                           value={phone}
-                          onChange={(e) => {
-                            setPhone(e.target.value);
-                            if(errors.phone) setErrors({...errors, phone: ''});
-                          }}
-                          onBlur={(e) => handleBlur('phone', e.target.value)}
+                          onChange={(e) => handleRealtimeChange('phone', e.target.value)}
+                          onBlur={(e) => handleBlurValidation('phone', e.target.value)}
                           placeholder="Số điện thoại"
                           icon={<Phone className="w-4 h-4" />}
                           error={errors.phone}
+                          isValid={isRegisterMode && touched.phone && !errors.phone && phone.length > 0}
                         />
                       </div>
                     )}
@@ -662,14 +732,12 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                       id="login-email"
                       type={isRegisterMode ? "email" : "text"}
                       value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if(errors.email) setErrors({...errors, email: ''});
-                      }}
-                      onBlur={(e) => handleBlur('email', e.target.value)}
+                      onChange={(e) => handleRealtimeChange('email', e.target.value)}
+                      onBlur={(e) => handleBlurValidation('email', e.target.value)}
                       placeholder={isRegisterMode ? "Địa chỉ Email" : "Email hoặc Tên đăng nhập"}
                       icon={<Mail className="w-4 h-4" />}
                       error={errors.email}
+                      isValid={isRegisterMode && touched.email && !errors.email && email.length > 0}
                     />
 
                     {/* Password Input */}
@@ -677,13 +745,12 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                       id="login-password"
                       type={passwordVisible ? "text" : "password"}
                       value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        if(errors.password) setErrors({...errors, password: ''});
-                      }}
+                      onChange={(e) => handleRealtimeChange('password', e.target.value)}
+                      onBlur={(e) => handleBlurValidation('password', e.target.value)}
                       placeholder="Mật khẩu"
                       icon={<Lock className="w-4 h-4" />}
                       error={errors.password}
+                      isValid={isRegisterMode && touched.password && !errors.password && password.length > 0}
                       rightElement={
                         <button 
                           type="button"
@@ -739,18 +806,14 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                           id="register-confirm-password"
                           type={confirmPasswordVisible ? "text" : "password"}
                           value={confirmPassword}
-                          onChange={(e) => {
-                            setConfirmPassword(e.target.value);
-                            if(errors.confirmPassword) setErrors({...errors, confirmPassword: ''});
-                          }}
+                          onChange={(e) => handleRealtimeChange('confirmPassword', e.target.value)}
+                          onBlur={(e) => handleBlurValidation('confirmPassword', e.target.value)}
                           placeholder="Xác nhận mật khẩu"
                           icon={<Lock className="w-4 h-4" />}
                           error={errors.confirmPassword}
+                          isValid={isRegisterMode && touched.confirmPassword && !errors.confirmPassword && confirmPassword.length > 0}
                           rightElement={
                             <div className="flex items-center gap-2">
-                              {confirmPassword && confirmPassword === password && (
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                              )}
                               <button 
                                 type="button"
                                 onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}

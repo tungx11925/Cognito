@@ -3,6 +3,10 @@ import cors from 'cors';
 import authRoutes from './routes/auth.routes';
 import appRoutes from './routes/app.routes';
 import documentRoutes from './routes/document.routes';
+import shareRoutes from './routes/share.routes';
+import paymentRoutes from './routes/payment.routes';
+import aiRoutes from './routes/ai.routes';
+import marketplaceRoutes from './routes/marketplace.routes';
 import path from 'path';
 
 const app = express();
@@ -21,6 +25,10 @@ app.get('/health', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/shares', shareRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api', appRoutes);
 
 // Serve static uploaded files

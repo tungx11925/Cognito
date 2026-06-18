@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from "react";
 import { apiFetch } from "@/services/api";
 import { getDecks, createFlashcard, createDeck } from "@/services/flashcard.service";
 import mammoth from "mammoth";
+import { MainLayout } from "@/components/layout/MainLayout";
 
 const suggestions = [
   "Generate 20 cards from Algorithms Chapter 4",
@@ -113,8 +114,9 @@ export default function AILabPage() {
   };
 
   return (
-    <div className="p-6 space-y-5">
-      <div>
+    <MainLayout>
+      <div className="p-6 space-y-5">
+        <div>
         <h1 style={{ color: "#111827", marginBottom: "4px", fontSize: "22px", fontWeight: 700 }}>AI Lab</h1>
         <p style={{ fontSize: "13px", color: "#9ca3af" }}>Generate flashcards automatically from text, PDFs, or prompts</p>
       </div>
@@ -321,6 +323,7 @@ export default function AILabPage() {
           </motion.div>
         </div>
       )}
-    </div>
+      </div>
+    </MainLayout>
   );
 }

@@ -1349,7 +1349,7 @@ export default function FlashcardDeckPage() {
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => {}}
-        onDashboardClick={() => router.push('/home')}
+        onDashboardClick={() => router.push('/library')}
         activeUser={activeUser!}
       />
 

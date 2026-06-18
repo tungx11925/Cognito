@@ -16,10 +16,11 @@ import {
   Volume2,
   VolumeX,
   Sparkles,
-  Palette,
   EyeOff,
   Activity,
-  Zap
+  Zap,
+  Share2,
+  Palette
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -34,6 +35,7 @@ import {
 } from "@/services/flashcard.service";
 import { Background, BackgroundStyle } from "@/components/flashcards/Background";
 import AIFlashcardLab from "@/components/flashcards/AIFlashcardLab";
+import ShareModal from "@/components/documents/ShareModal";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -74,6 +76,7 @@ function DeckCard({
   total,
   mastered,
   color,
+  onShare,
 }: {
   deck: Deck;
   dark: boolean;
@@ -81,6 +84,7 @@ function DeckCard({
   total: number;
   mastered: number;
   color: string;
+  onShare: (deck: Deck) => void;
 }) {
   const router = useRouter();
   const pct = total > 0 ? Math.round((mastered / total) * 100) : 0;
@@ -111,6 +115,13 @@ function DeckCard({
             title="Quản lý & chỉnh sửa thẻ"
           >
             Chỉnh sửa
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onShare(deck); }}
+            className="text-[10px] px-2 py-1 rounded-lg font-bold transition-all bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/50 hover:bg-amber-100 hover:scale-105"
+            title="Chia sẻ bộ thẻ"
+          >
+            <Share2 size={12} className="inline-block" />
           </button>
           <button
             onClick={onSelect}
@@ -236,6 +247,9 @@ export default function FlashcardsPage() {
   
   // Modals
   const [showAILab, setShowAILab] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareDeck, setShareDeck] = useState<Deck | null>(null);
+
   
   // Real database states
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -349,6 +363,11 @@ export default function FlashcardsPage() {
     }
   };
 
+  const handleShareClick = (deck: Deck) => {
+    setShareDeck(deck);
+    setIsShareModalOpen(true);
+  };
+
   const handleToggleDark = () => {
     const nextDark = !dark;
     setDark(nextDark);
@@ -423,7 +442,7 @@ export default function FlashcardsPage() {
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
-        onDashboardClick={() => router.push('/home')}
+        onDashboardClick={() => router.push('/library')}
         activeUser={activeUser!}
       />
 
@@ -433,10 +452,10 @@ export default function FlashcardsPage() {
           style={{ borderColor: dark ? "#222" : "rgba(26,46,28,0.08)" }}
         >
           <div className="flex items-center gap-2">
-            <Link href="/home" className="flex items-center gap-1 text-xs font-bold transition-opacity hover:opacity-80"
+            <Link href="/library" className="flex items-center gap-1 text-xs font-bold transition-opacity hover:opacity-80"
               style={{ color: primaryColor }}
             >
-              <ArrowLeft size={14} /> Bảng điều khiển
+              <ArrowLeft size={14} /> Thư viện của tôi
             </Link>
           </div>
 
@@ -671,6 +690,7 @@ export default function FlashcardsPage() {
                       total={counts.total}
                       mastered={counts.mastered}
                       color={color}
+                      onShare={handleShareClick}
                       onSelect={() => router.push(`/flashcards/${deck.id}?mode=study`)}
                     />
                   );
@@ -831,6 +851,14 @@ export default function FlashcardsPage() {
           />
         )}
       </AnimatePresence>
+
+      <ShareModal 
+        isOpen={isShareModalOpen} 
+        onClose={() => setIsShareModalOpen(false)} 
+        resourceId={shareDeck?.id || 0} 
+        resourceType="deck" 
+        triggerMessage={triggerMessage} 
+      />
     </div>
   );
 }

@@ -63,8 +63,9 @@ interface StudyContextType {
   setShowLanding: (show: boolean) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  activeUser: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[] } | null;
-  setActiveUser: (user: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[] } | null) => void;
+  activeUser: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number } | null;
+  setActiveUser: (user: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number } | null) => void;
+  updateWalletBalance: (amount: number) => void;
   updateAvatar: (file: File) => Promise<boolean>;
   updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string }) => Promise<boolean>;
   toggleVerification: (enable: boolean) => Promise<boolean>;
@@ -190,9 +191,11 @@ interface StudyContextType {
   setTaskProgressToast: (toast: { type: string; title: string; description: string; previousValue: number; currentValue: number; targetValue: number } | null) => void;
   showDailyRecommendModal: boolean;
   setShowDailyRecommendModal: (show: boolean) => void;
+  showPremiumModal: boolean;
+  setShowPremiumModal: (show: boolean) => void;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 const getAuthHeaders = (): Record<string, string> => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -339,7 +342,11 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[] } | null>(null);
+  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number } | null>(null);
+
+  const updateWalletBalance = (amount: number) => {
+    setActiveUser(prev => prev ? { ...prev, wallet_balance: (prev.wallet_balance || 0) + amount } : null);
+  };
   const [searchQuery, setSearchQuery] = useState('');
 
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -413,6 +420,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [taskCompletionToast, setTaskCompletionToast] = useState<{ type: string; title: string } | null>(null);
   const [taskProgressToast, setTaskProgressToast] = useState<{ type: string; title: string; description: string; previousValue: number; currentValue: number; targetValue: number } | null>(null);
   const [showDailyRecommendModal, setShowDailyRecommendModal] = useState<boolean>(false);
+  const [showPremiumModal, setShowPremiumModal] = useState<boolean>(false);
 
   // Toast message trigger helper
   const triggerMessage = (text: string, type: 'success' | 'error' = 'success') => {
@@ -1454,6 +1462,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setShowLoginModal,
       activeUser,
       setActiveUser,
+      updateWalletBalance,
       searchQuery,
 
       setSearchQuery,
@@ -1557,7 +1566,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       taskProgressToast,
       setTaskProgressToast,
       showDailyRecommendModal,
-      setShowDailyRecommendModal
+      setShowDailyRecommendModal,
+      showPremiumModal,
+      setShowPremiumModal
     }}>
       {children}
     </StudyContext.Provider>

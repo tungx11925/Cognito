@@ -762,27 +762,53 @@ router.get('/flashcards/community/decks', async (req: Request, res: Response) =>
   }
 });
 
-// Fork a public deck
+// Fork a public or purchased deck
 router.post('/flashcards/decks/:deckId/fork', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { deckId } = req.params;
     const userId = req.user!.id;
     
-    // Check if deck is public
-    const deckResult = await db.query('SELECT * FROM flashcard_decks WHERE id = $1', [deckId]);
+    // Check if deck exists
+    const deckResult = await db.query('SELECT * FROM card_decks WHERE id = $1', [deckId]);
     if (deckResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy bộ thẻ' });
+      // Fallback check old table name if user used flashcard_decks
+      const fallbackCheck = await db.query('SELECT * FROM flashcard_decks WHERE id = $1', [deckId]);
+      if (fallbackCheck.rows.length === 0) return res.status(404).json({ error: 'Không tìm thấy bộ thẻ' });
+      deckResult.rows = fallbackCheck.rows;
     }
     
     const originalDeck = deckResult.rows[0];
-    if (!originalDeck.is_public && originalDeck.user_id !== userId) {
-      return res.status(403).json({ error: 'Không có quyền sao chép bộ thẻ này' });
+    
+    // Authorization logic
+    let isAuthorized = false;
+    
+    // 1. Is owner
+    if (originalDeck.user_id === userId) isAuthorized = true;
+    
+    // 2. Is public and free
+    if (originalDeck.visibility === 'public' && (originalDeck.price === 0 || originalDeck.price === null)) isAuthorized = true;
+    if (originalDeck.is_public && (originalDeck.price === 0 || originalDeck.price === null)) isAuthorized = true; // backward compat
+    
+    // 3. Has purchased
+    if (!isAuthorized) {
+      const purchaseCheck = await db.query(
+        'SELECT id FROM purchased_resources WHERE user_id = $1 AND deck_id = $2',
+        [userId, deckId]
+      );
+      if (purchaseCheck.rows.length > 0) isAuthorized = true;
+    }
+
+    if (!isAuthorized) {
+      return res.status(403).json({ error: 'Bạn cần mở khóa bộ thẻ này trên chợ cộng đồng trước khi sao chép' });
     }
     
     // Create new deck
+    // Note: use the correct table name based on what's available
+    const insertTable = originalDeck.visibility !== undefined ? 'card_decks' : 'flashcard_decks';
+    
     const newDeckResult = await db.query(
-      'INSERT INTO flashcard_decks (user_id, name, description, forked_from_id, is_public) VALUES ($1, $2, $3, $4, false) RETURNING *',
-      [userId, originalDeck.name + ' (Copy)', originalDeck.description, deckId]
+      `INSERT INTO ${insertTable} (user_id, name, description, forked_from_id) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [userId, originalDeck.name || originalDeck.title + ' (Copy)', originalDeck.description, deckId]
     );
     const newDeck = newDeckResult.rows[0];
     
@@ -790,7 +816,7 @@ router.post('/flashcards/decks/:deckId/fork', authenticate, async (req: AuthRequ
     const cardsResult = await db.query('SELECT * FROM flashcards WHERE deck_id = $1', [deckId]);
     for (let card of cardsResult.rows) {
       await db.query(
-        'INSERT INTO flashcards (deck_id, front, back, is_starred) VALUES ($1, $2, $3, false)',
+        'INSERT INTO flashcards (deck_id, front, back) VALUES ($1, $2, $3)',
         [newDeck.id, card.front, card.back]
       );
     }

@@ -17,7 +17,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const router = useRouter();
-  const { logout, taskCompletionToast, setTaskCompletionToast } = useStudy();
+  const { logout, taskCompletionToast, setTaskCompletionToast, setShowPremiumModal } = useStudy();
   const [toastProgress, setToastProgress] = useState(60);
   const [showToast, setShowToast] = useState(false);
 
@@ -93,8 +93,8 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           <nav className="hidden md:flex items-center gap-7">
             {isLoggedIn ? (
               <>
-                <Link href="/home" className="transition-colors duration-200 text-sm font-bold" style={{ color: "#1a3d28" }}>
-                  Bảng điều khiển
+                <Link href="/library" className="transition-colors duration-200 text-sm font-bold" style={{ color: "#1a3d28" }}>
+                  Thư viện của tôi
                 </Link>
                 <Link href="/library" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
                   Tài liệu
@@ -132,13 +132,14 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             {isLoggedIn ? (
               <>
                 <button
-                  onClick={onDashboardClick}
-                  className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all"
-                  style={{ background: "#1a3d28", color: "#f5f3ee", border: "none", cursor: "pointer" }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#143020"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#1a3d28"; }}
+                  onClick={() => setShowPremiumModal(true)}
+                  className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5"
+                  style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", border: "none", cursor: "pointer", boxShadow: "0 2px 10px rgba(245, 158, 11, 0.2)" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 12px rgba(245, 158, 11, 0.3)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 10px rgba(245, 158, 11, 0.2)"; }}
                 >
-                  Vào bảng điều khiển
+                  <Sparkles size={14} />
+                  Nâng cấp Premium
                 </button>
                 
                 {/* Profile Dropdown Container */}
@@ -184,12 +185,12 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                           <button
                             onClick={() => {
                               setDropdownOpen(false);
-                              router.push('/home');
+                              router.push('/library');
                             }}
                             className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-left"
                           >
                             <Layout size={14} className="text-gray-400" />
-                            Bảng điều khiển
+                            Thư viện của tôi
                           </button>
 
                           <button
@@ -320,7 +321,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-4">
               {isLoggedIn ? (
                 <>
-                  <Link href="/home" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Bảng điều khiển</Link>
+                  <Link href="/library" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Thư viện của tôi</Link>
                   <Link href="/library" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tài liệu</Link>
                   <Link href="/chat" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Trợ lý AI</Link>
                   <Link href="/flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
@@ -336,11 +337,12 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
               )}
               {isLoggedIn ? (
                 <button 
-                  onClick={() => { setMobileOpen(false); onDashboardClick(); }}
-                  className="w-full py-2.5 rounded-lg mt-1" 
-                  style={{ background: "#1a3d28", color: "#f5f3ee", fontWeight: 600, border: "none", cursor: "pointer" }}
+                  onClick={() => { setMobileOpen(false); setShowPremiumModal(true); }}
+                  className="w-full py-2.5 rounded-lg mt-1 flex items-center justify-center gap-2" 
+                  style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", fontWeight: 600, border: "none", cursor: "pointer" }}
                 >
-                  Vào bảng điều khiển
+                  <Sparkles size={16} />
+                  Nâng cấp Premium
                 </button>
               ) : (
                 <button 

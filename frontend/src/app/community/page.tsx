@@ -1,12 +1,25 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Library, User, Copy, ThumbsUp, Star, Eye } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useStudy } from '@/context/StudyContext';
+import { Navbar } from '@/components/landing/Navbar';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Library, User, Copy, Eye } from 'lucide-react';
 import { getPublicDecks, forkDeck } from '@/services/flashcard.service';
 import toast from 'react-hot-toast';
+import RegisterModal from '@/components/auth/RegisterModal';
 
 export default function CommunityLibraryPage() {
+  const {
+    isAuthenticated,
+    showLoginModal,
+    setShowLoginModal,
+    activeUser,
+    triggerMessage,
+  } = useStudy();
+  
+  const router = useRouter();
   const [decks, setDecks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -34,6 +47,10 @@ export default function CommunityLibraryPage() {
   };
 
   const handleFork = async (deckId: number) => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
     try {
       await forkDeck(deckId);
       toast.success('Đã copy bộ thẻ vào thư viện của bạn!');
@@ -49,29 +66,36 @@ export default function CommunityLibraryPage() {
   );
 
   return (
-    <div className="h-full flex flex-col">
+    <div style={{ minHeight: "100vh", background: "#f5f3ee", color: "#0d1a14", overflowX: "hidden" }}>
+      <Navbar 
+        isLoggedIn={isAuthenticated}
+        onSignInClick={() => setShowLoginModal(true)}
+        onDashboardClick={() => router.push('/library')}
+        activeUser={activeUser!}
+      />
+
       {/* Header */}
-      <header className="px-8 py-6 bg-white border-b border-gray-200">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <header className="px-4 md:px-8 py-10 max-w-7xl mx-auto">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Cộng Đồng EduShare</h1>
-            <p className="text-sm text-gray-500 mt-1">Khám phá hàng ngàn bộ thẻ và tài liệu được chia sẻ từ cộng đồng.</p>
+            <h1 className="text-4xl font-bold tracking-tight" style={{ color: "#0d1a14" }}>Cộng Đồng EduShare</h1>
+            <p className="text-lg mt-2" style={{ color: "#374151" }}>Khám phá hàng ngàn bộ thẻ và tài liệu được chia sẻ từ cộng đồng.</p>
           </div>
-          <div className="relative w-full md:w-96">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <div className="relative w-full md:w-[400px]">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input 
               type="text" 
               placeholder="Tìm kiếm tài liệu, flashcards..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-100 border-none rounded-xl focus:ring-2 focus:ring-[#1a3a2a] outline-none transition-all"
+              className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-[#1a3a2a] outline-none transition-all shadow-sm"
             />
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-8 bg-[#f9fafb]">
+      <main className="max-w-7xl mx-auto px-4 md:px-8 pb-20">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="w-8 h-8 border-4 border-[#1a3a2a] border-t-transparent rounded-full animate-spin" />
@@ -133,6 +157,16 @@ export default function CommunityLibraryPage() {
           </div>
         )}
       </main>
+
+      <AnimatePresence>
+        {showLoginModal && (
+          <RegisterModal 
+            isOpen={showLoginModal} 
+            onClose={() => setShowLoginModal(false)} 
+            triggerMessage={triggerMessage} 
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
