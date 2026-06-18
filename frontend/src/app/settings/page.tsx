@@ -110,6 +110,7 @@ export default function SettingsPage() {
   const [website, setWebsite] = useState("");
   const [timezone, setTimezone] = useState("Asia/Ho_Chi_Minh");
   const [bio, setBio] = useState("");
+  const [privacySetting, setPrivacySetting] = useState("public");
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Security password state
@@ -138,6 +139,7 @@ export default function SettingsPage() {
     if (activeUser) {
       setDisplayName(activeUser.name || "");
       setTwoFA(!!activeUser.is_verified);
+      setPrivacySetting(activeUser.privacy_setting || "public");
     }
   }, [activeUser]);
 
@@ -164,6 +166,7 @@ export default function SettingsPage() {
       // Save display name to database
       const success = await updateProfile({
         name: displayName,
+        privacy_setting: privacySetting,
       });
 
       if (success) {
@@ -603,6 +606,31 @@ export default function SettingsPage() {
                             <option value="Asia/Tokyo">Japan Standard Time (Asia/Tokyo - UTC+09:00)</option>
                             <option value="America/New_York">Eastern Standard Time (America/New_York - UTC-05:00)</option>
                             <option value="Europe/London">Greenwich Mean Time (Europe/London - UTC+00:00)</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <label className={`text-xs font-bold pl-0.5 ${isDarkActive ? "text-gray-300" : "text-gray-700"}`}>
+                            {language === "vi" ? "Chế độ riêng tư của hồ sơ" : "Profile Privacy Mode"}
+                          </label>
+                          <select
+                            value={privacySetting}
+                            onChange={(e) => setPrivacySetting(e.target.value)}
+                            className={`w-full text-sm font-semibold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all appearance-none ${
+                              isDarkActive 
+                                ? "bg-gray-800 border-gray-700 text-white focus:border-emerald-500" 
+                                : "bg-gray-50 border-gray-200 text-gray-800 focus:border-[#2d5a3d]"
+                            }`}
+                          >
+                            <option value="public">
+                              {language === "vi" ? "Công khai (Ai cũng có thể xem hồ sơ, flashcards, tài liệu)" : "Public (Anyone can view profile, flashcards, documents)"}
+                            </option>
+                            <option value="friends">
+                              {language === "vi" ? "Chỉ bạn bè học cùng (Chỉ những người đã kết bạn mới có thể xem)" : "Friends Only (Only connected friends can view)"}
+                            </option>
+                            <option value="private">
+                              {language === "vi" ? "Riêng tư (Chỉ mình bạn xem được)" : "Private (Only you can view)"}
+                            </option>
                           </select>
                         </div>
 

@@ -64,49 +64,120 @@ const Progress = ({ value, className = "", children }: any) => (
 const Separator = ({ className = "" }: any) => <div className={`shrink-0 bg-gray-200 h-[1px] w-full ${className}`} />;
 
 /* ── Data ──────────────────────────────────────────── */
+// Fallback week data (only used if API returns empty chart_data)
 const weekData = [
-  { day: "T2", minutes: 45, cards: 60 },
-  { day: "T3", minutes: 80, cards: 110 },
-  { day: "T4", minutes: 30, cards: 40 },
-  { day: "T5", minutes: 120, cards: 180 },
-  { day: "T6", minutes: 60, cards: 90 },
-  { day: "T7", minutes: 90, cards: 130 },
-  { day: "CN", minutes: 50, cards: 70 },
+  { day: "T2", minutes: 0, cards: 0 },
+  { day: "T3", minutes: 0, cards: 0 },
+  { day: "T4", minutes: 0, cards: 0 },
+  { day: "T5", minutes: 0, cards: 0 },
+  { day: "T6", minutes: 0, cards: 0 },
+  { day: "T7", minutes: 0, cards: 0 },
+  { day: "CN", minutes: 0, cards: 0 },
 ];
-const subjects = [
-  { name: "Tiếng Anh", level: 82, color: "#2d5a3d", xp: "4,200 XP" },
-  { name: "Toán học", level: 68, color: "#4a7c59", xp: "2,800 XP" },
-  { name: "Hóa học", level: 55, color: "#6aad81", xp: "1,900 XP" },
-  { name: "Lịch sử", level: 74, color: "#1a2e1c", xp: "3,100 XP" },
-  { name: "Vật lý", level: 43, color: "#8ec4a0", xp: "1,200 XP" },
+
+// Compute XP level dynamically from user's actual activity data
+function computeUserLevel(totalStudyMinutes: number, totalReviews: number, totalSessions: number, totalDocuments: number, totalNotes: number) {
+  // XP formula: minutes * 2 + reviews * 3 + sessions * 10 + docs * 15 + notes * 5
+  const totalXP = (totalStudyMinutes * 2) + (totalReviews * 3) + (totalSessions * 10) + (totalDocuments * 15) + (totalNotes * 5);
+  // Each level requires 500 XP, starting at level 1
+  const level = Math.max(1, Math.floor(totalXP / 500) + 1);
+  const currentLevelXP = totalXP % 500;
+  const xpToNextLevel = 500;
+  const pct = Math.round((currentLevelXP / xpToNextLevel) * 100);
+  return { totalXP, level, currentLevelXP, xpToNextLevel, pct };
+}
+
+// Compute subject levels from actual document categories
+const SUBJECT_COLORS = [
+  "#2d5a3d", "#4a7c59", "#6aad81", "#1a2e1c", "#8ec4a0",
+  "#3b82f6", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4",
 ];
-const flashcardSets = [
-  { title: "Từ vựng IELTS Band 7+", cards: 240, mastered: 180, category: "Tiếng Anh", lastStudied: "2 giờ trước", difficulty: "Nâng cao" },
-  { title: "Toán Cao cấp — Giải tích", cards: 120, mastered: 95, category: "Toán học", lastStudied: "Hôm qua", difficulty: "Trung bình" },
-  { title: "Lịch sử Việt Nam", cards: 85, mastered: 72, category: "Lịch sử", lastStudied: "2 ngày trước", difficulty: "Cơ bản" },
-  { title: "Hóa học Hữu cơ", cards: 160, mastered: 88, category: "Hóa học", lastStudied: "3 ngày trước", difficulty: "Nâng cao" },
-  { title: "Grammar IELTS Writing", cards: 95, mastered: 60, category: "Tiếng Anh", lastStudied: "4 ngày trước", difficulty: "Trung bình" },
-  { title: "Vật lý lượng tử cơ bản", cards: 70, mastered: 28, category: "Vật lý", lastStudied: "1 tuần trước", difficulty: "Nâng cao" },
-];
-const achievements = [
-  { icon: Flame, label: "Streak 30 ngày", desc: "Học liên tục 30 ngày", color: "text-orange-500", bg: "bg-orange-50", earned: true, date: "05/2026" },
-  { icon: Trophy, label: "Top học sinh", desc: "Xếp hạng top 5%", color: "text-yellow-500", bg: "bg-yellow-50", earned: true, date: "04/2026" },
-  { icon: Brain, label: "Trí tuệ xuất sắc", desc: "1000 thẻ trong 1 ngày", color: "text-purple-500", bg: "bg-purple-50", earned: true, date: "03/2026" },
-  { icon: Star, label: "100% chính xác", desc: "Hoàn hảo 1 bài kiểm tra", color: "text-blue-500", bg: "bg-blue-50", earned: true, date: "02/2026" },
-  { icon: Zap, label: "Học siêu tốc", desc: "500 thẻ trong 1 giờ", color: "text-green-500", bg: "bg-green-50", earned: false, date: null },
-  { icon: Medal, label: "Chuyên gia AI", desc: "100 phiên với Trợ lý AI", color: "text-gray-400", bg: "bg-gray-50", earned: false, date: null },
-];
-const friends = [
-  { name: "Trần Minh Khoa", avatar: "Khoa", streak: 45, subject: "Vật lý" },
-  { name: "Lê Thị Hoa", avatar: "Hoa", streak: 28, subject: "Tiếng Anh" },
-  { name: "Phạm Quốc Bảo", avatar: "Bảo", streak: 15, subject: "Toán học" },
-  { name: "Ngô Thị Lan", avatar: "Lan", streak: 62, subject: "Hóa học" },
-];
-const recentDocs = [
-  { title: "Giáo trình IELTS Academic Reading", pages: 124, read: 89, type: "PDF" },
-  { title: "Bộ đề thi thử Đại học Quốc gia", pages: 48, read: 48, type: "Đề thi" },
-  { title: "Cambridge Grammar in Use", pages: 320, read: 210, type: "Sách" },
-];
+function computeSubjects(docs: any[], deckCountsMap: Record<number, { total: number; mastered: number }>, decksArr: any[]) {
+  // Group decks by category (use deck name as fallback)
+  const catMap: Record<string, { total: number; mastered: number }> = {};
+  decksArr.forEach(deck => {
+    const cat = deck.name || "Khác";
+    const counts = deckCountsMap[deck.id] || { total: 0, mastered: 0 };
+    if (!catMap[cat]) catMap[cat] = { total: 0, mastered: 0 };
+    catMap[cat].total += counts.total;
+    catMap[cat].mastered += counts.mastered;
+  });
+  // Also add doc categories
+  docs.forEach(doc => {
+    const cat = doc.category || "Khác";
+    if (!catMap[cat]) catMap[cat] = { total: 0, mastered: 0 };
+  });
+  const entries = Object.entries(catMap).slice(0, 6);
+  if (entries.length === 0) return [];
+  const maxTotal = Math.max(...entries.map(([, v]) => v.total), 1);
+  return entries.map(([name, v], i) => ({
+    name,
+    level: v.total > 0 ? Math.min(Math.round((v.mastered / Math.max(v.total, 1)) * 100), 100) : Math.min(10 + i * 8, 90),
+    color: SUBJECT_COLORS[i % SUBJECT_COLORS.length],
+    xp: `${v.mastered * 10 + v.total * 3} XP`,
+  }));
+}
+
+// Compute achievements dynamically from real user data
+function computeAchievements(streak: number, totalReviews: number, totalStudyMinutes: number, totalDocuments: number, totalSessions: number) {
+  return [
+    {
+      icon: Flame,
+      label: "Streak 7 ngày",
+      desc: "Học liên tục 7 ngày",
+      color: streak >= 7 ? "text-orange-500" : "text-gray-400",
+      bg: streak >= 7 ? "bg-orange-50" : "bg-gray-50",
+      earned: streak >= 7,
+      date: streak >= 7 ? "Đã đạt" : null
+    },
+    {
+      icon: Flame,
+      label: "Streak 30 ngày",
+      desc: "Học liên tục 30 ngày",
+      color: streak >= 30 ? "text-orange-600" : "text-gray-400",
+      bg: streak >= 30 ? "bg-orange-50" : "bg-gray-50",
+      earned: streak >= 30,
+      date: streak >= 30 ? "Đã đạt" : null
+    },
+    {
+      icon: Brain,
+      label: "Ôn tập 100 thẻ",
+      desc: "Ôn tập tổng cộng 100 thẻ ghi nhớ",
+      color: totalReviews >= 100 ? "text-purple-500" : "text-gray-400",
+      bg: totalReviews >= 100 ? "bg-purple-50" : "bg-gray-50",
+      earned: totalReviews >= 100,
+      date: totalReviews >= 100 ? "Đã đạt" : null
+    },
+    {
+      icon: Clock,
+      label: "5 giờ học tập",
+      desc: "Tích lũy 5 giờ học tập",
+      color: totalStudyMinutes >= 300 ? "text-blue-500" : "text-gray-400",
+      bg: totalStudyMinutes >= 300 ? "bg-blue-50" : "bg-gray-50",
+      earned: totalStudyMinutes >= 300,
+      date: totalStudyMinutes >= 300 ? "Đã đạt" : null
+    },
+    {
+      icon: BookMarked,
+      label: "5 tài liệu",
+      desc: "Tải lên hoặc đọc 5 tài liệu",
+      color: totalDocuments >= 5 ? "text-emerald-500" : "text-gray-400",
+      bg: totalDocuments >= 5 ? "bg-emerald-50" : "bg-gray-50",
+      earned: totalDocuments >= 5,
+      date: totalDocuments >= 5 ? "Đã đạt" : null
+    },
+    {
+      icon: Zap,
+      label: "10 phiên Pomodoro",
+      desc: "Hoàn thành 10 phiên học tập Pomodoro",
+      color: totalSessions >= 10 ? "text-yellow-500" : "text-gray-400",
+      bg: totalSessions >= 10 ? "bg-yellow-50" : "bg-gray-50",
+      earned: totalSessions >= 10,
+      date: totalSessions >= 10 ? "Đã đạt" : null
+    },
+  ];
+}
+
 const diffColor: Record<string, string> = {
   "Nâng cao": "bg-red-50 text-red-600 border-red-200",
   "Trung bình": "bg-yellow-50 text-yellow-700 border-yellow-200",
@@ -535,23 +606,36 @@ export default function UserProfile() {
                   <span className="absolute top-2 right-2 w-3 h-3 bg-green-400 border-2 border-white rounded-full animate-pulse" />
                 </div>
                 <div className="pb-1 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-gray-900 text-2xl font-bold">{activeUser?.name || "Nguyễn Văn An"}</h2>
-                    <Badge variant="pro" className="text-xs px-2 py-0.5 hover:bg-[#2d5a3d]">⭐ Pro</Badge>
-                    <Badge className="bg-amber-100 text-amber-700 text-xs px-2 py-0 border border-amber-200">Cấp 14</Badge>
-                  </div>
-                  <p className="text-sm text-gray-400 mt-0.5">@{(activeUser as any)?.username || activeUser?.name?.toLowerCase().replace(/\s+/g, '') || "nguyenvanan"}</p>
-                  
-                  {/* XP Progress Bar */}
-                  <div className="mt-3 max-w-xs">
-                    <div className="flex justify-between text-[10px] text-gray-500 mb-1">
-                      <span className="font-semibold text-[#2d5a3d]">Tiến trình Cấp 14</span>
-                      <span className="font-medium text-gray-600">3,400 / 5,000 XP (68%)</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200/50">
-                      <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: "68%" }} />
-                    </div>
-                  </div>
+                  {(() => {
+                    const { level, currentLevelXP, xpToNextLevel, pct } = computeUserLevel(
+                      analyticsData?.total_study_minutes || 0,
+                      analyticsData?.total_reviews || 0,
+                      analyticsData?.total_sessions || 0,
+                      analyticsData?.total_documents || 0,
+                      analyticsData?.total_notes || 0
+                    );
+                    return (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-gray-900 text-2xl font-bold">{activeUser?.name || "Người dùng"}</h2>
+                          <Badge variant="pro" className="text-xs px-2 py-0.5 hover:bg-[#2d5a3d]">⭐ Pro</Badge>
+                          <Badge className="bg-amber-100 text-amber-700 text-xs px-2 py-0 border border-amber-200">Cấp {level}</Badge>
+                        </div>
+                        <p className="text-sm text-gray-400 mt-0.5">@{(activeUser as any)?.username || activeUser?.name?.toLowerCase().replace(/\s+/g, '') || "nguoidung"}</p>
+
+                        {/* XP Progress Bar — dynamic */}
+                        <div className="mt-3 max-w-xs">
+                          <div className="flex justify-between text-[10px] text-gray-500 mb-1">
+                            <span className="font-semibold text-[#2d5a3d]">Tiến trình Cấp {level}</span>
+                            <span className="font-medium text-gray-600">{currentLevelXP.toLocaleString()} / {xpToNextLevel.toLocaleString()} XP ({pct}%)</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200/50">
+                            <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -705,7 +789,11 @@ export default function UserProfile() {
                 <div className="grid grid-cols-1 gap-2.5">
                   {friends.length > 0 ? (
                     friends.map((f) => (
-                      <div key={f.id} className="flex items-center gap-3 p-3 bg-[#f4f7f4] border border-[#2d5a3d]/20 rounded-xl transition-all duration-200 hover:bg-emerald-50/30 hover:border-[#2d5a3d]/35 group cursor-pointer shadow-2xs">
+                      <div 
+                        key={f.id} 
+                        onClick={() => router.push(`/profile/${f.id}`)}
+                        className="flex items-center gap-3 p-3 bg-[#f4f7f4] border border-[#2d5a3d]/20 rounded-xl transition-all duration-200 hover:bg-emerald-50/30 hover:border-[#2d5a3d]/35 group cursor-pointer shadow-2xs"
+                      >
                         <div className="w-9 h-9 rounded-xl bg-[#2d5a3d]/15 text-[#2d5a3d] text-xs font-bold flex items-center justify-center shrink-0">
                           {f.avatar_url ? (
                             <img src={f.avatar_url} alt={f.name} className="w-full h-full object-cover rounded-xl" />
@@ -827,17 +915,27 @@ export default function UserProfile() {
                     </CardHeader>
                     <CardContent className="pt-0">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        {subjects.map((s) => (
-                          <div key={s.name} className="p-3.5 bg-[#f4f7f4] border border-[#2d5a3d]/20 rounded-xl hover:border-[#2d5a3d]/40 transition-all shadow-2xs">
-                            <div className="flex justify-between items-center text-xs font-bold text-gray-700 mb-1.5">
-                              <span>{s.name}</span>
-                              <span className="text-[#2d5a3d]">{s.xp}</span>
+                        {(() => {
+                          const computedSubjects = computeSubjects(documents, deckCounts, decks);
+                          if (computedSubjects.length === 0) {
+                            return (
+                              <div className="col-span-2 text-center py-8 text-sm text-gray-400 font-medium">
+                                Chưa có dữ liệu để tính toán. Hãy thêm tài liệu hoặc tạo bộ flashcard!
+                              </div>
+                            );
+                          }
+                          return computedSubjects.map((s) => (
+                            <div key={s.name} className="p-3.5 bg-[#f4f7f4] border border-[#2d5a3d]/20 rounded-xl hover:border-[#2d5a3d]/40 transition-all shadow-2xs">
+                              <div className="flex justify-between items-center text-xs font-bold text-gray-700 mb-1.5">
+                                <span>{s.name}</span>
+                                <span className="text-[#2d5a3d]">{s.xp}</span>
+                              </div>
+                              <div className="h-2 bg-gray-200/80 rounded-full overflow-hidden border border-gray-200/40">
+                                <div className="h-full rounded-full transition-all" style={{ width: `${s.level}%`, backgroundColor: s.color }} />
+                              </div>
                             </div>
-                            <div className="h-2 bg-gray-200/80 rounded-full overflow-hidden border border-gray-200/40">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${s.level}%`, backgroundColor: s.color }} />
-                            </div>
-                          </div>
-                        ))}
+                          ));
+                        })()}
                       </div>
                     </CardContent>
                   </Card>
@@ -982,12 +1080,12 @@ export default function UserProfile() {
                     </CardHeader>
                     <CardContent className="pt-4 divide-y divide-gray-100/70">
                       {[
-                        { label: "Họ và tên", value: activeUser?.name || "Nguyễn Văn An", icon: User },
-                        { label: "Học vấn", value: activeUser?.education || "Đại học Quốc gia Hà Nội", icon: GraduationCap },
-                        { label: "Địa chỉ", value: activeUser?.address || "Hà Nội, Việt Nam", icon: MapPin },
-                        { label: "Ngày tham gia", value: "Tháng 1, 2024", icon: Calendar, readOnly: true },
-                        { label: "Email liên hệ", value: activeUser?.email || "vuhailam05@gmail.com", icon: Mail, readOnly: true },
-                        { label: "Số điện thoại", value: activeUser?.phone || "+84 912 345 678", icon: Phone }
+                        { label: "Họ và tên", value: activeUser?.name || "", icon: User },
+                        { label: "Học vấn", value: activeUser?.education || "", icon: GraduationCap },
+                        { label: "Địa chỉ", value: activeUser?.address || "", icon: MapPin },
+                        { label: "Ngày tham gia", value: activeUser?.created_at ? new Date(activeUser.created_at).toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' }) : "Chưa rõ", icon: Calendar, readOnly: true },
+                        { label: "Email liên hệ", value: activeUser?.email || "", icon: Mail, readOnly: true },
+                        { label: "Số điện thoại", value: activeUser?.phone || "Chưa cập nhật", icon: Phone }
                       ].map((item, index) => {
                         const isEditMode = isEditing && !item.readOnly;
                         
@@ -1397,25 +1495,34 @@ export default function UserProfile() {
               {activeTab === "achievements" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {achievements.map((a, i) => (
-                      <Card key={i} className={`border-0 shadow-sm transition-all ${a.earned ? "hover:shadow-md" : "opacity-50"}`}>
-                        <CardContent className="p-4 flex flex-col items-center gap-3 text-center">
-                          <div className={`w-14 h-14 rounded-2xl ${a.earned ? a.bg : "bg-gray-100"} flex items-center justify-center`}>
-                            <a.icon className={`w-7 h-7 ${a.earned ? a.color : "text-gray-300"}`} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-800">{a.label}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">{a.desc}</p>
-                            {a.earned && a.date && (
-                              <p className="text-xs text-[#4a7c59] mt-1 font-medium">Đạt được {a.date}</p>
-                            )}
-                            {!a.earned && (
-                              <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 mt-1">Chưa đạt</Badge>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                    {(() => {
+                      const dynAchievements = computeAchievements(
+                        activeUser?.streak ?? 0,
+                        analyticsData?.total_reviews || 0,
+                        analyticsData?.total_study_minutes || 0,
+                        analyticsData?.total_documents || documents.length || 0,
+                        analyticsData?.total_sessions || 0
+                      );
+                      return dynAchievements.map((a, i) => (
+                        <Card key={i} className={`border-0 shadow-sm transition-all ${a.earned ? "hover:shadow-md" : "opacity-50"}`}>
+                          <CardContent className="p-4 flex flex-col items-center gap-3 text-center">
+                            <div className={`w-14 h-14 rounded-2xl ${a.earned ? a.bg : "bg-gray-100"} flex items-center justify-center`}>
+                              <a.icon className={`w-7 h-7 ${a.earned ? a.color : "text-gray-300"}`} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-800">{a.label}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">{a.desc}</p>
+                              {a.earned && a.date && (
+                                <p className="text-xs text-[#4a7c59] mt-1 font-medium">{a.date}</p>
+                              )}
+                              {!a.earned && (
+                                <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 mt-1">Chưa đạt</Badge>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ));
+                    })()}
                   </div>
 
                   {/* Xếp hạng */}
@@ -1423,23 +1530,34 @@ export default function UserProfile() {
                     <CardHeader className="pb-3">
                       <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
                         <Trophy className="w-4.5 h-4.5 text-[#2d5a3d]" />
-                        Xếp hạng toàn cầu
+                        Điểm XP của bạn
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">
-                      <div className="grid grid-cols-3 gap-3">
-                        {[
-                          { label: "Tuần này", rank: "#42", total: "8,400", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/20" },
-                          { label: "Tháng này", rank: "#156", total: "24,000", bg: "bg-[#edf4fc]", border: "border-blue-200" },
-                          { label: "Mọi thời đại", rank: "#892", total: "120,000", bg: "bg-[#fcf3eb]", border: "border-orange-200" },
-                        ].map(r => (
-                          <div key={r.label} className={`p-3 rounded-xl ${r.bg} border ${r.border} text-center shadow-2xs`}>
-                            <p className="text-xl font-bold text-[#1a2e1c]">{r.rank}</p>
-                            <p className="text-[10px] text-gray-400 font-medium mt-0.5">{r.label}</p>
-                            <p className="text-[10px] text-[#4a7c59] font-medium mt-1">/ {r.total} người</p>
+                      {(() => {
+                        const { totalXP, level, currentLevelXP, xpToNextLevel, pct } = computeUserLevel(
+                          analyticsData?.total_study_minutes || 0,
+                          analyticsData?.total_reviews || 0,
+                          analyticsData?.total_sessions || 0,
+                          analyticsData?.total_documents || documents.length || 0,
+                          analyticsData?.total_notes || 0
+                        );
+                        return (
+                          <div className="grid grid-cols-3 gap-3">
+                            {[
+                              { label: "Tổng XP", rank: totalXP.toLocaleString(), unit: "XP", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/20" },
+                              { label: "Cấp hiện tại", rank: `Cấp ${level}`, unit: "", bg: "bg-[#edf4fc]", border: "border-blue-200" },
+                              { label: "Tiến độ cấp", rank: `${pct}%`, unit: `${currentLevelXP}/${xpToNextLevel} XP`, bg: "bg-[#fcf3eb]", border: "border-orange-200" },
+                            ].map(r => (
+                              <div key={r.label} className={`p-3 rounded-xl ${r.bg} border ${r.border} text-center shadow-2xs`}>
+                                <p className="text-xl font-bold text-[#1a2e1c]">{r.rank}</p>
+                                <p className="text-[10px] text-gray-400 font-medium mt-0.5">{r.label}</p>
+                                {r.unit && <p className="text-[10px] text-[#4a7c59] font-medium mt-1">{r.unit}</p>}
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
                 </div>

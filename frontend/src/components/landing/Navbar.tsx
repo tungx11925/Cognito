@@ -99,9 +99,6 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                 <Link href="/library" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
                   Tài liệu
                 </Link>
-                <Link href="/chat" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
-                  Trợ lý AI
-                </Link>
                 <Link href="/flashcards" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
                   Flashcards
                 </Link>
@@ -113,9 +110,6 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
               <>
                 <Link href="#features" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
                   Tính năng
-                </Link>
-                <Link href="#ai-chat" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
-                  Trợ lý AI
                 </Link>
                 <Link href="#flashcards" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
                   Flashcards
@@ -323,14 +317,12 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                 <>
                   <Link href="/library" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Thư viện của tôi</Link>
                   <Link href="/library" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tài liệu</Link>
-                  <Link href="/chat" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Trợ lý AI</Link>
                   <Link href="/flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
                 </>
               ) : (
                 <>
                   <Link href="#features" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tính năng</Link>
-                  <Link href="#ai-chat" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Trợ lý AI</Link>
                   <Link href="#flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
                 </>

@@ -242,6 +242,107 @@ router.get('/friends', authenticate, async (req: AuthRequest, res: Response) => 
   }
 });
 
+// Get another user's public/restricted profile
+router.get('/users/:targetUserId/profile', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const viewerId = req.user!.id;
+    const targetUserId = parseInt(req.params.targetUserId, 10);
+
+    if (isNaN(targetUserId)) {
+      return res.status(400).json({ error: 'Mã người dùng không hợp lệ' });
+    }
+
+    // Fetch target user info
+    const userResult = await db.query(
+      'SELECT id, name, email, phone, education, address, website, created_at, avatar_url, streak, privacy_setting FROM users WHERE id = $1',
+      [targetUserId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+    }
+
+    const targetUser = userResult.rows[0];
+
+    // Determine access allowance
+    let isAllowed = false;
+    if (viewerId === targetUserId) {
+      isAllowed = true;
+    } else if (targetUser.privacy_setting === 'public') {
+      isAllowed = true;
+    } else if (targetUser.privacy_setting === 'friends') {
+      // Check if they are accepted friends
+      const friendshipResult = await db.query(
+        `SELECT 1 FROM friendships 
+         WHERE ((user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)) 
+         AND status = 'accepted'`,
+        [viewerId, targetUserId]
+      );
+      if (friendshipResult.rows.length > 0) {
+        isAllowed = true;
+      }
+    }
+
+    if (!isAllowed) {
+      return res.status(200).json({
+        isRestricted: true,
+        privacy: targetUser.privacy_setting,
+        user: {
+          id: targetUser.id,
+          name: targetUser.name,
+          avatar_url: targetUser.avatar_url,
+          privacy_setting: targetUser.privacy_setting
+        }
+      });
+    }
+
+    // Full profile retrieval
+    // 1. Study dates
+    const studyDatesResult = await db.query(
+      'SELECT study_date FROM user_study_dates WHERE user_id = $1 ORDER BY study_date ASC',
+      [targetUserId]
+    );
+    const studyDates = studyDatesResult.rows.map(row => row.study_date);
+
+    // 2. Public flashcard decks
+    const decksResult = await db.query(
+      'SELECT * FROM flashcard_decks WHERE user_id = $1 AND is_public = true ORDER BY created_at DESC',
+      [targetUserId]
+    );
+
+    // 3. Documents
+    const documentsResult = await db.query(
+      'SELECT * FROM documents WHERE user_id = $1 ORDER BY created_at DESC',
+      [targetUserId]
+    );
+
+    // 4. Friends list (only accepted friends, excluding themselves)
+    const friendsResult = await db.query(
+      `SELECT u.id, u.name, u.email, u.phone, u.education, u.address, u.avatar_url, u.streak
+       FROM friendships f
+       JOIN users u ON (f.friend_id = u.id AND f.user_id = $1) OR (f.user_id = u.id AND f.friend_id = $1)
+       WHERE (f.user_id = $1 OR f.friend_id = $1) AND f.status = 'accepted' AND u.id != $1
+       ORDER BY u.name ASC`,
+      [targetUserId]
+    );
+
+    return res.status(200).json({
+      isRestricted: false,
+      user: {
+        ...targetUser,
+        study_dates: studyDates,
+        friends: friendsResult.rows,
+        decks: decksResult.rows,
+        documents: documentsResult.rows
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Error fetching target user profile:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 
 // ==========================================
 // DOCUMENTS ENDPOINTS

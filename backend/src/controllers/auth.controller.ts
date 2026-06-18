@@ -86,7 +86,7 @@ export const register = async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     
     const result = await db.query(
-      'INSERT INTO users (email, phone, password, name) VALUES ($1, $2, $3, $4) RETURNING id, email, phone, name, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date',
+      'INSERT INTO users (email, phone, password, name) VALUES ($1, $2, $3, $4) RETURNING id, email, phone, name, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting',
       [formattedEmail, phone, hashedPassword, name]
     );
     
@@ -197,7 +197,8 @@ export const login = async (req: Request, res: Response) => {
         is_verified: user.is_verified,
         streak: finalStreak,
         last_study_date: finalLastStudyDate,
-        study_dates: studyDates
+        study_dates: studyDates,
+        privacy_setting: user.privacy_setting
       } 
     });
   } catch (error: any) {
@@ -266,7 +267,8 @@ export const verify2FA = async (req: Request, res: Response) => {
         is_verified: user.is_verified,
         streak: finalStreak,
         last_study_date: finalLastStudyDate,
-        study_dates: studyDates
+        study_dates: studyDates,
+        privacy_setting: user.privacy_setting
       }
     });
   } catch (error: any) {
@@ -327,7 +329,7 @@ export const googleLogin = async (req: Request, res: Response) => {
       // User doesn't exist, create a new one
       const dummyPassword = await bcrypt.hash(Math.random().toString(36).slice(-10), 10);
       const insertResult = await db.query(
-        'INSERT INTO users (email, name, password) VALUES ($1, $2, $3) RETURNING id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date',
+        'INSERT INTO users (email, name, password) VALUES ($1, $2, $3) RETURNING id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting',
         [email, name || 'Google User', dummyPassword]
       );
       user = insertResult.rows[0];
@@ -370,7 +372,8 @@ export const googleLogin = async (req: Request, res: Response) => {
         is_verified: user.is_verified,
         streak: finalStreak,
         last_study_date: finalLastStudyDate,
-        study_dates: studyDates
+        study_dates: studyDates,
+        privacy_setting: user.privacy_setting
       }
     });
   } catch (error: any) {
@@ -386,7 +389,7 @@ export const getMe = async (req: any, res: Response) => {
     // Automatically update/calculate streak on session check
     await updateUserStreak(userId);
     
-    const result = await db.query('SELECT id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date FROM users WHERE id = $1', [userId]);
+    const result = await db.query('SELECT id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting FROM users WHERE id = $1', [userId]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Người dùng không tồn tại' });
@@ -481,7 +484,7 @@ export const updateAvatar = async (req: any, res: Response) => {
 
     // Update user in database
     const dbResult = await db.query(
-      'UPDATE users SET avatar_url = $1 WHERE id = $2 RETURNING id, email, name, created_at, avatar_url, is_verified, streak, last_study_date',
+      'UPDATE users SET avatar_url = $1 WHERE id = $2 RETURNING id, email, name, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting',
       [avatarUrl, userId]
     );
 
@@ -509,7 +512,7 @@ export const updateAvatar = async (req: any, res: Response) => {
 export const updateProfile = async (req: any, res: Response) => {
   try {
     const userId = req.user.id;
-    const { name, phone, education, address } = req.body;
+    const { name, phone, education, address, privacy_setting } = req.body;
 
     if (!name || name.trim().length < 2) {
       return res.status(400).json({ error: 'Tên người dùng phải có ít nhất 2 ký tự' });
@@ -524,9 +527,12 @@ export const updateProfile = async (req: any, res: Response) => {
       return res.status(400).json({ error: 'Số điện thoại không hợp lệ' });
     }
 
+    const validPrivacySettings = ['public', 'private', 'friends'];
+    const finalPrivacySetting = validPrivacySettings.includes(privacy_setting) ? privacy_setting : 'public';
+
     const dbResult = await db.query(
-      'UPDATE users SET name = $1, phone = $2, education = $3, address = $4 WHERE id = $5 RETURNING id, email, name, phone, education, address, created_at, avatar_url, is_verified, streak, last_study_date',
-      [name.trim(), normalizedPhone, education || '', address || '', userId]
+      'UPDATE users SET name = $1, phone = $2, education = $3, address = $4, privacy_setting = $5 WHERE id = $6 RETURNING id, email, name, phone, education, address, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting',
+      [name.trim(), normalizedPhone, education || '', address || '', finalPrivacySetting, userId]
     );
 
     const user = dbResult.rows[0];
