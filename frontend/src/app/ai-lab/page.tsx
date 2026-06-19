@@ -6,6 +6,7 @@ import { apiFetch } from "@/services/api";
 import { getDecks, createFlashcard, createDeck } from "@/services/flashcard.service";
 import mammoth from "mammoth";
 import { MainLayout } from "@/components/layout/MainLayout";
+import toast from "react-hot-toast";
 
 const suggestions = [
   "Generate 20 cards from Algorithms Chapter 4",
@@ -50,11 +51,11 @@ export default function AILabPage() {
         const result = await mammoth.extractRawText({ arrayBuffer });
         setPrompt(result.value.substring(0, 5000));
       } else {
-        alert("Hiện tại hệ thống chỉ hỗ trợ trích xuất text từ file .txt và .docx trực tiếp trên trình duyệt.");
+        toast.error("Hiện tại hệ thống chỉ hỗ trợ trích xuất text từ file .txt và .docx trực tiếp trên trình duyệt.");
       }
     } catch (err) {
       console.error(err);
-      alert("Lỗi khi đọc file!");
+      toast.error("Lỗi khi đọc file!");
     }
   };
 
@@ -71,43 +72,50 @@ export default function AILabPage() {
       });
       
       if (response && response.cards) {
-        // Add fake confidence scores for UI flair
+        // Normalize keys and add fake confidence scores for UI flair
         const cardsWithConfidence = response.cards.map((c: any) => ({
-          ...c,
+          front: c.front || c.Front || c.question || c.Question || c.q || 'Không có câu hỏi',
+          back: c.back || c.Back || c.answer || c.Answer || c.a || 'Không có câu trả lời',
           confidence: Math.floor(Math.random() * 15) + 85
         }));
         setGeneratedCards(cardsWithConfidence);
       }
     } catch (err: any) {
-      alert("Lỗi tạo flashcard: " + err.message);
+      toast.error("Lỗi tạo flashcard: " + err.message);
     } finally {
       setGenerating(false);
     }
   };
 
   const handleSaveToDeck = async () => {
-    if (!selectedDeckId) return alert("Vui lòng chọn bộ thẻ!");
+    if (!selectedDeckId) { toast.error("Vui lòng chọn bộ thẻ!"); return; }
     setIsSaving(true);
     try {
       let targetDeckId = selectedDeckId;
       if (selectedDeckId === 'new') {
-        if (!newDeckName) return alert("Vui lòng nhập tên bộ thẻ mới!");
+        if (!newDeckName) { toast.error("Vui lòng nhập tên bộ thẻ mới!"); return; }
         const newDeck = await createDeck(newDeckName, "Tạo tự động từ AI Lab");
         targetDeckId = newDeck.id;
         setDecks([newDeck, ...decks]);
       }
       
       // Save all cards
-      await Promise.all(
+      const results = await Promise.all(
         generatedCards.map(card => createFlashcard(targetDeckId as number, card.front, card.back))
       );
       
-      alert("Đã lưu toàn bộ thẻ thành công!");
+      const errors = results.filter(r => r && r.error);
+      if (errors.length > 0) {
+        toast.error("Đã xảy ra lỗi khi lưu một số thẻ: " + errors[0].error);
+        return;
+      }
+      
+      toast.success("Đã lưu toàn bộ thẻ thành công!");
       setShowSaveModal(false);
       setGeneratedCards([]);
       setPrompt("");
     } catch (err: any) {
-      alert("Lỗi lưu thẻ: " + err.message);
+      toast.error("Lỗi lưu thẻ: " + err.message);
     } finally {
       setIsSaving(false);
     }

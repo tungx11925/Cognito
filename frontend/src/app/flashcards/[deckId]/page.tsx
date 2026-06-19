@@ -214,7 +214,7 @@ export default function FlashcardDeckPage() {
         getDecks()
       ]);
 
-      const loadedCards: Flashcard[] = allCards || [];
+      const loadedCards: Flashcard[] = Array.isArray(allCards) ? allCards : [];
       setCards(loadedCards);
 
       // ── Restore study progress from localStorage ─────────────────────────

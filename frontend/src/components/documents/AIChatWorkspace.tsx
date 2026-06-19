@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { chatWithAI, generateQuiz } from '@/services/ai.service';
 import { Send, Bot, User, Brain, AlertCircle, PlayCircle, Loader2, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useStudy } from '@/context/StudyContext';
 
 interface Props {
@@ -143,16 +144,37 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
   };
 
   const clearHistory = () => {
-    if (confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử trò chuyện?')) {
-      const initialMsg: Message = {
-        id: 'welcome',
-        role: 'ai',
-        content: `Xin chào! 👋 Mình là **Trợ lý EduShare AI**.\nMình đã chuẩn bị sẵn sàng tài liệu **"${documentTitle}"**.\nBạn muốn mình giúp gì nào?`,
-        type: 'text'
-      };
-      setMessages([initialMsg]);
-      localStorage.setItem(`chat_history_${documentId}`, JSON.stringify([initialMsg]));
-    }
+    toast((t) => (
+      <div className="flex flex-col gap-3 font-sans">
+        <p className="text-sm font-semibold text-gray-900">
+          Bạn có chắc chắn muốn xóa toàn bộ lịch sử trò chuyện?
+        </p>
+        <div className="flex gap-2 justify-end mt-2">
+          <button 
+            className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Hủy bỏ
+          </button>
+          <button 
+            className="px-4 py-2 text-xs font-bold text-white bg-rose-500 rounded-xl hover:bg-rose-600 transition-colors"
+            onClick={() => {
+              toast.dismiss(t.id);
+              const initialMsg: Message = {
+                id: 'welcome',
+                role: 'ai',
+                content: `Xin chào! 👋 Mình là **Trợ lý EduShare AI**.\nMình đã chuẩn bị sẵn sàng tài liệu **"${documentTitle}"**.\nBạn muốn mình giúp gì nào?`,
+                type: 'text'
+              };
+              setMessages([initialMsg]);
+              localStorage.setItem(`chat_history_${documentId}`, JSON.stringify([initialMsg]));
+            }}
+          >
+            Xóa lịch sử
+          </button>
+        </div>
+      </div>
+    ), { duration: Infinity, style: { borderRadius: '16px' } });
   };
 
   return (

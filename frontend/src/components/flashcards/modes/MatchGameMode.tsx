@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Clock, Play, RotateCcw } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { postMatchLeaderboard, getMatchLeaderboard } from '@/services/flashcard.service';
 
 interface MatchItem {
@@ -55,7 +56,7 @@ export default function MatchGameMode({
 
   const startGame = () => {
     if (cards.length < 2) {
-      alert("Cần ít nhất 2 thẻ để chơi ghép thẻ!");
+      toast.error("Cần ít nhất 2 thẻ để chơi ghép thẻ!");
       return;
     }
     

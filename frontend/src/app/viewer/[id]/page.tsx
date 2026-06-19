@@ -13,6 +13,7 @@ import { createDeck } from '@/services/flashcard.service';
 import dynamic from 'next/dynamic';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 
 const DocumentViewerWrapper = dynamic(() => import('@/components/documents/DocumentViewerWrapper'), {
   ssr: false,
@@ -105,7 +106,7 @@ export default function DocumentViewerPage() {
       router.push(`/flashcards/${deckResult.id}`);
     } catch (error) {
       console.error('Lỗi khi tạo flashcard:', error);
-      alert('Không thể tạo flashcard lúc này. Hãy chắc chắn bạn đã cấu hình GROQ API KEY!');
+      toast.error('Không thể tạo flashcard lúc này. Hãy chắc chắn bạn đã cấu hình GROQ API KEY!');
       setIsGeneratingCards(false);
     }
   };

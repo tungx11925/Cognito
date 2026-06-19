@@ -88,7 +88,7 @@ export async function getOrCreateDailyTasks(userId: number) {
     
     // Check if today's tasks already exist
     const checkRes = await db.query(
-      'SELECT * FROM user_daily_tasks WHERE user_id = $1 AND task_date = $2',
+      'SELECT * FROM user_daily_tasks WHERE user_id = $1 AND activity_date = $2',
       [userId, todayStr]
     );
     
@@ -128,9 +128,9 @@ export async function getOrCreateDailyTasks(userId: number) {
     for (const task of defaultTasks) {
       try {
         const res = await db.query(
-          `INSERT INTO user_daily_tasks (user_id, task_date, task_type, title, description, target_value, current_value, is_completed, is_notified)
+          `INSERT INTO user_daily_tasks (user_id, activity_date, task_type, title, description, target_value, current_value, completed, is_notified)
            VALUES ($1, $2, $3, $4, $5, $6, 0, false, false)
-           ON CONFLICT (user_id, task_date, task_type) DO NOTHING
+           ON CONFLICT (user_id, activity_date, task_type) DO NOTHING
            RETURNING *`,
           [userId, todayStr, task.type, task.title, task.description, task.target]
         );
@@ -145,7 +145,7 @@ export async function getOrCreateDailyTasks(userId: number) {
     // Re-fetch in case ON CONFLICT triggered DO NOTHING
     if (insertedTasks.length === 0) {
       const finalRes = await db.query(
-        'SELECT * FROM user_daily_tasks WHERE user_id = $1 AND task_date = $2',
+        'SELECT * FROM user_daily_tasks WHERE user_id = $1 AND activity_date = $2',
         [userId, todayStr]
       );
       return finalRes.rows;
@@ -169,18 +169,18 @@ export async function incrementTaskProgress(userId: number, taskType: string, in
     const res = await db.query(
       `UPDATE user_daily_tasks
        SET current_value = LEAST(current_value + $1, target_value)
-       WHERE user_id = $2 AND task_date = $3 AND task_type = $4
+       WHERE user_id = $2 AND activity_date = $3 AND task_type = $4
        RETURNING *`,
       [incrementValue, userId, todayStr, taskType]
     );
     
     if (res.rows.length > 0) {
       const task = res.rows[0];
-      // If completed, update is_completed
-      if (task.current_value >= task.target_value && !task.is_completed) {
+      // If completed, update completed
+      if (task.current_value >= task.target_value && !task.completed) {
         const completedRes = await db.query(
           `UPDATE user_daily_tasks
-           SET is_completed = true
+           SET completed = true
            WHERE id = $1
            RETURNING *`,
           [task.id]
@@ -1484,6 +1484,12 @@ ${note_content}
       ];
     }
     
+    // Normalize keys just in case AI returns 'Front' or 'question' instead of 'front'
+    cards = cards.map((c: any) => ({
+      front: c.front || c.Front || c.question || c.Question || c.q || 'Không có câu hỏi',
+      back: c.back || c.Back || c.answer || c.Answer || c.a || 'Không có câu trả lời',
+    }));
+
     const insertedCards = [];
     if (deck_id && cards.length > 0) {
       for (const card of cards) {

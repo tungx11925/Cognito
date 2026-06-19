@@ -60,18 +60,7 @@ export default function MarketplacePage() {
     }
   };
 
-  const handleUnlock = async (resource: MarketplaceResource) => {
-    if (!isAuthenticated) {
-      setShowLoginModal(true);
-      return;
-    }
-    
-    // Simulate Confirmation for paid items
-    if (resource.price > 0) {
-      const confirm = window.confirm(`Bạn có chắc chắn muốn mở khóa "${resource.title}" với giá ${resource.price} xu?`);
-      if (!confirm) return;
-    }
-
+  const executeUnlock = async (resource: MarketplaceResource) => {
     setUnlocking(resource.id);
     try {
       const token = localStorage.getItem('token');
@@ -100,6 +89,43 @@ export default function MarketplacePage() {
     } finally {
       setUnlocking(null);
     }
+  };
+
+  const handleUnlock = async (resource: MarketplaceResource) => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
+    
+    if (resource.price > 0) {
+      toast((t) => (
+        <div className="flex flex-col gap-3 font-sans">
+          <p className="text-sm font-semibold text-gray-900">
+            Bạn có chắc muốn mở khóa "{resource.title}" với giá {resource.price} xu?
+          </p>
+          <div className="flex gap-2 justify-end mt-2">
+            <button 
+              className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+              onClick={() => toast.dismiss(t.id)}
+            >
+              Hủy bỏ
+            </button>
+            <button 
+              className="px-4 py-2 text-xs font-bold text-white bg-amber-500 rounded-xl hover:bg-amber-600 transition-colors"
+              onClick={() => {
+                toast.dismiss(t.id);
+                executeUnlock(resource);
+              }}
+            >
+              Đồng ý mở khóa
+            </button>
+          </div>
+        </div>
+      ), { duration: Infinity, style: { borderRadius: '16px' } });
+      return;
+    }
+
+    executeUnlock(resource);
   };
 
   const filteredResources = resources.filter(res => 

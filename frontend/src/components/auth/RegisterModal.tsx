@@ -9,6 +9,7 @@ import { googleLogin } from '../../services/auth.service';
 import Lottie from 'lottie-react';
 import loginAnimation from './login-animation.json';
 import registerAnimation from './register-animation.json';
+import toast from 'react-hot-toast';
 
 interface RegisterModalProps {
   isOpen: boolean;
@@ -436,9 +437,30 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
 
   const handleCloseAttempt = () => {
     if (hasData) {
-      if (window.confirm("Bạn có chắc chắn muốn thoát? Các thông tin bạn vừa nhập sẽ bị mất.")) {
-        onClose();
-      }
+      toast((t) => (
+        <div className="flex flex-col gap-3 font-sans">
+          <p className="text-sm font-semibold text-gray-900">
+            Bạn có chắc chắn muốn thoát? Các thông tin bạn vừa nhập sẽ bị mất.
+          </p>
+          <div className="flex gap-2 justify-end mt-2">
+            <button 
+              className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+              onClick={() => toast.dismiss(t.id)}
+            >
+              Hủy bỏ
+            </button>
+            <button 
+              className="px-4 py-2 text-xs font-bold text-white bg-rose-500 rounded-xl hover:bg-rose-600 transition-colors"
+              onClick={() => {
+                toast.dismiss(t.id);
+                onClose();
+              }}
+            >
+              Thoát
+            </button>
+          </div>
+        </div>
+      ), { duration: Infinity, style: { borderRadius: '16px' } });
     } else {
       onClose();
     }
