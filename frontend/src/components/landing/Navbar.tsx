@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown, User, Settings, LogOut, Layout, Trophy, Sparkles } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
@@ -176,6 +176,19 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
 
                         {/* Menu Options */}
                         <div className="p-1">
+                          {activeUser?.email === 'admin@edushare.com' && (
+                            <button
+                              onClick={() => {
+                                setDropdownOpen(false);
+                                router.push('/admin');
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-left"
+                            >
+                              <Shield size={14} className="text-emerald-600" />
+                              Quản trị hệ thống
+                            </button>
+                          )}
+
                           <button
                             onClick={() => {
                               setDropdownOpen(false);

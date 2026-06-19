@@ -156,12 +156,12 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
   };
 
   return (
-    <div className="h-full flex flex-col relative">
+    <div className="flex-1 flex flex-col relative bg-[#EBE9E4] overflow-hidden">
       {/* Header with Clear Button */}
       <div className="absolute top-2 right-2 z-10">
         <button 
           onClick={clearHistory}
-          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shadow-sm bg-white/80 backdrop-blur-sm border border-gray-100"
+          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shadow-sm bg-white border border-gray-300"
           title="Xóa lịch sử trò chuyện"
         >
           <Trash2 size={16} />
@@ -169,18 +169,18 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
       </div>
 
       {/* Chat Messages Area */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-white pb-32 pt-10">
+      <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-[#EBE9E4] pb-32 pt-10">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0 shadow-sm ${msg.role === 'ai' ? 'bg-gradient-to-br from-[#0D2B24] to-[#1a4a3b]' : 'bg-gray-200 text-gray-600'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0 shadow-sm ${msg.role === 'ai' ? 'bg-gradient-to-br from-[#0D2B24] to-[#1a4a3b]' : 'bg-gray-300 border border-gray-400/50 text-gray-700'}`}>
               {msg.role === 'ai' ? <Bot size={18} /> : <User size={18} />}
             </div>
             
             <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} max-w-[90%]`}>
-              <div className={`border shadow-sm rounded-2xl p-4 text-[14px] leading-relaxed ${
+              <div className={`border rounded-2xl p-4 text-[14px] leading-relaxed ${
                 msg.role === 'user' 
-                  ? 'bg-[#0D2B24] text-white border-[#0D2B24] rounded-tr-sm' 
-                  : 'bg-[#FAF8F5] border-gray-100 text-gray-800 rounded-tl-sm'
+                  ? 'bg-[#0D2B24] text-white border-[#0b1f1a] rounded-tr-sm shadow-md' 
+                  : 'bg-white border-gray-300 text-gray-800 rounded-tl-sm shadow-md'
               }`}>
                 <div className="whitespace-pre-wrap">{renderMarkdown(msg.content)}</div>
                 
@@ -188,13 +188,13 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button 
                       onClick={() => handleSend('Tóm tắt nội dung tài liệu')}
-                      className="text-[12px] bg-white border border-gray-200 px-3 py-1.5 rounded-full text-gray-700 hover:text-[#0D2B24] hover:border-[#0D2B24] transition-colors shadow-sm"
+                      className="text-[12px] bg-white border border-gray-300/80 px-3.5 py-1.5 rounded-full text-gray-700 hover:text-[#0D2B24] hover:border-[#0D2B24] transition-colors shadow-md font-semibold"
                     >
                       📝 Tóm tắt
                     </button>
                     <button 
                       onClick={handleGenerateQuiz}
-                      className="text-[12px] bg-white border border-gray-200 px-3 py-1.5 rounded-full text-gray-700 hover:text-[#0D2B24] hover:border-[#0D2B24] transition-colors shadow-sm"
+                      className="text-[12px] bg-white border border-gray-300/80 px-3.5 py-1.5 rounded-full text-gray-700 hover:text-[#0D2B24] hover:border-[#0D2B24] transition-colors shadow-md font-semibold"
                     >
                       ✏️ Tạo bài trắc nghiệm
                     </button>
@@ -217,7 +217,7 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0D2B24] to-[#1a4a3b] flex items-center justify-center text-white shrink-0 shadow-sm">
               <Bot size={18} />
             </div>
-            <div className="bg-[#FAF8F5] border border-gray-100 shadow-sm rounded-2xl rounded-tl-sm p-4 text-[14px] text-gray-800 flex items-center gap-2">
+            <div className="bg-white border border-gray-300 shadow-md rounded-2xl rounded-tl-sm p-4 text-[14px] text-gray-800 flex items-center gap-2">
               <Loader2 size={16} className="animate-spin text-[#0D2B24]" /> AI đang suy nghĩ...
             </div>
           </div>
@@ -226,8 +226,8 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
       </div>
       
       {/* Fixed Input Chat Box */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent pt-8">
-        <div className="relative group shadow-sm rounded-2xl overflow-hidden border border-gray-200 bg-white focus-within:border-[#0D2B24] focus-within:ring-1 focus-within:ring-[#0D2B24] transition-all">
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#EBE9E4] via-[#EBE9E4] to-transparent pt-8">
+        <div className="relative group shadow-lg rounded-2xl overflow-hidden border border-gray-300 bg-white focus-within:border-[#0D2B24] focus-within:ring-1 focus-within:ring-[#0D2B24] transition-all">
           <textarea 
             value={input}
             onChange={(e) => setInput(e.target.value)}

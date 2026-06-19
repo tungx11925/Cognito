@@ -5,7 +5,8 @@ import { authenticate } from '../middlewares/auth.middleware';
 const router = Router();
 
 // AI routes (Protected)
-router.post('/chat', authenticate, chatWithDocument);
+// NOTE: /chat is commented out here because it conflicts with the /ai/chat route in app.routes.ts which supports document_id and rich offline/online fallback features.
+// router.post('/chat', authenticate, chatWithDocument);
 router.post('/flashcards/generate', authenticate, generateFlashcards);
 
 export default router;

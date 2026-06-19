@@ -47,24 +47,24 @@ export default function PomodoroWidget() {
   const progressPercent = ((totalTime - timeLeft) / totalTime) * 100;
 
   return (
-    <div className="bg-[#FAF8F5] rounded-lg border border-gray-200/60 p-3 shadow-sm flex flex-col gap-2 relative overflow-hidden">
+    <div className="relative overflow-hidden w-full">
       {/* Background Progress Bar */}
-      <div className="absolute inset-0 z-0 bg-white" />
+      <div className="absolute inset-0 z-0 bg-gray-50 rounded-xl border border-gray-200/60" />
       <motion.div 
-        className={`absolute inset-y-0 left-0 z-0 opacity-10 ${isBreak ? 'bg-emerald-500' : 'bg-[#0D2B24]'}`}
+        className={`absolute inset-y-0 left-0 z-0 opacity-10 rounded-l-xl ${isBreak ? 'bg-emerald-500' : 'bg-[#0D2B24]'}`}
         initial={{ width: 0 }}
         animate={{ width: `${progressPercent}%` }}
         transition={{ duration: 1, ease: "linear" }}
       />
       
-      <div className="flex items-center justify-between z-10">
-        <div className="flex items-center gap-2">
-          <div className={`flex items-center justify-center w-7 h-7 rounded-md ${isBreak ? 'bg-emerald-100 text-emerald-600' : 'bg-[#0D2B24]/10 text-[#0D2B24]'}`}>
-             {isBreak ? <Coffee size={14} /> : <BrainCircuit size={14} />}
+      <div className="flex items-center justify-between z-10 relative p-3">
+        <div className="flex items-center gap-3">
+          <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${isBreak ? 'bg-emerald-100 text-emerald-600' : 'bg-[#0D2B24]/10 text-[#0D2B24]'}`}>
+             {isBreak ? <Coffee size={15} /> : <BrainCircuit size={15} />}
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{isBreak ? 'Nghỉ ngơi' : 'Tập trung'}</span>
-            <span className="font-mono text-sm font-bold text-gray-800 leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{isBreak ? 'Nghỉ ngơi' : 'Tập trung'}</span>
+            <span className="font-mono text-[16px] font-bold text-gray-800 leading-none mt-0.5" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {formatTime(timeLeft)}
             </span>
           </div>
@@ -73,7 +73,7 @@ export default function PomodoroWidget() {
         <div className="flex items-center gap-1.5">
           <button 
             onClick={toggleTimer}
-            className={`p-1.5 rounded-md flex items-center justify-center transition-colors shadow-sm ${
+            className={`p-2 rounded-lg flex items-center justify-center transition-colors shadow-sm ${
               isBreak ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-[#0D2B24] text-white hover:bg-[#154238]'
             }`}
           >
@@ -81,7 +81,7 @@ export default function PomodoroWidget() {
           </button>
           <button 
             onClick={resetTimer}
-            className="p-1.5 rounded-md bg-white border border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50 transition-colors shadow-sm"
+            className="p-2 rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50 transition-colors shadow-sm"
           >
             <RotateCcw size={14} />
           </button>
