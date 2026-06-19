@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-
+import toast from 'react-hot-toast';
 export interface DocumentItem {
   id: number;
   user_id: number;
@@ -920,9 +920,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
-  // API Call: Delete Document
-  const handleDeleteDocument = async (id: number) => {
-    if (!confirm("Bạn có chắc chắn muốn xóa tài liệu này khỏi thư viện?")) return;
+  const executeDeleteDocument = async (id: number) => {
     try {
       const res = await fetch(`${API_BASE_URL}/documents/${id}`, {
         method: 'DELETE',
@@ -937,6 +935,33 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } catch (e) {
       triggerMessage("Lỗi khi xóa tài liệu", "error");
     }
+  };
+
+  const handleDeleteDocument = async (id: number) => {
+    toast((t) => (
+      <div className="flex flex-col gap-3 font-sans">
+        <p className="text-sm font-semibold text-gray-900">
+          Bạn có chắc chắn muốn xóa tài liệu này khỏi thư viện?
+        </p>
+        <div className="flex gap-2 justify-end mt-2">
+          <button 
+            className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Hủy bỏ
+          </button>
+          <button 
+            className="px-4 py-2 text-xs font-bold text-white bg-rose-500 rounded-xl hover:bg-rose-600 transition-colors"
+            onClick={() => {
+              toast.dismiss(t.id);
+              executeDeleteDocument(id);
+            }}
+          >
+            Xóa tài liệu
+          </button>
+        </div>
+      </div>
+    ), { duration: Infinity, style: { borderRadius: '16px' } });
   };
 
   // API Call: Edit Document (Rename / Edit)

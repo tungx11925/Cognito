@@ -39,12 +39,16 @@ db.query(`
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
   
+  ALTER TABLE user_daily_tasks ADD COLUMN IF NOT EXISTS is_notified BOOLEAN DEFAULT false;
+  CREATE UNIQUE INDEX IF NOT EXISTS unique_user_daily_tasks ON user_daily_tasks(user_id, activity_date, task_type);
+  
   CREATE TABLE IF NOT EXISTS user_study_dates (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     study_date DATE NOT NULL DEFAULT CURRENT_DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE UNIQUE INDEX IF NOT EXISTS unique_user_study_dates ON user_study_dates(user_id, study_date);
   
   -- Documents enhancements
   ALTER TABLE documents ADD COLUMN IF NOT EXISTS visibility VARCHAR(50) DEFAULT 'private';

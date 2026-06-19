@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getNotesByDocument, saveNote } from '@/services/note.service';
 import { Check, Loader2, Download, Trash2, BookOpen, Sparkles, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { generateFlashcardsFromNote, getDecks, createDeck, createFlashcard } from '@/services/flashcard.service';
 
 interface Props {
@@ -90,10 +91,31 @@ export default function SmartNotesWorkspace({ documentId }: Props) {
   };
 
   const handleClear = () => {
-    if (confirm('Bạn có chắc chắn muốn xóa toàn bộ ghi chú?')) {
-      setContent('');
-      setSaveStatus('saving');
-    }
+    toast((t) => (
+      <div className="flex flex-col gap-3 font-sans">
+        <p className="text-sm font-semibold text-gray-900">
+          Bạn có chắc chắn muốn xóa toàn bộ ghi chú?
+        </p>
+        <div className="flex gap-2 justify-end mt-2">
+          <button 
+            className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Hủy bỏ
+          </button>
+          <button 
+            className="px-4 py-2 text-xs font-bold text-white bg-rose-500 rounded-xl hover:bg-rose-600 transition-colors"
+            onClick={() => {
+              toast.dismiss(t.id);
+              setContent('');
+              setSaveStatus('saving');
+            }}
+          >
+            Xóa ghi chú
+          </button>
+        </div>
+      </div>
+    ), { duration: Infinity, style: { borderRadius: '16px' } });
   };
 
   const handleDownload = () => {
@@ -109,7 +131,7 @@ export default function SmartNotesWorkspace({ documentId }: Props) {
 
   const handleOpenDeckModal = () => {
     if (!content.trim()) {
-      alert("Vui lòng ghi chú thêm nội dung trước khi tạo flashcard.");
+      toast.error("Vui lòng ghi chú thêm nội dung trước khi tạo flashcard.");
       return;
     }
     fetchDecks();
@@ -128,7 +150,7 @@ export default function SmartNotesWorkspace({ documentId }: Props) {
       }
 
       if (!finalDeckId) {
-        alert("Vui lòng chọn hoặc tạo bộ bài (Deck) mới.");
+        toast.error("Vui lòng chọn hoặc tạo bộ bài (Deck) mới.");
         setIsGenerating(false);
         return;
       }
@@ -143,7 +165,7 @@ export default function SmartNotesWorkspace({ documentId }: Props) {
       const textToGenerate = selection && selection.length > 10 ? selection : content;
 
       if (!textToGenerate || textToGenerate.trim() === '') {
-        alert("Ghi chú của bạn đang trống, không thể tạo flashcard!");
+        toast.error("Ghi chú của bạn đang trống, không thể tạo flashcard!");
         setIsGenerating(false);
         return;
       }
@@ -178,7 +200,7 @@ export default function SmartNotesWorkspace({ documentId }: Props) {
       const response = await generateFlashcardsFromNote(textToGenerate, Number(finalDeckId), documentId);
       
       if (!response.cards || response.cards.length === 0) {
-        alert("AI không thể trích xuất được khái niệm nào từ nội dung này. Vui lòng thử bôi đen một đoạn văn bản rõ ràng hơn có chứa định nghĩa hoặc từ khóa.");
+        toast.error("AI không thể trích xuất được khái niệm nào từ nội dung này. Vui lòng thử bôi đen một đoạn văn bản rõ ràng hơn.");
         setIsGenerating(false);
         return;
       }
@@ -188,7 +210,7 @@ export default function SmartNotesWorkspace({ documentId }: Props) {
       setShowDeckModal(false);
       setNewDeckName('');
     } catch (error: any) {
-      alert("Lỗi khi tạo flashcard: " + error.message);
+      toast.error("Lỗi khi tạo flashcard: " + error.message);
     } finally {
       setIsGenerating(false);
     }
