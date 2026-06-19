@@ -18,7 +18,6 @@ export default function CommunityLibraryPage() {
     activeUser,
     triggerMessage,
   } = useStudy();
-  
   const router = useRouter();
   const [decks, setDecks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +120,10 @@ export default function CommunityLibraryPage() {
                   <h3 className="text-lg font-bold text-gray-900 line-clamp-2 mb-1">{deck.name}</h3>
                   <p className="text-sm text-gray-500 line-clamp-2 mb-4 h-10">{deck.description || 'Không có mô tả'}</p>
                   
-                  <div className="flex items-center gap-2 mt-auto pt-4 border-t border-gray-100">
+                  <div 
+                    onClick={() => router.push(`/profile/${deck.user_id}`)}
+                    className="flex items-center gap-2 mt-auto pt-4 border-t border-gray-100 cursor-pointer hover:opacity-80 transition-opacity"
+                  >
                     {deck.avatar_url ? (
                       <img src={deck.avatar_url} alt={deck.author_name} className="w-6 h-6 rounded-full" />
                     ) : (
