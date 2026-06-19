@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
 
 interface NavbarProps {
@@ -17,6 +17,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const { logout, taskCompletionToast, setTaskCompletionToast, setShowPremiumModal } = useStudy();
   const [toastProgress, setToastProgress] = useState(60);
   const [showToast, setShowToast] = useState(false);
@@ -101,6 +102,17 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                 </Link>
                 <Link href="/flashcards" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
                   Flashcards
+                </Link>
+                <Link
+                  href="/ai-test"
+                  className={`transition-colors duration-200 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${
+                    pathname === '/ai-test'
+                      ? 'bg-[#1a3d28] text-white'
+                      : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
+                  }`}
+                >
+                  <FileQuestion size={13} />
+                  Bài tập AI
                 </Link>
                 <Link href="/community" className="transition-colors duration-200 text-sm font-semibold text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
                   Cộng đồng
@@ -331,6 +343,9 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link href="/library" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Thư viện của tôi</Link>
                   <Link href="/library" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tài liệu</Link>
                   <Link href="/flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
+                  <Link href="/ai-test" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
+                    <FileQuestion size={16} /> Bài tập AI
+                  </Link>
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
                 </>
               ) : (
