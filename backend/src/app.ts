@@ -7,6 +7,7 @@ import shareRoutes from './routes/share.routes';
 import paymentRoutes from './routes/payment.routes';
 import aiRoutes from './routes/ai.routes';
 import marketplaceRoutes from './routes/marketplace.routes';
+import adminRoutes from './routes/admin.routes';
 import path from 'path';
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api/shares', shareRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api', appRoutes);
 
 // Serve static uploaded files

@@ -13,6 +13,7 @@ db.query(`
   ALTER TABLE users ADD COLUMN IF NOT EXISTS last_study_date TIMESTAMP DEFAULT NULL;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_balance INTEGER DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_setting VARCHAR(20) NOT NULL DEFAULT 'public';
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user';
   
   CREATE TABLE IF NOT EXISTS user_daily_activity (
     id SERIAL PRIMARY KEY,
@@ -94,6 +95,7 @@ db.query(`
     ease_factor REAL DEFAULT 2.5,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
+  UPDATE users SET role = 'admin' WHERE email = 'admin@edushare.com';
 `).then(() => {
   console.log('Database schema bootstrap completed successfully.');
 }).catch((err) => {

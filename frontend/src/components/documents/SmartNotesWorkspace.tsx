@@ -245,7 +245,7 @@ export default function SmartNotesWorkspace({ documentId }: Props) {
         </div>
       </div>
       
-      <div className="flex-1 relative bg-[#FAF8F5] rounded-xl border border-gray-200 overflow-hidden shadow-inner group">
+      <div className="flex-1 relative bg-[#FAF9F5] rounded-xl border border-gray-300 overflow-hidden shadow-inner group">
         <textarea 
           id="note-textarea"
           className="absolute inset-0 w-full h-full p-5 bg-transparent resize-none text-[14px] leading-relaxed text-gray-800 placeholder-gray-400 focus:outline-none custom-scrollbar"
@@ -253,7 +253,7 @@ export default function SmartNotesWorkspace({ documentId }: Props) {
           value={content}
           onChange={handleChange}
           style={{
-            backgroundImage: 'repeating-linear-gradient(transparent, transparent 27px, #e5e7eb 28px)',
+            backgroundImage: 'repeating-linear-gradient(transparent, transparent 27px, #E5E2DC 28px)',
             backgroundAttachment: 'local',
             lineHeight: '28px',
             paddingTop: '28px'

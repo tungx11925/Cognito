@@ -200,15 +200,15 @@ export default function DocumentViewerPage() {
       </AnimatePresence>
       
       {/* 1. FIXED TOPBAR (Full width, h-14) */}
-      <header className="h-14 px-6 bg-[#FAF8F5] border-b border-gray-200/60 flex items-center justify-between shrink-0 z-20 relative">
+      <header className="h-14 px-6 bg-white border-b border-gray-200/80 flex items-center justify-between shrink-0 z-20 relative shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
         <div className="flex items-center gap-4 min-w-0">
-          <Link href="/library" className="p-1.5 -ml-1.5 text-gray-500 hover:text-[#0D2B24] rounded-lg hover:bg-gray-200/50 transition-colors shrink-0">
+          <Link href="/library" className="p-1.5 -ml-1.5 text-gray-500 hover:text-[#0D2B24] rounded-lg hover:bg-gray-100 transition-colors shrink-0">
             <ArrowLeft size={18} />
           </Link>
           <div className="min-w-0 flex items-center gap-3">
             <h1 className="text-[15px] font-bold text-[#0D2B24] truncate max-w-lg">{document.title}</h1>
             <div className="flex items-center gap-2 text-[12px] shrink-0">
-              <span className="bg-white border border-gray-200 px-2 py-0.5 rounded-md text-gray-600 font-medium shadow-sm">
+              <span className="bg-[#F5F3EE] border border-gray-200/60 px-2 py-0.5 rounded-md text-gray-700 font-medium">
                 {document.category || 'Khác'}
               </span>
               <span className="text-gray-400">•</span>
@@ -218,18 +218,18 @@ export default function DocumentViewerPage() {
         </div>
         
         <div className="flex items-center gap-2.5 shrink-0">
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-[#0D2B24] border border-transparent hover:border-gray-200 hover:bg-white rounded-lg transition-all font-medium">
+          <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-[#0D2B24] border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded-lg transition-all font-semibold">
             <Share2 size={14} /> Chia sẻ
           </button>
-          <a href={document.doc_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-[#0D2B24] border border-transparent hover:border-gray-200 hover:bg-white rounded-lg transition-all font-medium">
+          <a href={document.doc_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-[#0D2B24] border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded-lg transition-all font-semibold">
             <Download size={14} /> Tải xuống
           </a>
-          <div className="w-px h-4 bg-gray-300 mx-1"></div>
+          <div className="w-px h-4 bg-gray-200 mx-1"></div>
           <button 
             onClick={toggleSidebar}
-            className={`flex items-center gap-2 px-4 py-1.5 text-sm font-semibold rounded-lg transition-all shadow-sm ${
+            className={`flex items-center gap-2 px-4 py-1.5 text-sm font-bold rounded-lg transition-all shadow-sm ${
               isSidebarOpen 
-                ? 'bg-[#0D2B24] text-white hover:bg-[#154238] shadow-md' 
+                ? 'bg-[#0D2B24] text-white hover:bg-[#154238] shadow-md hover:shadow-lg' 
                 : 'bg-white border border-gray-200 text-[#0D2B24] hover:bg-gray-50'
             }`}
           >
@@ -237,7 +237,7 @@ export default function DocumentViewerPage() {
           </button>
         </div>
       </header>
-
+ 
       {/* 2. MAIN WORKSPACE (Dual-pane structure) */}
       <div className="flex-1 h-[calc(100vh-3.5rem)] flex overflow-hidden relative">
         {/* @ts-ignore */}
@@ -246,30 +246,30 @@ export default function DocumentViewerPage() {
           {/* BÊN TRÁI: Document Viewer Pane */}
           <Panel 
             defaultSize={isSidebarOpen ? 60 : 100} 
-            className="bg-[#F0F2F5] relative overflow-y-auto min-w-0 flex flex-col"
+            className="bg-[#EBECEF] relative overflow-y-auto min-w-0 flex flex-col"
           >
-            <div className="min-h-full p-4 md:p-8 flex justify-center min-w-0">
+            <div className="min-h-full p-4 md:p-8 flex justify-center min-w-0 bg-[#EBECEF]">
               {/* Document Container with soft shadow mimicking real paper */}
-              <div className="w-full max-w-5xl bg-white shadow-lg rounded-sm overflow-hidden">
+              <div className="w-full max-w-5xl bg-white shadow-xl rounded-md overflow-hidden border border-gray-300/40">
                 <DocumentViewerWrapper url={document.doc_url} />
               </div>
             </div>
           </Panel>
-
+ 
           {/* RESIZER HANDLE */}
           <Separator 
-            className={`group relative shrink-0 flex items-center justify-center outline-none z-10 ${
+            className={`group relative shrink-0 flex items-center justify-center outline-none z-10 transition-all ${
               isSidebarOpen ? 'flex' : 'hidden'
             } ${isMobile ? 'h-2 w-full cursor-row-resize' : 'w-2 h-full cursor-col-resize -ml-1'}`}
           >
-            <div className={`transition-colors duration-200 ${isMobile ? 'h-[1px] w-full' : 'w-[1px] h-full'} bg-gray-200 group-hover:bg-[#0D2B24] group-data-[resize-handle-active]:bg-[#0D2B24]`} />
+            <div className={`transition-colors duration-200 ${isMobile ? 'h-[1px] w-full' : 'w-[1px] h-full'} bg-gray-200/80 group-hover:bg-[#0D2B24] group-data-[resize-handle-active]:bg-[#0D2B24]`} />
           </Separator>
-
+ 
           {/* BÊN PHẢI: AI Assistant Sidebar Pane */}
           <Panel 
             defaultSize={40}
             minSize={25}
-            className={`bg-white border-gray-200/80 overflow-hidden min-w-0 ${isMobile ? 'w-full border-t' : 'h-full border-l'}`}
+            className={`bg-[#EBE9E4] border-l-2 border-gray-300 overflow-hidden min-w-0 ${isMobile ? 'w-full border-t-2' : ''}`}
           >
             <AnimatePresence initial={false}>
               {isSidebarOpen && (
@@ -278,57 +278,59 @@ export default function DocumentViewerPage() {
                   animate={{ x: 0, y: 0, opacity: 1 }}
                   exit={{ x: isMobile ? 0 : 50, y: isMobile ? 50 : 0, opacity: 0 }}
                   transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
-                  className="w-full h-full flex flex-col relative bg-white"
+                  className="w-full h-full flex flex-col relative bg-[#EBE9E4]"
                 >
-                  {/* AI Tabs / Header */}
-                  <div className="flex items-center border-b border-gray-100 p-2 shrink-0 bg-white">
+                  {/* AI Tabs / Header - iOS Segmented Control Style */}
+                  <div className="flex items-center bg-[#D6D3CC] p-1 rounded-xl gap-1 shrink-0 m-3.5 border border-gray-300/40">
                     <button 
                       onClick={() => setActiveTab('ai')}
-                      className={`flex-1 py-2 text-[13px] font-bold rounded-lg transition-all ${
-                        activeTab === 'ai' ? 'bg-[#FAF8F5] text-[#0D2B24] shadow-sm border border-gray-200/50' : 'text-gray-500 hover:bg-gray-50'
+                      className={`flex-1 py-1.5 text-[13px] font-bold rounded-lg transition-all ${
+                        activeTab === 'ai' 
+                          ? 'bg-white text-[#0D2B24] shadow-sm border border-gray-300/20' 
+                          : 'text-gray-600 hover:text-gray-800 hover:bg-white/30'
                       }`}
                     >
                       ✨ Trợ lý AI
                     </button>
                     <button 
                       onClick={() => setActiveTab('tools')}
-                      className={`flex-1 py-2 text-[13px] font-bold rounded-lg transition-all ${
-                        activeTab === 'tools' ? 'bg-[#FAF8F5] text-[#0D2B24] shadow-sm border border-gray-200/50' : 'text-gray-500 hover:bg-gray-50'
+                      className={`flex-1 py-1.5 text-[13px] font-bold rounded-lg transition-all ${
+                        activeTab === 'tools' 
+                          ? 'bg-white text-[#0D2B24] shadow-sm border border-gray-300/20' 
+                          : 'text-gray-600 hover:text-gray-800 hover:bg-white/30'
                       }`}
                     >
                       🛠️ Công cụ
                     </button>
                   </div>
-
+ 
                   {/* AI Chat Content */}
                   <div className="flex-1 flex flex-col overflow-hidden relative">
                     {activeTab === 'ai' ? (
                       <AIChatWorkspace documentId={Number(docId)} documentTitle={document.title} />
                     ) : (
-                      <div className="flex-1 overflow-y-auto p-5 flex flex-col space-y-6">
-                        <div>
+                      <div className="flex-1 overflow-y-auto px-4 pb-8 flex flex-col space-y-6">
+                        <div className="bg-white border border-gray-300/70 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
                           <h3 className="text-[12px] font-bold text-gray-900 uppercase tracking-wider mb-3">Đồng hồ Pomodoro</h3>
                           <PomodoroWidget />
                         </div>
-
-                        <div className="pt-6 border-t border-gray-100 flex-1 min-h-[300px]">
+ 
+                        <div className="bg-white border border-gray-300/70 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)] flex-1 min-h-[350px]">
                           <SmartNotesWorkspace documentId={Number(docId)} />
                         </div>
                         
-                        <div className="pt-6 border-t border-gray-100">
-                          <h3 className="text-[12px] font-bold text-gray-900 uppercase tracking-wider mb-3">Flashcard AI</h3>
-                          <div className="bg-[#0D2B24] p-4 rounded-xl shadow-md">
-                            <p className="text-xs text-green-50 mb-3 leading-relaxed">
-                              Trích xuất tự động các khái niệm quan trọng trong tài liệu thành thẻ ghi nhớ.
-                            </p>
-                            <button 
-                              onClick={handleGenerateFlashcards}
-                              disabled={isGeneratingCards}
-                              className="w-full py-2 text-sm font-semibold text-[#0D2B24] bg-white rounded-lg hover:bg-gray-50 shadow-sm transition-colors flex justify-center items-center gap-2 disabled:opacity-70"
-                            >
-                              {isGeneratingCards ? <Loader2 size={16} className="animate-spin" /> : 'Tạo Flashcard ngay'}
-                            </button>
-                          </div>
+                        <div className="bg-gradient-to-br from-[#0D2B24] to-[#154238] p-5 rounded-2xl shadow-md border border-[#1a3a2a]">
+                          <h3 className="text-[12px] font-bold text-green-200 uppercase tracking-wider mb-2">Flashcard AI</h3>
+                          <p className="text-xs text-green-50/90 mb-4 leading-relaxed">
+                            Trích xuất tự động các khái niệm quan trọng trong tài liệu thành thẻ ghi nhớ.
+                          </p>
+                          <button 
+                            onClick={handleGenerateFlashcards}
+                            disabled={isGeneratingCards}
+                            className="w-full py-2.5 text-sm font-bold text-[#0D2B24] bg-white rounded-xl hover:bg-gray-50 shadow-sm transition-colors flex justify-center items-center gap-2 disabled:opacity-70"
+                          >
+                            {isGeneratingCards ? <Loader2 size={16} className="animate-spin" /> : 'Tạo Flashcard ngay'}
+                          </button>
                         </div>
                       </div>
                     )}
