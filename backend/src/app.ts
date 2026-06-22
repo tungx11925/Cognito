@@ -8,6 +8,8 @@ import paymentRoutes from './routes/payment.routes';
 import aiRoutes from './routes/ai.routes';
 import marketplaceRoutes from './routes/marketplace.routes';
 import adminRoutes from './routes/admin.routes';
+import aiTestRoutes from './routes/ai-test.routes';
+import { bootstrapAITestSchema } from './db/ai-test-schema';
 import path from 'path';
 
 const app = express();
@@ -31,7 +33,12 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api', aiTestRoutes);
+app.use('/api/ai', aiTestRoutes);
 app.use('/api', appRoutes);
+
+// Run AI test schema migration on startup
+bootstrapAITestSchema();
 
 // Serve static uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
