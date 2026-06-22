@@ -717,10 +717,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) {
-          setDocuments(data);
-          return;
-        }
+        setDocuments(data || []);
+        return;
       }
       setDocuments(MOCK_DOCUMENTS);
     } catch (e) {
@@ -737,10 +735,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) {
-          setDecks(data);
-          return;
-        }
+        setDecks(data || []);
+        return;
       }
       setDecks(MOCK_DECKS);
     } catch (e) {
@@ -931,9 +927,12 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         fetchDocuments();
         fetchAnalytics();
         if (activeDoc?.id === id) setActiveDoc(null);
+      } else {
+        const errorData = await res.json();
+        triggerMessage(errorData.error || "Không thể xóa tài liệu", "error");
       }
     } catch (e) {
-      triggerMessage("Lỗi khi xóa tài liệu", "error");
+      triggerMessage("Lỗi kết nối máy chủ", "error");
     }
   };
 
