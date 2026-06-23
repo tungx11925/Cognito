@@ -36,13 +36,13 @@ exports.up = async (pgm) => {
       references: '"users"',
       onDelete: 'CASCADE',
     },
-    task_date: { type: 'date', notNull: true, default: pgm.func('CURRENT_DATE') },
+    activity_date: { type: 'date', notNull: true, default: pgm.func('CURRENT_DATE') },
     task_type: { type: 'varchar(50)', notNull: true },
     title: { type: 'varchar(255)', notNull: true },
     description: { type: 'text' },
     target_value: { type: 'integer', notNull: true },
     current_value: { type: 'integer', notNull: true, default: 0 },
-    is_completed: { type: 'boolean', notNull: true, default: false },
+    completed: { type: 'boolean', notNull: true, default: false },
     is_notified: { type: 'boolean', notNull: true, default: false },
     created_at: {
       type: 'timestamp',
@@ -53,7 +53,7 @@ exports.up = async (pgm) => {
 
   // Unique constraint for user tasks per day
   pgm.addConstraint('user_daily_tasks', 'unique_user_task_date_type', {
-    unique: ['user_id', 'task_date', 'task_type']
+    unique: ['user_id', 'activity_date', 'task_type']
   });
 
   // 3. Seed some additional users for friends list

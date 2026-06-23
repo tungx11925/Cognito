@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, UploadCloud, File, AlertCircle } from 'lucide-react';
 import { uploadDocument } from '@/services/document.service';
@@ -9,15 +9,27 @@ interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  defaultCategory?: string;
+  existingCategories?: string[];
 }
 
-export default function UploadDocumentModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
+export default function UploadDocumentModal({ 
+  isOpen, 
+  onClose, 
+  onSuccess,
+  defaultCategory = '',
+  existingCategories = []
+}: UploadModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState(defaultCategory);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setCategory(defaultCategory);
+  }, [defaultCategory]);
 
   if (!isOpen) return null;
 
@@ -95,16 +107,26 @@ export default function UploadDocumentModal({ isOpen, onClose, onSuccess }: Uplo
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Thể loại</label>
-            <input
-              type="text"
-              value={category}
-              onChange={e => setCategory(e.target.value)}
-              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/20 focus:border-[#1a3a2a] transition-all text-sm"
-              placeholder="VD: Toán học, IT, Ngoại ngữ..."
-            />
-          </div>
+          {!defaultCategory && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Thể loại</label>
+              <input
+                type="text"
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                list="category-suggestions"
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/20 focus:border-[#1a3a2a] transition-all text-sm"
+                placeholder="VD: Toán học, IT, Ngoại ngữ..."
+              />
+              {existingCategories && existingCategories.length > 0 && (
+                <datalist id="category-suggestions">
+                  {existingCategories.map(cat => (
+                    <option key={cat} value={cat} />
+                  ))}
+                </datalist>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả thêm (Tùy chọn)</label>

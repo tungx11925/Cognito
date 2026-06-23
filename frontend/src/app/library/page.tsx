@@ -94,7 +94,9 @@ function DocCard({
   onDelete,
   onEdit,
   onShare,
-  onSelect
+  onSelect,
+  onDragStart,
+  onDragEnd
 }: {
   doc: any;
   dark: boolean;
@@ -104,6 +106,8 @@ function DocCard({
   onEdit: (doc: any) => void;
   onShare: (doc: any) => void;
   onSelect: () => void;
+  onDragStart?: (e: React.DragEvent, doc: any) => void;
+  onDragEnd?: () => void;
 }) {
   const type = getDocType(doc);
   const size = getDocSize(doc);
@@ -118,6 +122,9 @@ function DocCard({
 
   return (
     <motion.div
+      draggable={!!onDragStart}
+      onDragStart={(e: any) => onDragStart && onDragStart(e, doc)}
+      onDragEnd={(e: any) => onDragEnd && onDragEnd()}
       whileHover={{ y: -3, transition: { duration: 0.16 } }}
       onClick={onSelect}
       style={{
@@ -196,7 +203,9 @@ function DocRow({
   onDelete,
   onEdit,
   onShare,
-  onSelect
+  onSelect,
+  onDragStart,
+  onDragEnd
 }: {
   doc: any;
   dark: boolean;
@@ -206,6 +215,8 @@ function DocRow({
   onEdit: (doc: any) => void;
   onShare: (doc: any) => void;
   onSelect: () => void;
+  onDragStart?: (e: React.DragEvent, doc: any) => void;
+  onDragEnd?: () => void;
 }) {
   const type = getDocType(doc);
   const size = getDocSize(doc);
@@ -218,6 +229,9 @@ function DocRow({
 
   return (
     <motion.div
+      draggable={!!onDragStart}
+      onDragStart={(e: any) => onDragStart && onDragStart(e, doc)}
+      onDragEnd={(e: any) => onDragEnd && onDragEnd()}
       whileHover={{ x: 3, transition: { duration: 0.14 } }}
       onClick={onSelect}
       style={{
@@ -275,6 +289,183 @@ function DocRow({
   );
 }
 
+function FolderCard({
+  category,
+  count,
+  dark,
+  isDragOver,
+  isDragActive,
+  onClick,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDelete,
+  onRename
+}: {
+  category: string;
+  count: number;
+  dark: boolean;
+  isDragOver: boolean;
+  isDragActive: boolean;
+  onClick: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent) => void;
+  onDelete?: (e: React.MouseEvent) => void;
+  onRename?: (e: React.MouseEvent) => void;
+}) {
+  const folderColor = getCategoryColor(category);
+  const textMain = dark ? "#f0f0f0" : "#1a2e1c";
+  const cardBg = dark ? "#1e1e1e" : "#ffffff";
+  const border = dark ? "#2a2a2a" : "rgba(26,46,28,0.18)";
+
+  return (
+    <motion.div
+      onClick={onClick}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      whileHover={{ scale: 1.02, y: -2 }}
+      animate={{
+        scale: isDragOver ? 1.05 : 1,
+        borderColor: isDragOver ? folderColor : border,
+        boxShadow: isDragOver 
+          ? `0 0 15px ${folderColor}40, 4px 4px 0 ${folderColor}20` 
+          : dark 
+            ? "4px 4px 0 rgba(255,255,255,0.03)" 
+            : "4px 4px 0 rgba(26,46,28,0.08)"
+      }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      style={{
+        background: cardBg,
+        border: "2px solid",
+        borderColor: isDragOver ? folderColor : border,
+        borderRadius: 20,
+        padding: "20px 16px",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        minHeight: 120,
+        position: "relative",
+        overflow: "hidden"
+      }}
+    >
+      <div 
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 16,
+          width: 50,
+          height: 6,
+          backgroundColor: folderColor,
+          borderBottomLeftRadius: 4,
+          borderBottomRightRadius: 4,
+          pointerEvents: "none"
+        }}
+      />
+
+      {/* Rename Folder button */}
+      {onRename && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRename(e);
+          }}
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 34,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 4,
+            borderRadius: 6,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: dark ? "#4b5563" : "#9ca3af",
+            transition: "all 0.15s",
+            zIndex: 10,
+            pointerEvents: isDragActive ? "none" : "auto"
+          }}
+          className="hover:text-emerald-500 hover:bg-emerald-500/10"
+          title="Đổi tên thư mục"
+        >
+          <Edit2 size={13} />
+        </button>
+      )}
+
+      {/* Delete Folder button */}
+      {onDelete && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(e);
+          }}
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 4,
+            borderRadius: 6,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: dark ? "#4b5563" : "#9ca3af",
+            transition: "all 0.15s",
+            zIndex: 10,
+            pointerEvents: isDragActive ? "none" : "auto"
+          }}
+          className="hover:text-rose-500 hover:bg-rose-500/10"
+          title="Xóa thư mục"
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
+
+      <div style={{ pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", width: 48, height: 48, borderRadius: 14, background: folderColor + "15" }}>
+        <FolderOpen size={24} color={folderColor} strokeWidth={2.25} />
+      </div>
+
+      <div style={{ pointerEvents: "none", textAlign: "center", marginTop: 4 }}>
+        <div style={{ fontWeight: 800, fontSize: 13, color: textMain, fontFamily: "'Outfit', sans-serif" }}>
+          {category}
+        </div>
+        <div style={{ fontSize: 11, color: dark ? "#777" : "#888", fontWeight: 600, marginTop: 2, fontFamily: "'Outfit', sans-serif" }}>
+          {count} tài liệu
+        </div>
+      </div>
+
+      {isDragOver && (
+        <div 
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: folderColor + "08",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 11,
+            fontWeight: 800,
+            color: folderColor,
+            textTransform: "uppercase",
+            letterSpacing: "1px",
+            pointerEvents: "none"
+          }}
+        >
+          Thả vào thư mục
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function LibraryPage() {
@@ -307,6 +498,160 @@ export default function LibraryPage() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [shareDoc, setShareDoc] = useState<any | null>(null);
 
+  // Drag and Drop States & Handlers
+  const [draggedDoc, setDraggedDoc] = useState<any | null>(null);
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [deletedFolders, setDeletedFolders] = useState<string[]>([]);
+  const [folderModalConfig, setFolderModalConfig] = useState<{
+    isOpen: boolean;
+    type: "delete" | "rename";
+    category: string;
+    message?: string;
+    inputValue?: string;
+    onConfirm: (val?: string) => void;
+  } | null>(null);
+
+  useEffect(() => {
+    if (draggedDoc) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [draggedDoc]);
+
+  const handleDragStart = (e: React.DragEvent, doc: any) => {
+    setDraggedDoc(doc);
+    e.dataTransfer.setData("text/plain", doc.id.toString());
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragEnd = () => {
+    setDraggedDoc(null);
+    setDragOverFolder(null);
+  };
+
+  const handleDropOnFolder = async (e: React.DragEvent, folderCategory: string) => {
+    e.preventDefault();
+    setDragOverFolder(null);
+    if (!draggedDoc) return;
+    
+    const success = await handleEditDocument(
+      draggedDoc.id,
+      draggedDoc.title,
+      folderCategory,
+      draggedDoc.description
+    );
+    
+    if (success) {
+      // If we move a file to a previously deleted category folder, undelete it
+      if (deletedFolders.includes(folderCategory)) {
+        const nextDeleted = deletedFolders.filter(x => x !== folderCategory);
+        setDeletedFolders(nextDeleted);
+        localStorage.setItem(`deleted-folders-${activeUser?.id || 'guest'}`, JSON.stringify(nextDeleted));
+      }
+      triggerMessage("Đã chuyển tài liệu vào thư mục " + folderCategory, "success");
+    }
+    setDraggedDoc(null);
+  };
+
+  const completeDeleteFolder = (category: string) => {
+    const newDeleted = [...deletedFolders, category];
+    setDeletedFolders(newDeleted);
+    localStorage.setItem(`deleted-folders-${activeUser?.id || 'guest'}`, JSON.stringify(newDeleted));
+    
+    if (selectedFolder === category) {
+      setSelectedFolder(null);
+    }
+    setFolderModalConfig(null);
+  };
+
+  const handleDeleteFolder = (category: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    const docsInFolder = documents.filter((d: any) => d.category === category);
+    
+    if (docsInFolder.length > 0) {
+      setFolderModalConfig({
+        isOpen: true,
+        type: "delete",
+        category,
+        message: `Thư mục "${category}" đang chứa ${docsInFolder.length} tài liệu. Bạn có chắc chắn muốn xóa thư mục này? Các tài liệu bên trong sẽ được chuyển về mục Chưa phân loại.`,
+        onConfirm: async () => {
+          let hasError = false;
+          for (const doc of docsInFolder) {
+            const success = await handleEditDocument(doc.id, doc.title, "Khác", doc.description);
+            if (!success) hasError = true;
+          }
+          
+          if (hasError) {
+            triggerMessage("Đã xảy ra lỗi khi di chuyển một số tài liệu.", "error");
+            return;
+          }
+          
+          triggerMessage(`Đã xóa thư mục "${category}" và chuyển các tài liệu ra ngoài.`, "success");
+          completeDeleteFolder(category);
+        }
+      });
+    } else {
+      triggerMessage(`Đã xóa thư mục trống "${category}".`, "success");
+      completeDeleteFolder(category);
+    }
+  };
+
+  const handleRenameFolder = (oldCategory: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    setFolderModalConfig({
+      isOpen: true,
+      type: "rename",
+      category: oldCategory,
+      inputValue: oldCategory,
+      onConfirm: async (newName) => {
+        if (!newName || !newName.trim() || newName.trim() === oldCategory) return;
+        const trimmedNewName = newName.trim();
+        
+        const docsInFolder = documents.filter((d: any) => d.category === oldCategory);
+        
+        if (docsInFolder.length > 0) {
+          let hasError = false;
+          for (const doc of docsInFolder) {
+            const success = await handleEditDocument(doc.id, doc.title, trimmedNewName, doc.description);
+            if (!success) hasError = true;
+          }
+          
+          if (hasError) {
+            triggerMessage("Đã xảy ra lỗi khi đổi tên danh mục cho một số tài liệu.", "error");
+            return;
+          }
+        }
+        
+        // Add old category to deletedFolders list so it doesn't show up empty if it was a default category
+        const newDeleted = [...deletedFolders, oldCategory];
+        setDeletedFolders(newDeleted);
+        localStorage.setItem(`deleted-folders-${activeUser?.id || 'guest'}`, JSON.stringify(newDeleted));
+        
+        // If the new category was in deletedFolders, remove it
+        if (deletedFolders.includes(trimmedNewName)) {
+          const nextDeleted = deletedFolders.filter(x => x !== trimmedNewName);
+          setDeletedFolders(nextDeleted);
+          localStorage.setItem(`deleted-folders-${activeUser?.id || 'guest'}`, JSON.stringify(nextDeleted));
+        }
+        
+        triggerMessage(`Đã đổi tên thư mục từ "${oldCategory}" thành "${trimmedNewName}".`, "success");
+        
+        if (selectedFolder === oldCategory) {
+          setSelectedFolder(trimmedNewName);
+        }
+        
+        setFolderModalConfig(null);
+      }
+    });
+  };
+
   const handleStartEdit = (doc: any) => {
     setEditingDoc(doc);
     setEditTitle(doc.title || "");
@@ -329,10 +674,19 @@ export default function LibraryPage() {
     if (isAuthenticated) {
       fetchDocuments();
       const userKey = `starred-docs-${activeUser?.id || 'guest'}`;
+      const deletedKey = `deleted-folders-${activeUser?.id || 'guest'}`;
       try {
         const savedStars = localStorage.getItem(userKey);
         if (savedStars) {
           setStarredIds(JSON.parse(savedStars));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      try {
+        const savedDeleted = localStorage.getItem(deletedKey);
+        if (savedDeleted) {
+          setDeletedFolders(JSON.parse(savedDeleted));
         }
       } catch (e) {
         console.error(e);
@@ -381,6 +735,20 @@ export default function LibraryPage() {
     ...Array.from(new Set(documents.map((d: any) => d.category).filter(Boolean)))
   ];
 
+  // Get dynamic categories list from real documents (excluding empty/Khác for actual folders)
+  const folderCategories = Array.from(
+    new Set([
+      "Toán học",
+      "Vật lý",
+      "Hóa học",
+      "Sinh học",
+      "Tiếng Anh",
+      "Lịch sử",
+      "Trí tuệ nhân tạo",
+      ...documents.map((d: any) => d.category).filter(Boolean)
+    ])
+  ).filter(cat => cat !== "Khác" && cat !== "Tất cả danh mục" && cat !== "" && !deletedFolders.includes(cat));
+
   // Client side filtered list
   const filteredDocs = documents.filter((doc: any) => {
     const matchesSearch =
@@ -390,6 +758,11 @@ export default function LibraryPage() {
       categoryFilter === "Tất cả danh mục" || doc.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
+
+  // Calculate displayed documents based on folder selection
+  const displayedDocs = selectedFolder
+    ? filteredDocs.filter((doc: any) => doc.category === selectedFolder)
+    : filteredDocs.filter((doc: any) => !doc.category || doc.category === "Khác" || !folderCategories.includes(doc.category));
 
   const pageBg = dark ? "#121212" : "#ebe8e0";
   const textMain = dark ? "#f0f0f0" : "#1a2e1c";
@@ -656,30 +1029,127 @@ export default function LibraryPage() {
             </span>
           </div>
 
+          {/* Folders Grid */}
+          {!selectedFolder && (
+            <div className="space-y-4">
+              <h2 style={{ fontSize: 14, fontWeight: 800, color: textMain, display: "flex", alignItems: "center", gap: 6, fontFamily: "'Outfit', sans-serif" }}>
+                <FolderOpen size={16} /> Thư mục tài liệu (Thể loại)
+              </h2>
+              <div 
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                  gap: 16,
+                  padding: "6px 4px",
+                  marginBottom: 32
+                }}
+              >
+                {folderCategories.map((cat) => (
+                  <FolderCard
+                    key={cat}
+                    category={cat}
+                    count={documents.filter((d: any) => d.category === cat).length}
+                    dark={dark}
+                    isDragOver={dragOverFolder === cat}
+                    isDragActive={!!draggedDoc}
+                    onClick={() => setSelectedFolder(cat)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (e.dataTransfer) {
+                        e.dataTransfer.dropEffect = "move";
+                      }
+                      if (dragOverFolder !== cat) setDragOverFolder(cat);
+                    }}
+                    onDragLeave={() => setDragOverFolder(null)}
+                    onDrop={(e) => handleDropOnFolder(e, cat)}
+                    onDelete={(e) => handleDeleteFolder(cat, e)}
+                    onRename={(e) => handleRenameFolder(cat, e)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Folder Path / Trail Header */}
+          {selectedFolder && (
+            <div 
+              style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: 10, 
+                marginBottom: 20,
+                padding: "8px 12.5px",
+                borderRadius: 12,
+                background: dark ? "rgba(255,255,255,0.02)" : "rgba(26,46,28,0.03)",
+                border: `1.5px solid ${sidebarBorder}`
+              }}
+            >
+              <button
+                onClick={() => setSelectedFolder(null)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer) {
+                    e.dataTransfer.dropEffect = "move";
+                  }
+                  if (dragOverFolder !== "Khác") setDragOverFolder("Khác");
+                }}
+                onDragLeave={() => setDragOverFolder(null)}
+                onDrop={(e) => {
+                  handleDropOnFolder(e, "Khác");
+                  setSelectedFolder(null);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "6px 12px",
+                  borderRadius: 10,
+                  border: `2px dashed ${dragOverFolder === "Khác" ? getCategoryColor("Khác") : sidebarBorder}`,
+                  background: dragOverFolder === "Khác" ? getCategoryColor("Khác") + "15" : (dark ? "#1e1e1e" : "#ffffff"),
+                  color: dragOverFolder === "Khác" ? getCategoryColor("Khác") : textMain,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+                title="Thả tài liệu vào đây để đưa ra ngoài thư mục"
+              >
+                <span style={{ pointerEvents: "none", display: "flex", alignItems: "center", gap: 6 }}>
+                  <ArrowLeft size={13} /> Quay lại & Đưa ra ngoài
+                </span>
+              </button>
+              <span className="text-gray-400 font-bold">/</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: textMain, display: "flex", alignItems: "center", gap: 6, fontFamily: "'Outfit', sans-serif" }}>
+                Thư mục: <span style={{ color: getCategoryColor(selectedFolder) }}>{selectedFolder}</span>
+              </span>
+            </div>
+          )}
+
+          {/* Section title for documents list */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 800, color: textMain, fontFamily: "'Outfit', sans-serif" }}>
+              {selectedFolder ? `Tài liệu trong thư mục` : `Tài liệu ở ngoài thư mục`}
+            </h2>
+            <span style={{ fontSize: 12, color: textSub, fontWeight: 600, fontFamily: "'Outfit', sans-serif" }}>
+              {displayedDocs.length} tài liệu
+            </span>
+          </div>
+
           {/* List/Grid of Documents */}
-          {filteredDocs.length === 0 ? (
+          {displayedDocs.length === 0 ? (
             <div
               className="text-center py-20 bg-white dark:bg-zinc-900 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center p-6"
               style={{ borderColor: dark ? "#2a2a2a" : "rgba(26,46,28,0.15)" }}
             >
               <FolderOpen size={48} className="text-gray-300 dark:text-zinc-700 mb-4" />
               <h3 className="font-bold text-sm" style={{ color: textMain }}>
-                Không tìm thấy tài liệu nào
+                Không tìm thấy tài liệu nào ở đây
               </h3>
               <p className="text-xs mt-1 mb-5" style={{ color: textSub }}>
-                {search || categoryFilter !== "Tất cả danh mục"
-                  ? "Hãy thử tìm kiếm với bộ lọc khác."
-                  : "Bắt đầu bằng việc tải lên một tài liệu học tập mới."}
+                {selectedFolder
+                  ? "Kéo thả tài liệu từ bên ngoài vào thư mục này để phân loại."
+                  : "Mọi tài liệu đã được phân loại vào các thư mục thể loại ở trên."}
               </p>
-              {isAuthenticated && (
-                <button
-                  onClick={() => setIsUploadOpen(true)}
-                  className="px-4 py-2 text-white text-xs font-bold rounded-xl transition-all active:scale-95"
-                  style={{ background: primaryColor }}
-                >
-                  Tải lên tài liệu mới
-                </button>
-              )}
             </div>
           ) : viewMode === "grid" ? (
             <motion.div
@@ -688,9 +1158,10 @@ export default function LibraryPage() {
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
                 gap: 14,
+                padding: "6px 4px",
               }}
             >
-              {filteredDocs.map((doc: any, i: number) => (
+              {displayedDocs.map((doc: any, i: number) => (
                 <motion.div
                   key={doc.id}
                   initial={{ opacity: 0, y: 16 }}
@@ -706,6 +1177,8 @@ export default function LibraryPage() {
                     onEdit={handleStartEdit}
                     onShare={handleShareClick}
                     onSelect={() => handleDocSelect(doc)}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
                   />
                 </motion.div>
               ))}
@@ -734,7 +1207,7 @@ export default function LibraryPage() {
                 <div style={{ width: 40 }} />
               </div>
 
-              {filteredDocs.map((doc: any, i: number) => (
+              {displayedDocs.map((doc: any, i: number) => (
                 <motion.div
                   key={doc.id}
                   initial={{ opacity: 0, x: -10 }}
@@ -750,6 +1223,8 @@ export default function LibraryPage() {
                     onEdit={handleStartEdit}
                     onShare={handleShareClick}
                     onSelect={() => handleDocSelect(doc)}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
                   />
                 </motion.div>
               ))}
@@ -765,6 +1240,8 @@ export default function LibraryPage() {
             isOpen={isUploadOpen}
             onClose={() => setIsUploadOpen(false)}
             onSuccess={fetchDocuments}
+            defaultCategory={selectedFolder || ""}
+            existingCategories={folderCategories}
           />
         )}
       </AnimatePresence>
@@ -892,6 +1369,108 @@ export default function LibraryPage() {
                   }}
                 >
                   Lưu thay đổi
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Folder Action Modal */}
+      <AnimatePresence>
+        {folderModalConfig && folderModalConfig.isOpen && (
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setFolderModalConfig(null)}
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-sm border-2 rounded-2xl shadow-xl p-5 overflow-hidden z-10 font-sans"
+              style={{
+                background: dark ? "#1a1a1a" : "#ffffff",
+                borderColor: dark ? "#2a2a2a" : "rgba(26,46,28,0.18)",
+                color: textMain,
+                fontFamily: "'Outfit', sans-serif"
+              }}
+            >
+              <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 12, color: textMain }}>
+                {folderModalConfig.type === "delete" ? "Xóa thư mục" : "Đổi tên thư mục"}
+              </h3>
+              
+              {folderModalConfig.type === "delete" ? (
+                <p style={{ fontSize: 12, lineHeight: 1.6, color: dark ? "#a0a0a0" : "#4a5568", marginBottom: 20 }}>
+                  {folderModalConfig.message}
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+                  <label style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: dark ? "#888" : "#666" }}>
+                    Tên thư mục mới
+                  </label>
+                  <input
+                    type="text"
+                    value={folderModalConfig.inputValue || ""}
+                    onChange={(e) => setFolderModalConfig({
+                      ...folderModalConfig,
+                      inputValue: e.target.value
+                    })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        folderModalConfig.onConfirm(folderModalConfig.inputValue);
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      borderRadius: 10,
+                      border: `2px solid ${dark ? "#2d2d2d" : "rgba(26,46,28,0.12)"}`,
+                      background: dark ? "#262626" : "#fcfcfc",
+                      color: textMain,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      outline: "none",
+                      boxSizing: "border-box"
+                    }}
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button
+                  onClick={() => setFolderModalConfig(null)}
+                  style={{
+                    padding: "7px 14px",
+                    borderRadius: 9,
+                    cursor: "pointer",
+                    border: `2px solid ${dark ? "#2a2a2a" : "rgba(26,46,28,0.1)"}`,
+                    background: dark ? "#242424" : "#f4f4f2",
+                    color: dark ? "#aaa" : "#555",
+                    fontWeight: 700,
+                    fontSize: 11
+                  }}
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={() => folderModalConfig.onConfirm(folderModalConfig.inputValue)}
+                  style={{
+                    padding: "7px 14px",
+                    borderRadius: 9,
+                    cursor: "pointer",
+                    border: "none",
+                    background: folderModalConfig.type === "delete" ? "#ef4444" : primaryColor,
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: 11
+                  }}
+                >
+                  {folderModalConfig.type === "delete" ? "Xóa thư mục" : "Lưu thay đổi"}
                 </button>
               </div>
             </motion.div>

@@ -25,6 +25,17 @@ db.query(`
   
   CREATE UNIQUE INDEX IF NOT EXISTS unique_user_daily_activity ON user_daily_activity(user_id, activity_date);
 
+  -- Rename old columns if they exist from old migrations/schemas
+  DO $$
+  BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_daily_tasks' AND column_name='task_date') THEN
+      ALTER TABLE user_daily_tasks RENAME COLUMN task_date TO activity_date;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_daily_tasks' AND column_name='is_completed') THEN
+      ALTER TABLE user_daily_tasks RENAME COLUMN is_completed TO completed;
+    END IF;
+  END $$;
+
   -- Missing Tables Fixes
   CREATE TABLE IF NOT EXISTS user_daily_tasks (
     id SERIAL PRIMARY KEY,

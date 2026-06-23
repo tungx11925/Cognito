@@ -1,5 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { authenticate, AuthRequest } from '../middlewares/auth.middleware';
+import { rateLimiter } from '../middlewares/rateLimiter.middleware';
 import { 
   getAdminStats, 
   getUsers, 
@@ -8,7 +9,9 @@ import {
   deleteUser, 
   getDocuments, 
   deleteDocument,
-  getTransactions
+  getTransactions,
+  warnUser,
+  getUserDetails
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -25,11 +28,13 @@ const authorizeAdmin = (req: AuthRequest, res: Response, next: NextFunction) => 
 router.use(authenticate, authorizeAdmin);
 
 router.get('/stats', getAdminStats);
-router.get('/users', getUsers);
+router.get('/users', rateLimiter(60000, 120), getUsers);
 router.post('/users', createUser);
 router.put('/users/:id', updateUser);
 router.delete('/users/:id', deleteUser);
-router.get('/documents', getDocuments);
+router.post('/users/:id/warn', rateLimiter(60000, 10), warnUser);
+router.get('/users/:id/details', getUserDetails);
+router.get('/documents', rateLimiter(60000, 120), getDocuments);
 router.delete('/documents/:id', deleteDocument);
 router.get('/transactions', getTransactions);
 

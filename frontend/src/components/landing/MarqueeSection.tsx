@@ -19,7 +19,7 @@ function MarqueeTrack({ reverse = false }: { reverse?: boolean }) {
     <div className="overflow-hidden py-3">
       <motion.div
         className="flex gap-4 w-max"
-        animate={{ x: reverse ? ["0%", "50%"] : ["0%", "-50%"] }}
+        animate={{ x: reverse ? ["-50%", "0%"] : ["0%", "-50%"] }}
         transition={{
           duration: 28,
           repeat: Infinity,
