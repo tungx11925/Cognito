@@ -6,7 +6,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "migrate": "node-pg-migrate",
-    "migrate:up": "node-pg-migrate up",
+    "migrate:up": "node-pg-migrate up --no-check-order",
     "migrate:down": "node-pg-migrate down",
     "migrate:create": "node-pg-migrate create"
   },
