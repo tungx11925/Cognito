@@ -2,6 +2,8 @@ exports.up = pgm => {
   // 1. Thêm is_starred vào flashcards
   pgm.addColumn('flashcards', {
     is_starred: { type: 'boolean', default: false }
+  }, {
+    ifNotExists: true
   });
 
   // 2. Thêm forked_from_id vào flashcard_decks
@@ -12,6 +14,8 @@ exports.up = pgm => {
       onDelete: 'SET NULL',
       default: null
     }
+  }, {
+    ifNotExists: true
   });
 
   // 3. Tạo bảng match_game_leaderboards
@@ -35,9 +39,11 @@ exports.up = pgm => {
       notNull: true,
       default: pgm.func('current_timestamp'),
     },
+  }, {
+    ifNotExists: true
   });
 
-  pgm.createIndex('match_game_leaderboards', 'deck_id');
+  pgm.createIndex('match_game_leaderboards', 'deck_id', { ifNotExists: true });
 };
 
 exports.down = pgm => {

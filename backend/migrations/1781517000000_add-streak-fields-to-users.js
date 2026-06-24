@@ -2,6 +2,8 @@ exports.up = pgm => {
   pgm.addColumn('users', {
     streak: { type: 'integer', default: 0 },
     last_study_date: { type: 'timestamp', default: null }
+  }, {
+    ifNotExists: true
   });
 };
 

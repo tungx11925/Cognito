@@ -5,6 +5,8 @@ exports.shorthands = undefined;
 exports.up = pgm => {
   pgm.addColumn('users', {
     avatar_url: { type: 'varchar(500)' }
+  }, {
+    ifNotExists: true
   });
 };
 
