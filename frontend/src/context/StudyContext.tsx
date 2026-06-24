@@ -520,6 +520,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setActiveUser(null);
     setIsAuthenticated(false);
     triggerMessage('Đăng xuất thành công', 'success');
+    // Force a full reload and redirect to landing page to completely reset Google Sign-in libraries
+    window.location.href = '/';
   };
 
   const updateAvatar = async (file: File): Promise<boolean> => {
