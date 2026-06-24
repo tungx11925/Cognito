@@ -17,7 +17,11 @@ const getFileExtension = (url: string): string => {
   }
 };
 
-export default function DocumentViewerWrapper({ url }: { url: string }) {
+export default function DocumentViewerWrapper({ url: rawUrl }: { url: string }) {
+  const url = typeof window !== 'undefined' && window.location.protocol === 'https:' && rawUrl.startsWith('http://') && !rawUrl.includes('localhost') && !rawUrl.includes('127.0.0.1')
+    ? rawUrl.replace('http://', 'https://')
+    : rawUrl;
+
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);

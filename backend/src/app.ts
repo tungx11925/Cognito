@@ -13,6 +13,7 @@ import { bootstrapAITestSchema } from './db/ai-test-schema';
 import path from 'path';
 
 const app = express();
+app.set('trust proxy', true);
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
