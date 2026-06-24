@@ -1061,9 +1061,13 @@ router.post('/ai/chat', authenticate, async (req: AuthRequest, res: Response) =>
         
         // 1. Try to read the actual document text using mammoth
         if (document && document.doc_url && document.doc_url.endsWith('.docx')) {
-          const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
-          const textResult = await mammoth.extractRawText({ buffer: response.data });
-          documentText = textResult.value;
+          try {
+            const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
+            const textResult = await mammoth.extractRawText({ buffer: response.data });
+            documentText = textResult.value;
+          } catch (fetchError) {
+            console.warn("[Groq AI] Failed to fetch or parse docx content:", fetchError);
+          }
         }
 
         // 2. Setup Groq AI
@@ -1115,9 +1119,13 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
         
         // 1. Try to read the actual document text using mammoth
         if (document && document.doc_url && document.doc_url.endsWith('.docx')) {
-          const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
-          const textResult = await mammoth.extractRawText({ buffer: response.data });
-          documentText = textResult.value;
+          try {
+            const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
+            const textResult = await mammoth.extractRawText({ buffer: response.data });
+            documentText = textResult.value;
+          } catch (fetchError) {
+            console.warn("[Gemini AI] Failed to fetch or parse docx content:", fetchError);
+          }
         }
 
         // 2. Setup Gemini AI
