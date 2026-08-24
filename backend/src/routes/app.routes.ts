@@ -1055,26 +1055,21 @@ router.post('/ai/chat', authenticate, async (req: AuthRequest, res: Response) =>
     const geminiApiKey = process.env.GEMINI_API_KEY;
     const groqApiKey = process.env.GROQ_API_KEY;
 
-    // IF GROQ API KEY IS PROVIDED, USE GROQ AI
+    // 1. TRY GROQ AI
     if (groqApiKey && !groqApiKey.includes('your_')) {
       try {
         let documentText = '';
-        
-        // 1. Try to read the actual document text using mammoth
         if (document && document.doc_url && document.doc_url.endsWith('.docx')) {
           try {
             const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
             const textResult = await mammoth.extractRawText({ buffer: response.data });
             documentText = textResult.value;
           } catch (fetchError) {
-            console.warn("[Groq AI] Failed to fetch or parse docx content:", fetchError);
+            console.warn("[Groq AI] Failed to fetch docx:", fetchError);
           }
         }
 
-        // 2. Setup Groq AI
         const groq = new Groq({ apiKey: groqApiKey });
-        
-        // 3. Construct prompt
         const systemPrompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy và hỗ trợ học tập toàn diện như ChatGPT.
 Tên tài liệu người dùng đang xem: ${docTitle}
 Mô tả: ${docDesc}
@@ -1089,13 +1084,10 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
 5. Trình bày nội dung đẹp mắt bằng Markdown (in đậm, danh sách, blockquote, hoặc MathJax/LaTeX nếu là công thức toán).`;
 
         let apiMessages: any[] = [{ role: "system", content: systemPrompt }];
-        
         if (history && Array.isArray(history)) {
-          // Truncate history to save tokens: only keep the last 4 turns
           const recentHistory = history.slice(-4);
           apiMessages = apiMessages.concat(recentHistory);
         }
-        
         apiMessages.push({ role: "user", content: message });
 
         const completion = await groq.chat.completions.create({
@@ -1105,36 +1097,33 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
           max_tokens: 1024,
         });
 
-        reply = completion.choices[0]?.message?.content || "Không có phản hồi từ AI.";
-
-        return res.status(200).json({ reply });
+        reply = completion.choices[0]?.message?.content || "";
+        if (reply) {
+          return res.status(200).json({ reply });
+        }
       } catch (aiError) {
-        console.error("Groq AI Error:", aiError);
-        reply = "Hệ thống AI (Groq) hiện đang bận hoặc cấu hình API Key có vấn đề. Chuyển sang chế độ dự phòng...\n\n";
+        console.error("Groq AI Error in /ai/chat, falling back to Gemini:", aiError);
       }
     }
-    // IF GEMINI API KEY IS PROVIDED, USE GEMINI AI
-    else if (geminiApiKey && !geminiApiKey.includes('your_')) {
+
+    // 2. TRY GEMINI AI (Fallback if Groq fails or no Groq key)
+    if (geminiApiKey && !geminiApiKey.includes('your_')) {
       try {
         let documentText = '';
-        
-        // 1. Try to read the actual document text using mammoth
         if (document && document.doc_url && document.doc_url.endsWith('.docx')) {
           try {
             const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
             const textResult = await mammoth.extractRawText({ buffer: response.data });
             documentText = textResult.value;
           } catch (fetchError) {
-            console.warn("[Gemini AI] Failed to fetch or parse docx content:", fetchError);
+            console.warn("[Gemini AI] Failed to fetch docx:", fetchError);
           }
         }
 
-        // 2. Setup Gemini AI
         const genAI = new GoogleGenerativeAI(geminiApiKey);
         const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
         const model = genAI.getGenerativeModel({ model: modelName });
         
-        // 3. Construct prompt
         const prompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy và hỗ trợ học tập toàn diện như ChatGPT.
 Tên tài liệu người dùng đang xem: ${docTitle}
 Mô tả: ${docDesc}
@@ -1152,11 +1141,11 @@ Câu hỏi của người dùng: "${message}"`;
 
         const result = await model.generateContent(prompt);
         reply = result.response.text();
-
-        return res.status(200).json({ reply });
+        if (reply) {
+          return res.status(200).json({ reply });
+        }
       } catch (aiError) {
-        console.error("Gemini AI Error:", aiError);
-        reply = "Hệ thống AI hiện đang bận hoặc cấu hình API Key có vấn đề. Chuyển sang chế độ dự phòng...\n\n";
+        console.error("Gemini AI Error in /ai/chat:", aiError);
       }
     }
 
