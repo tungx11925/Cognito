@@ -86,7 +86,7 @@ export const register = async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     
     const result = await db.query(
-      'INSERT INTO users (email, phone, password, name) VALUES ($1, $2, $3, $4) RETURNING id, email, phone, name, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting',
+      'INSERT INTO users (email, phone, password, name) VALUES ($1, $2, $3, $4) RETURNING id, email, phone, name, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role',
       [formattedEmail, phone, hashedPassword, name]
     );
     
@@ -198,7 +198,8 @@ export const login = async (req: Request, res: Response) => {
         streak: finalStreak,
         last_study_date: finalLastStudyDate,
         study_dates: studyDates,
-        privacy_setting: user.privacy_setting
+        privacy_setting: user.privacy_setting,
+        role: user.role
       } 
     });
   } catch (error: any) {
@@ -268,7 +269,8 @@ export const verify2FA = async (req: Request, res: Response) => {
         streak: finalStreak,
         last_study_date: finalLastStudyDate,
         study_dates: studyDates,
-        privacy_setting: user.privacy_setting
+        privacy_setting: user.privacy_setting,
+        role: user.role
       }
     });
   } catch (error: any) {
@@ -373,7 +375,8 @@ export const googleLogin = async (req: Request, res: Response) => {
         streak: finalStreak,
         last_study_date: finalLastStudyDate,
         study_dates: studyDates,
-        privacy_setting: user.privacy_setting
+        privacy_setting: user.privacy_setting,
+        role: user.role
       }
     });
   } catch (error: any) {
@@ -389,7 +392,7 @@ export const getMe = async (req: any, res: Response) => {
     // Automatically update/calculate streak on session check
     await updateUserStreak(userId);
     
-    const result = await db.query('SELECT id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting FROM users WHERE id = $1', [userId]);
+    const result = await db.query('SELECT id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role FROM users WHERE id = $1', [userId]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Người dùng không tồn tại' });
@@ -484,7 +487,7 @@ export const updateAvatar = async (req: any, res: Response) => {
 
     // Update user in database
     const dbResult = await db.query(
-      'UPDATE users SET avatar_url = $1 WHERE id = $2 RETURNING id, email, name, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting',
+      'UPDATE users SET avatar_url = $1 WHERE id = $2 RETURNING id, email, name, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role',
       [avatarUrl, userId]
     );
 
@@ -531,7 +534,7 @@ export const updateProfile = async (req: any, res: Response) => {
     const finalPrivacySetting = validPrivacySettings.includes(privacy_setting) ? privacy_setting : 'public';
 
     const dbResult = await db.query(
-      'UPDATE users SET name = $1, phone = $2, education = $3, address = $4, privacy_setting = $5 WHERE id = $6 RETURNING id, email, name, phone, education, address, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting',
+      'UPDATE users SET name = $1, phone = $2, education = $3, address = $4, privacy_setting = $5 WHERE id = $6 RETURNING id, email, name, phone, education, address, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role',
       [name.trim(), normalizedPhone, education || '', address || '', finalPrivacySetting, userId]
     );
 
@@ -594,6 +597,34 @@ export const changePassword = async (req: any, res: Response) => {
     res.status(200).json({ message: 'Thay đổi mật khẩu thành công!' });
   } catch (error: any) {
     console.error('Change password error:', error);
+    res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+  }
+};
+
+export const upgradePremium = async (req: any, res: Response) => {
+  try {
+    const userId = req.user.id;
+
+    const result = await db.query(
+      'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, email, name, role, phone, education, address, website, avatar_url, is_verified, streak, last_study_date, privacy_setting',
+      ['premium', userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Người dùng không tồn tại' });
+    }
+
+    const studyDates = await getUserStudyDates(userId);
+
+    res.status(200).json({
+      message: 'Nâng cấp Premium thành công! Chào mừng bạn đến với thế giới không giới hạn.',
+      user: {
+        ...result.rows[0],
+        study_dates: studyDates
+      }
+    });
+  } catch (error: any) {
+    console.error('UpgradePremium error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
 };
