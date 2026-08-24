@@ -8,6 +8,7 @@ import Link from 'next/link';
 import PomodoroWidget from '@/components/documents/PomodoroWidget';
 import SmartNotesWorkspace from '@/components/documents/SmartNotesWorkspace';
 import AIChatWorkspace from '@/components/documents/AIChatWorkspace';
+import MindmapWorkspace from '@/components/documents/MindmapWorkspace';
 import { generateFlashcards } from '@/services/ai.service';
 import { createDeck } from '@/services/flashcard.service';
 import dynamic from 'next/dynamic';
@@ -33,7 +34,7 @@ export default function DocumentViewerPage() {
   const [document, setDocument] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'tools' | 'ai'>('ai');
+  const [activeTab, setActiveTab] = useState<'tools' | 'ai' | 'mindmap'>('ai');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [selectedText, setSelectedText] = useState("");
@@ -285,7 +286,7 @@ export default function DocumentViewerPage() {
                   <div className="flex items-center bg-[#D6D3CC] p-1 rounded-xl gap-1 shrink-0 m-3.5 border border-gray-300/40">
                     <button 
                       onClick={() => setActiveTab('ai')}
-                      className={`flex-1 py-1.5 text-[13px] font-bold rounded-lg transition-all ${
+                      className={`flex-1 py-1.5 text-[12px] font-bold rounded-lg transition-all ${
                         activeTab === 'ai' 
                           ? 'bg-white text-[#0D2B24] shadow-sm border border-gray-300/20' 
                           : 'text-gray-600 hover:text-gray-800 hover:bg-white/30'
@@ -294,8 +295,18 @@ export default function DocumentViewerPage() {
                       ✨ Trợ lý AI
                     </button>
                     <button 
+                      onClick={() => setActiveTab('mindmap')}
+                      className={`flex-1 py-1.5 text-[12px] font-bold rounded-lg transition-all ${
+                        activeTab === 'mindmap' 
+                          ? 'bg-white text-[#0D2B24] shadow-sm border border-gray-300/20' 
+                          : 'text-gray-600 hover:text-gray-800 hover:bg-white/30'
+                      }`}
+                    >
+                      🧠 Mindmap AI
+                    </button>
+                    <button 
                       onClick={() => setActiveTab('tools')}
-                      className={`flex-1 py-1.5 text-[13px] font-bold rounded-lg transition-all ${
+                      className={`flex-1 py-1.5 text-[12px] font-bold rounded-lg transition-all ${
                         activeTab === 'tools' 
                           ? 'bg-white text-[#0D2B24] shadow-sm border border-gray-300/20' 
                           : 'text-gray-600 hover:text-gray-800 hover:bg-white/30'
@@ -305,10 +316,12 @@ export default function DocumentViewerPage() {
                     </button>
                   </div>
  
-                  {/* AI Chat Content */}
+                  {/* AI Chat / Mindmap / Tools Content */}
                   <div className="flex-1 flex flex-col overflow-hidden relative">
                     {activeTab === 'ai' ? (
                       <AIChatWorkspace documentId={Number(docId)} documentTitle={document.title} />
+                    ) : activeTab === 'mindmap' ? (
+                      <MindmapWorkspace documentId={Number(docId)} documentTitle={document.title} />
                     ) : (
                       <div className="flex-1 overflow-y-auto px-4 pb-8 flex flex-col space-y-6">
                         <div className="bg-white border border-gray-300/70 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">

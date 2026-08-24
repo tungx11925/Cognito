@@ -9,6 +9,7 @@ import multer from 'multer';
 const pdfParse = require('pdf-parse');
 import xlsx from 'xlsx';
 import { authenticate, AuthRequest } from '../middlewares/auth.middleware';
+import { generateMindmapWithAI } from '../utils/ai-engine.service';
 const router = Router();
 
 export function getVietnamDateString(date: Date): string {
@@ -1578,7 +1579,7 @@ Yêu cầu đầu ra BẮT BUỘC phải là một mảng JSON có cấu trúc c
         { role: "system", content: systemPrompt },
         { role: "user", content: `NỘI DUNG TÀI LIỆU:\n${truncatedText}` }
       ],
-      model: "llama-3.3-70b-versatile", // Use latest supported Groq model
+      model: "groq/compound", // Use latest supported Groq model
       temperature: 0.2,
     });
 
@@ -1599,6 +1600,127 @@ Yêu cầu đầu ra BẮT BUỘC phải là một mảng JSON có cấu trúc c
   } catch (error: any) {
     console.error("Lỗi AI Flashcard Generator:", error);
     res.status(500).json({ error: error.message || 'Lỗi server nội bộ' });
+  }
+});
+
+// Get saved mindmap for document
+router.get('/ai/mindmap/:docId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { docId } = req.params;
+    const userId = req.user!.id;
+
+    const result = await db.query(
+      'SELECT * FROM mindmaps WHERE document_id = $1 AND user_id = $2',
+      [docId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Chưa có sơ đồ tư duy nào được lưu.' });
+    }
+
+    res.status(200).json({ success: true, mindmap: result.rows[0] });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI Mindmap Generator Route (with DB cache & UPSERT)
+router.post('/ai/generate-mindmap', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { document_id, title, content, force_regenerate } = req.body;
+    const userId = req.user!.id;
+    let docTitle = title || 'Sơ Đồ Tư Duy';
+    let docContent = content || '';
+
+    // 1. If not forcing regeneration and document_id is present, check DB cache first
+    if (document_id && !force_regenerate) {
+      const cached = await db.query(
+        'SELECT * FROM mindmaps WHERE document_id = $1 AND user_id = $2',
+        [document_id, userId]
+      );
+      if (cached.rows.length > 0) {
+        return res.status(200).json({
+          success: true,
+          cached: true,
+          title: docTitle,
+          mermaidCode: cached.rows[0].mermaid_code,
+        });
+      }
+    }
+
+    // 2. Fetch document content from DB if document_id is passed
+    if (document_id) {
+      const docResult = await db.query('SELECT title, description, solution_text, doc_url FROM documents WHERE id = $1', [document_id]);
+      if (docResult.rows.length > 0) {
+        const row = docResult.rows[0];
+        docTitle = row.title || docTitle;
+        // Prioritize solution_text or full document text over short description
+        docContent = row.solution_text || '';
+
+        // If solution_text is short or empty and doc_url exists, parse file from disk
+        if ((!docContent || docContent.length < 50) && row.doc_url) {
+          try {
+            const fs = require('fs');
+            const path = require('path');
+            const fileName = path.basename(row.doc_url);
+            const filePath = path.join(__dirname, '../../uploads', fileName);
+
+            if (fs.existsSync(filePath)) {
+              const fileBuffer = fs.readFileSync(filePath);
+              const ext = path.extname(filePath).toLowerCase();
+
+              if (ext === '.pdf') {
+                const pdfData = await pdfParse(fileBuffer);
+                if (pdfData.text && pdfData.text.trim()) docContent = pdfData.text;
+              } else if (ext === '.docx') {
+                const docxData = await mammoth.extractRawText({ buffer: fileBuffer });
+                if (docxData.value && docxData.value.trim()) docContent = docxData.value;
+              } else if (ext === '.txt') {
+                docContent = fileBuffer.toString('utf-8');
+              }
+            }
+          } catch (fileErr) {
+            console.error('[Mindmap] Lỗi khi đọc file tài liệu từ đĩa:', fileErr);
+          }
+        }
+
+        // Fallback to description if still empty
+        if (!docContent || docContent.trim().length === 0) {
+          docContent = row.description || docTitle;
+        }
+
+        // If title is generic (like test/testtt), try to derive a better title from first line of content
+        if (docTitle.toLowerCase().includes('test') && docContent.trim().length > 0) {
+          const firstLine = docContent.split('\n')[0].replace(/^[#*\s\d.]+/g, '').trim();
+          if (firstLine && firstLine.length > 3 && firstLine.length < 50) {
+            docTitle = firstLine;
+          }
+        }
+      }
+    }
+
+    if (!docContent.trim()) {
+      return res.status(400).json({ error: 'Nội dung tài liệu trống, không thể tạo mindmap.' });
+    }
+
+    // 3. Call AI engine to generate Mermaid Mindmap
+    const mermaidCode = await generateMindmapWithAI(docTitle, docContent);
+
+    // 4. Save/Cache in DB if document_id exists
+    if (document_id) {
+      await db.query(
+        `INSERT INTO mindmaps (document_id, user_id, mermaid_code)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (document_id, user_id)
+         DO UPDATE SET mermaid_code = EXCLUDED.mermaid_code, updated_at = CURRENT_TIMESTAMP`,
+        [document_id, userId, mermaidCode]
+      );
+    }
+
+    res.status(200).json({ success: true, cached: false, title: docTitle, mermaidCode });
+  } catch (error: any) {
+    console.error('Lỗi sinh Mindmap AI:', error);
+    res.status(500).json({ error: error.message || 'Không thể tạo Mindmap lúc này.' });
   }
 });
 

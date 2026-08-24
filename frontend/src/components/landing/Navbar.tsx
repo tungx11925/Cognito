@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
+
 
 interface NavbarProps {
   isLoggedIn: boolean;
@@ -137,16 +138,29 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           <div className="hidden md:flex items-center gap-3">
             {isLoggedIn ? (
               <>
-                <button
-                  onClick={() => setShowPremiumModal(true)}
-                  className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5"
-                  style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", border: "none", cursor: "pointer", boxShadow: "0 2px 10px rgba(245, 158, 11, 0.2)" }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 12px rgba(245, 158, 11, 0.3)"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 10px rgba(245, 158, 11, 0.2)"; }}
-                >
-                  <Sparkles size={14} />
-                  Nâng cấp Premium
-                </button>
+                {activeUser?.role === 'premium' || activeUser?.role === 'admin' ? (
+                  <button
+                    onClick={() => router.push('/premium')}
+                    className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 border border-amber-500/30 animate-pulse"
+                    style={{ background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)", color: "#fbbf24", cursor: "pointer", boxShadow: "0 2px 10px rgba(251, 191, 36, 0.1)" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 12px rgba(251, 191, 36, 0.25)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 10px rgba(251, 191, 36, 0.1)"; }}
+                  >
+                    <Crown size={14} className="fill-amber-400 text-amber-400" />
+                    Premium
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => router.push('/premium')}
+                    className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5"
+                    style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", border: "none", cursor: "pointer", boxShadow: "0 2px 10px rgba(245, 158, 11, 0.2)" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 12px rgba(245, 158, 11, 0.3)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 10px rgba(245, 158, 11, 0.2)"; }}
+                  >
+                    <Sparkles size={14} />
+                    Nâng cấp Premium
+                  </button>
+                )}
                 
                 {/* Profile Dropdown Container */}
                 <div className="relative profile-dropdown-container">
@@ -355,15 +369,27 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
                 </>
               )}
+
               {isLoggedIn ? (
-                <button 
-                  onClick={() => { setMobileOpen(false); setShowPremiumModal(true); }}
-                  className="w-full py-2.5 rounded-lg mt-1 flex items-center justify-center gap-2" 
-                  style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", fontWeight: 600, border: "none", cursor: "pointer" }}
-                >
-                  <Sparkles size={16} />
-                  Nâng cấp Premium
-                </button>
+                activeUser?.role === 'premium' || activeUser?.role === 'admin' ? (
+                  <button 
+                    onClick={() => { setMobileOpen(false); router.push('/premium'); }}
+                    className="w-full py-2.5 rounded-lg mt-1 flex items-center justify-center gap-2 border border-amber-500/30 animate-pulse" 
+                    style={{ background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)", color: "#fbbf24", fontWeight: 600, border: "none", cursor: "pointer" }}
+                  >
+                    <Crown size={16} className="fill-amber-400 text-amber-400" />
+                    Premium
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => { setMobileOpen(false); router.push('/premium'); }}
+                    className="w-full py-2.5 rounded-lg mt-1 flex items-center justify-center gap-2" 
+                    style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", fontWeight: 600, border: "none", cursor: "pointer" }}
+                  >
+                    <Sparkles size={16} />
+                    Nâng cấp Premium
+                  </button>
+                )
               ) : (
                 <button 
                   onClick={() => { setMobileOpen(false); onSignInClick(); }}

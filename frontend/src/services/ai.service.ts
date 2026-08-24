@@ -22,3 +22,15 @@ export const generateFlashcards = (document_id: number, deck_id?: number) => api
     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ document_id, deck_id })
 });
+
+export const generateMindmap = (document_id: number, force_regenerate?: boolean) => apiFetch('/ai/generate-mindmap', {
+    method: 'POST',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document_id, force_regenerate })
+});
+
+export const getCachedMindmap = (document_id: number) => apiFetch(`/ai/mindmap/${document_id}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+});
+

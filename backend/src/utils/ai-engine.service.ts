@@ -79,7 +79,7 @@ export async function generateQuestionsWithAI(cfg: GenerateConfig): Promise<Gene
       const groq = new Groq({ apiKey: groqKey });
       const completion = await groq.chat.completions.create({
         messages: [{ role: 'user', content: prompt }],
-        model: 'llama-3.1-70b-versatile',
+        model: 'groq/compound',
         temperature: 0.6,
         max_tokens: 8000,
       });
@@ -94,7 +94,7 @@ export async function generateQuestionsWithAI(cfg: GenerateConfig): Promise<Gene
   if (geminiKey && !geminiKey.includes('your_')) {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-3.6-flash' });
       const result = await model.generateContent(prompt);
       const raw = result.response.text();
       return parseAIResponse(raw);
@@ -105,3 +105,68 @@ export async function generateQuestionsWithAI(cfg: GenerateConfig): Promise<Gene
 
   throw new Error('Không có AI API key hợp lệ. Vui lòng cấu hình GROQ_API_KEY hoặc GEMINI_API_KEY trong file .env');
 }
+
+export async function generateMindmapWithAI(documentTitle: string, documentContent: string): Promise<string> {
+  const cleanContent = (documentContent || '').replace(/<[^>]*>?/gm, '').substring(0, 5000);
+  const prompt = `Bạn là một chuyên gia vẽ Sơ Đồ Tư Duy (Mindmap Expert). Hãy đọc tài liệu dưới đây và tổng hợp kiến thức thành một Sơ Đồ Tư Duy (Mindmap) theo cú pháp Mermaid.js CHUẨN TƯ DUY TỔNG HỢP.
+
+TIÊU ĐỀ TÀI LIỆU: ${documentTitle}
+NỘI DUNG TÀI LIỆU:
+${cleanContent}
+
+NGUYÊN TẮC THIẾT KẾ SƠ ĐỒ TƯ DUY (MINDMAP RULES):
+1. TUYỆT ĐỐI KHÔNG CHÉP NGUYÊN CÂU/ĐOẠN VĂN: Mỗi nút CHỈ DÙNG TỪ KHÓA SÚC TÍCH, THUẬT NGỮ, CÔNG THỨC KHÁI QUÁT (dưới 6 từ mỗi nút).
+2. CẤU TRÚC PHÂN NHÁNH ĐA CHỦ ĐỀ (BẮT BUỘC có 4 đến 6 nhánh chính Cấp 1 tỏa ra xung quanh):
+   - Nút gốc: root((${documentTitle.replace(/[()]/g, '')}))
+   - Nhánh Cấp 1: Các trụ cột kiến thức chính (Ví dụ: Định Nghĩa, Đồ Thị Parabol, Sự Biến Thiên, Phương Trình Bậc Hai, Dạng Bài Tập, Ứng Dụng Thực Tế...).
+   - Nhánh Cấp 2: Các khía cạnh cốt lõi / trường hợp / trục đối xứng / công thức.
+   - Nhánh Cấp 3: Từ khóa làm rõ, công thức chi tiết hoặc giá trị cụ thể.
+3. TỔNG HỢP KIẾN THỨC THÔNG MINH: Tự động hệ thống hóa và bổ sung các góc nhìn tư duy bài học đầy đủ, khoa học (Khái niệm, Đồ thị, Công thức, Các bước giải, Ứng dụng).
+4. QUY TẮC CÚ PHÁP MERMAID:
+   - Dòng đầu tiên: mindmap
+   - Dòng thứ hai: root((Tên chủ đề chính))
+   - Cấp 1 thụt lùi 2 khoảng trắng.
+   - Cấp 2 thụt lùi 4 khoảng trắng.
+   - Cấp 3 thụt lùi 6 khoảng trắng.
+   - TUYỆT ĐỐI KHÔNG dùng ký tự đặc biệt như ngoặc (), ngoặc vuông [], dấu kép "" trong tên các nút.
+   - CHỈ TRẢ VỀ DUY NHẤT MÃ MERMAID PURE (Không văn bản giải thích, KHÔNG bọc trong khối \`\`\`mermaid \`\`\`).`;
+
+  const groqKey = process.env.GROQ_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+
+  if (groqKey && !groqKey.includes('your_')) {
+    try {
+      const groq = new Groq({ apiKey: groqKey });
+      const completion = await groq.chat.completions.create({
+        messages: [{ role: 'user', content: prompt }],
+        model: 'groq/compound',
+        temperature: 0.5,
+        max_tokens: 2000,
+      });
+      let raw = completion.choices[0]?.message?.content || '';
+      const idx = raw.indexOf('mindmap');
+      if (idx !== -1) raw = raw.substring(idx);
+      return raw.replace(/```mermaid/gi, '').replace(/```/g, '').trim();
+    } catch (err) {
+      console.error('[Mindmap AI] Groq failed, falling back to Gemini:', err);
+    }
+  }
+
+  if (geminiKey && !geminiKey.includes('your_')) {
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      let raw = result.response.text();
+      const idx = raw.indexOf('mindmap');
+      if (idx !== -1) raw = raw.substring(idx);
+      return raw.replace(/```mermaid/gi, '').replace(/```/g, '').trim();
+    } catch (err) {
+      console.error('[Mindmap AI] Gemini failed:', err);
+    }
+  }
+
+  throw new Error('Không thể gọi AI service. Vui lòng kiểm tra GROQ_API_KEY hoặc GEMINI_API_KEY!');
+}
+
