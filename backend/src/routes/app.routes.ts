@@ -1092,7 +1092,7 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
 
         const completion = await groq.chat.completions.create({
           messages: apiMessages,
-          model: process.env.GROQ_MODEL || "groq/compound",
+          model: process.env.GROQ_CHAT_MODEL || "groq/compound-mini",
           temperature: 0.7,
           max_tokens: 1024,
         });
