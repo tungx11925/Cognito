@@ -1100,7 +1100,7 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
 
         const completion = await groq.chat.completions.create({
           messages: apiMessages,
-          model: "llama-3.1-8b-instant",
+          model: process.env.GROQ_MODEL || "groq/compound",
           temperature: 0.7,
           max_tokens: 1024,
         });
@@ -1131,7 +1131,8 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
 
         // 2. Setup Gemini AI
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+        const model = genAI.getGenerativeModel({ model: modelName });
         
         // 3. Construct prompt
         const prompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy và hỗ trợ học tập toàn diện như ChatGPT.
