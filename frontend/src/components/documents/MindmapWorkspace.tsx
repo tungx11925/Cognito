@@ -83,23 +83,23 @@ export default function MindmapWorkspace({ documentId, documentTitle }: MindmapW
   return (
     <div className="w-full h-full flex flex-col space-y-4 p-4 overflow-y-auto">
       {/* Banner Header */}
-      <div className="bg-gradient-to-r from-[#0D2B24] to-[#16483C] p-5 rounded-2xl shadow-sm text-white relative overflow-hidden">
+      <div className="bg-gradient-to-r from-[#0D2B24] to-[#16483C] p-4 sm:p-5 rounded-2xl shadow-sm text-white relative flex-shrink-0">
         <div className="relative z-10">
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 bg-emerald-500/20 text-emerald-300 rounded-lg">
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="p-1.5 bg-emerald-500/20 text-emerald-300 rounded-lg shrink-0">
                 <Network size={18} />
               </span>
-              <h3 className="text-sm font-bold tracking-wide">AI Mindmap Auto-Generator</h3>
+              <h3 className="text-sm font-bold tracking-wide truncate">AI Mindmap Auto-Generator</h3>
             </div>
             {mindmapCode && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 rounded-md">
+              <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 rounded-md shrink-0">
                 {isCached ? <Database size={11} /> : <Sparkles size={11} />}
                 {isCached ? 'Đã lưu trong DB' : 'AI Mới tạo'}
               </span>
             )}
           </div>
-          <p className="text-xs text-emerald-100/90 leading-normal w-full break-words">
+          <p className="text-xs text-emerald-100/90 leading-relaxed w-full break-words">
             Trích xuất tự động cấu trúc kiến thức và các nhánh khái niệm quan trọng từ tài liệu thành sơ đồ tư duy trực quan.
           </p>
         </div>
