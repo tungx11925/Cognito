@@ -326,7 +326,7 @@ export default function DocumentViewerPage() {
                       <div className="flex-1 overflow-y-auto px-4 pb-8 flex flex-col space-y-6">
                         <div className="bg-white border border-gray-300/70 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
                           <h3 className="text-[12px] font-bold text-gray-900 uppercase tracking-wider mb-3">Đồng hồ Pomodoro</h3>
-                          <PomodoroWidget />
+                          <PomodoroWidget documentId={Number(docId)} />
                         </div>
  
                         <div className="bg-white border border-gray-300/70 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)] flex-1 min-h-[350px]">
