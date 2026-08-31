@@ -65,8 +65,34 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
   const [notifTab, setNotifTab] = useState<'all' | 'unread'>('all');
+
+  // Load notifications from localStorage on client side mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('edushare_notifications');
+      if (saved) {
+        try {
+          setNotifications(JSON.parse(saved));
+        } catch (e) {
+          console.error("Failed to parse saved notifications", e);
+        }
+      }
+    }
+  }, []);
+
+  // Persist notifications whenever they update
+  const updateNotifications = (newNotifs: NotificationItem[] | ((prev: NotificationItem[]) => NotificationItem[])) => {
+    setNotifications(prev => {
+      const updated = typeof newNotifs === 'function' ? newNotifs(prev) : newNotifs;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('edushare_notifications', JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
 
   const router = useRouter();
   const pathname = usePathname();
@@ -77,11 +103,11 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    updateNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
   const handleNotificationClick = (item: NotificationItem) => {
-    setNotifications(prev => prev.map(n => n.id === item.id ? { ...n, read: true } : n));
+    updateNotifications(prev => prev.map(n => n.id === item.id ? { ...n, read: true } : n));
     if (item.link) {
       setNotificationsOpen(false);
       router.push(item.link);
@@ -94,7 +120,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
       setShowToast(true);
 
       // Dynamically add a task notification when a task completes
-      setNotifications(prev => [
+      updateNotifications(prev => [
         {
           id: Date.now().toString(),
           title: 'Nhiệm vụ hoàn thành! 🎉',
