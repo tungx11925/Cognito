@@ -787,22 +787,27 @@ router.post('/flashcards', authenticate, async (req: AuthRequest, res: Response)
 });
 
 // Update a flashcard
-router.put('/flashcards/:id', async (req: Request, res: Response) => {
+router.put('/flashcards/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { front, back } = req.body;
+    const userId = req.user!.id;
     
     if (!front || !back || front.trim() === '' || back.trim() === '') {
       return res.status(400).json({ error: 'Nội dung Front và Back không được để trống' });
     }
 
     const result = await db.query(
-      'UPDATE flashcards SET front = $1, back = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *',
-      [front, back, id]
+      `UPDATE flashcards f
+       SET front = $1, back = $2, updated_at = CURRENT_TIMESTAMP
+       FROM flashcard_decks d
+       WHERE f.deck_id = d.id AND f.id = $3 AND d.user_id = $4
+       RETURNING f.*`,
+      [front, back, id, userId]
     );
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+      return res.status(404).json({ error: 'Flashcard không tồn tại hoặc bạn không có quyền sửa' });
     }
     
     res.status(200).json(result.rows[0]);
@@ -812,13 +817,20 @@ router.put('/flashcards/:id', async (req: Request, res: Response) => {
 });
 
 // Delete a flashcard
-router.delete('/flashcards/:id', async (req: Request, res: Response) => {
+router.delete('/flashcards/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await db.query('DELETE FROM flashcards WHERE id = $1 RETURNING id', [id]);
+    const userId = req.user!.id;
+    const result = await db.query(
+      `DELETE FROM flashcards f
+       USING flashcard_decks d
+       WHERE f.deck_id = d.id AND f.id = $1 AND d.user_id = $2
+       RETURNING f.id`,
+      [id, userId]
+    );
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+      return res.status(404).json({ error: 'Flashcard không tồn tại hoặc bạn không có quyền xóa' });
     }
     
     res.status(200).json({ message: 'Đã xóa thẻ thành công' });
@@ -832,14 +844,19 @@ router.put('/flashcards/:id/star', authenticate, async (req: AuthRequest, res: R
   try {
     const { id } = req.params;
     const { is_starred } = req.body;
+    const userId = req.user!.id;
     
     const result = await db.query(
-      'UPDATE flashcards SET is_starred = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
-      [is_starred, id]
+      `UPDATE flashcards f
+       SET is_starred = $1, updated_at = CURRENT_TIMESTAMP
+       FROM flashcard_decks d
+       WHERE f.deck_id = d.id AND f.id = $2 AND d.user_id = $3
+       RETURNING f.*`,
+      [is_starred, id, userId]
     );
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+      return res.status(404).json({ error: 'Flashcard không tồn tại hoặc bạn không có quyền sửa' });
     }
     
     res.status(200).json(result.rows[0]);
