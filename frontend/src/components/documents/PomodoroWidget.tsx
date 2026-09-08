@@ -66,7 +66,7 @@ export default function PomodoroWidget({ documentId }: PomodoroWidgetProps) {
         // Break completed
         setIsBreak(false);
         setTimeLeft(25 * 60); // 25 min focus
-        toast.info("Hết giờ nghỉ! Sẵn sàng cho phiên tập trung tiếp theo 💪");
+        toast("Hết giờ nghỉ! Sẵn sàng cho phiên tập trung tiếp theo 💪", { icon: '⏰' });
       }
       setIsActive(false);
     }

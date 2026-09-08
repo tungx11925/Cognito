@@ -864,6 +864,62 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
+  // Real-time SSE Connection for Daily Tasks, Streaks & Live Notifications
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    // Fetch initial tasks on login/auth
+    fetchTasks();
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!token) return;
+
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(`${API_BASE_URL}/notifications/stream?token=${encodeURIComponent(token)}`);
+
+      eventSource.addEventListener('TASK_COMPLETED', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data && data.task) {
+            setTasks(prev => prev.map(t => t.task_type === data.task.task_type ? { ...t, ...data.task, is_completed: true, completed: true } : t));
+            setTaskCompletionToast({
+              type: data.taskType || data.task.task_type,
+              title: data.title || data.task.title
+            });
+            triggerMessage(`🎉 Xuất sắc! Bạn vừa hoàn thành nhiệm vụ "${data.title || data.task.title}"!`, 'success');
+          }
+        } catch (err) {
+          console.error('Error handling SSE TASK_COMPLETED event:', err);
+        }
+      });
+
+      eventSource.addEventListener('TASK_PROGRESS', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data && data.task) {
+            setTasks(prev => prev.map(t => t.task_type === data.task.task_type ? { ...t, ...data.task } : t));
+          }
+        } catch (err) {
+          console.error('Error handling SSE TASK_PROGRESS event:', err);
+        }
+      });
+
+      eventSource.onerror = (err) => {
+        // EventSource will automatically retry in background
+        console.warn('SSE notification stream reconnecting...');
+      };
+    } catch (e) {
+      console.error('Failed to initialize SSE connection:', e);
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [isAuthenticated]);
+
   const triggerTaskProgress = async (taskType: string, increment: number = 1) => {
     try {
       const prevTask = tasks.find(t => t.task_type === taskType);
