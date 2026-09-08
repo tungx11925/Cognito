@@ -43,7 +43,6 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', aiTestRoutes);
-app.use('/api/ai', aiTestRoutes);
 app.use('/api', appRoutes);
 
 // Run AI test schema migration on startup
