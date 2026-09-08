@@ -1548,7 +1548,7 @@ const uploadMem = multer({
   }
 });
 
-router.post('/ai/generate-flashcards-from-file', uploadMem.single('document'), async (req: Request, res: Response) => {
+router.post('/ai/generate-flashcards-from-file', authenticate, uploadMem.single('document'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Vui lòng chọn file' });
 
