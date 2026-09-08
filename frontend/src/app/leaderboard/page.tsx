@@ -241,7 +241,7 @@ export default function LeaderboardPage() {
                   transition={{ delay: 0.1 }}
                   className="bg-white border-3 border-[#1a2e1c] rounded-3xl p-3 sm:p-5 text-center shadow-[5px_5px_0px_0px_rgba(26,46,28,1)] relative flex flex-col items-center justify-between min-h-[220px] sm:min-h-[250px]"
                 >
-                  <div className="absolute -top-4 bg-slate-100 text-slate-800 border-2 border-[#1a2e1c] font-black text-[11px] sm:text-xs px-3 py-0.5 rounded-full flex items-center gap-1 shadow-sm shrink-0 whitespace-nowrap">
+                  <div className="absolute -top-4 z-20 bg-slate-200 text-slate-900 border-2 border-[#1a2e1c] font-black text-xs px-3.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm shrink-0 whitespace-nowrap">
                     🥈 #2 Bạc
                   </div>
                   
@@ -273,7 +273,7 @@ export default function LeaderboardPage() {
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-gradient-to-b from-amber-50 via-white to-amber-50/50 border-3 border-amber-500 rounded-3xl p-4 sm:p-6 text-center shadow-[7px_7px_0px_0px_#1a2e1c] ring-3 ring-amber-400/30 relative flex flex-col items-center justify-between min-h-[260px] sm:min-h-[300px] z-10 scale-102"
                 >
-                  <div className="absolute -top-5 bg-amber-400 text-[#1a2e1c] border-2 border-[#1a2e1c] font-black text-xs sm:text-sm px-4 py-1 rounded-full flex items-center gap-1.5 shadow-md shrink-0 whitespace-nowrap animate-bounce">
+                  <div className="absolute -top-5 z-20 bg-amber-400 text-[#1a2e1c] border-2 border-[#1a2e1c] font-black text-xs sm:text-sm px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-md shrink-0 whitespace-nowrap animate-bounce">
                     <Crown className="w-4 h-4 fill-[#1a2e1c]" /> #1 Quán Quân
                   </div>
 
@@ -307,7 +307,7 @@ export default function LeaderboardPage() {
                   transition={{ delay: 0.2 }}
                   className="bg-white border-3 border-[#1a2e1c] rounded-3xl p-3 sm:p-5 text-center shadow-[5px_5px_0px_0px_rgba(26,46,28,1)] relative flex flex-col items-center justify-between min-h-[195px] sm:min-h-[225px]"
                 >
-                  <div className="absolute -top-4 bg-[#d97706]/20 text-[#78350f] border-2 border-[#1a2e1c] font-black text-[11px] sm:text-xs px-3 py-0.5 rounded-full flex items-center gap-1 shadow-sm shrink-0 whitespace-nowrap">
+                  <div className="absolute -top-4 z-20 bg-[#fde68a] text-[#78350f] border-2 border-[#1a2e1c] font-black text-xs px-3.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm shrink-0 whitespace-nowrap">
                     🥉 #3 Đồng
                   </div>
 
