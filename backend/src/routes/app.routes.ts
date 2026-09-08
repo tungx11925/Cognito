@@ -10,6 +10,8 @@ const pdfParse = require('pdf-parse');
 import xlsx from 'xlsx';
 import { authenticate, AuthRequest } from '../middlewares/auth.middleware';
 import { generateMindmapWithAI } from '../utils/ai-engine.service';
+import { sseService } from '../utils/sse.service';
+import jwt from 'jsonwebtoken';
 const router = Router();
 
 export function getVietnamDateString(date: Date): string {
@@ -181,13 +183,37 @@ export async function incrementTaskProgress(userId: number, taskType: string, in
       if (task.current_value >= task.target_value && !task.completed) {
         const completedRes = await db.query(
           `UPDATE user_daily_tasks
-           SET completed = true
+           SET completed = true, is_notified = true
            WHERE id = $1
            RETURNING *`,
           [task.id]
         );
-        return { task: completedRes.rows[0], justCompleted: true };
+        const completedTask = completedRes.rows[0] || task;
+
+        // Broadcast real-time SSE event to all connected sessions of this user
+        sseService.sendToUser(userId, 'TASK_COMPLETED', {
+          task: completedTask,
+          taskType,
+          title: completedTask.title,
+          description: completedTask.description,
+          rewardXP: 50,
+          timestamp: new Date().toISOString()
+        });
+
+        return { task: completedTask, justCompleted: true };
       }
+
+      // Broadcast progress update event
+      sseService.sendToUser(userId, 'TASK_PROGRESS', {
+        task,
+        taskType,
+        currentValue: task.current_value,
+        targetValue: task.target_value,
+        title: task.title,
+        description: task.description,
+        timestamp: new Date().toISOString()
+      });
+
       return { task, justCompleted: false };
     }
   } catch (error) {
@@ -196,6 +222,43 @@ export async function incrementTaskProgress(userId: number, taskType: string, in
   return null;
 }
 
+
+// ==========================================
+// REAL-TIME NOTIFICATIONS (SSE)
+// ==========================================
+
+// Real-time Server-Sent Events stream for tasks, streak & live notifications
+router.get('/notifications/stream', async (req: Request, res: Response) => {
+  let token = req.headers.authorization?.split(' ')[1] || (req.query.token as string);
+  if (!token && req.headers.cookie) {
+    const match = req.headers.cookie.match(/token=([^;]+)/);
+    if (match) token = match[1];
+  }
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: missing token for SSE' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY || 'your_64_character_secret_key_here') as any;
+    const userId = decoded.id;
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+
+    sseService.addClient(userId, res);
+
+    req.on('close', () => {
+      sseService.removeClient(res);
+    });
+  } catch (err: any) {
+    return res.status(401).json({ error: 'Invalid authentication token' });
+  }
+});
 
 // ==========================================
 // TASKS & FRIENDS ENDPOINTS
