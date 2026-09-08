@@ -1800,6 +1800,9 @@ router.post('/ai/generate-mindmap', authenticate, async (req: AuthRequest, res: 
 // ==========================================
 // SYSTEM-WIDE LEADERBOARD
 // ==========================================
+// ==========================================
+// SYSTEM-WIDE LEADERBOARD
+// ==========================================
 router.get('/leaderboard', async (req: Request, res: Response) => {
   try {
     const { category = 'streak', period = 'weekly', limit = 50 } = req.query;
@@ -1856,6 +1859,16 @@ router.get('/leaderboard', async (req: Request, res: Response) => {
         isCurrentUser: currentUserId === row.id
       }));
     } else if (category === 'quiz') {
+      let dateFilterTasks = '';
+      let dateFilterTestSets = '';
+      if (period === 'weekly') {
+        dateFilterTasks = "AND activity_date >= CURRENT_DATE - INTERVAL '7 days'";
+        dateFilterTestSets = "AND created_at >= CURRENT_DATE - INTERVAL '7 days'";
+      } else if (period === 'monthly') {
+        dateFilterTasks = "AND activity_date >= CURRENT_DATE - INTERVAL '30 days'";
+        dateFilterTestSets = "AND created_at >= CURRENT_DATE - INTERVAL '30 days'";
+      }
+
       const query = `
         SELECT 
           u.id, 
@@ -1865,12 +1878,12 @@ router.get('/leaderboard', async (req: Request, res: Response) => {
           u.streak,
           u.created_at,
           (
-            COALESCE((SELECT COUNT(*) * 50 FROM user_daily_tasks WHERE user_id = u.id AND completed = true), 0) +
-            COALESCE((SELECT COUNT(*) * 100 FROM test_sets WHERE created_by = u.id), 0) +
+            COALESCE((SELECT COUNT(*) * 50 FROM user_daily_tasks WHERE user_id = u.id AND completed = true ${dateFilterTasks}), 0) +
+            COALESCE((SELECT COUNT(*) * 100 FROM test_sets WHERE created_by = u.id ${dateFilterTestSets}), 0) +
             COALESCE((SELECT COUNT(*) * 10 FROM flashcards f JOIN flashcard_decks d ON f.deck_id = d.id WHERE d.user_id = u.id), 0)
           )::int as score,
-          COALESCE((SELECT COUNT(*) FROM user_daily_tasks WHERE user_id = u.id AND completed = true), 0)::int as tasks_completed,
-          COALESCE((SELECT COUNT(*) FROM test_sets WHERE created_by = u.id), 0)::int as test_sets_count
+          COALESCE((SELECT COUNT(*) FROM user_daily_tasks WHERE user_id = u.id AND completed = true ${dateFilterTasks}), 0)::int as tasks_completed,
+          COALESCE((SELECT COUNT(*) FROM test_sets WHERE created_by = u.id ${dateFilterTestSets}), 0)::int as test_sets_count
         FROM users u
         WHERE u.privacy_setting != 'private'
         ORDER BY score DESC, u.streak DESC, u.id ASC
@@ -1892,6 +1905,16 @@ router.get('/leaderboard', async (req: Request, res: Response) => {
       }));
     } else {
       // Default: 'streak'
+      let dateFilterStudyDates = '';
+      let dateFilterActivity = '';
+      if (period === 'weekly') {
+        dateFilterStudyDates = "AND study_date >= CURRENT_DATE - INTERVAL '7 days'";
+        dateFilterActivity = "AND activity_date >= CURRENT_DATE - INTERVAL '7 days'";
+      } else if (period === 'monthly') {
+        dateFilterStudyDates = "AND study_date >= CURRENT_DATE - INTERVAL '30 days'";
+        dateFilterActivity = "AND activity_date >= CURRENT_DATE - INTERVAL '30 days'";
+      }
+
       const query = `
         SELECT 
           u.id, 
@@ -1900,8 +1923,8 @@ router.get('/leaderboard', async (req: Request, res: Response) => {
           u.role, 
           u.streak,
           u.created_at,
-          COALESCE((SELECT COUNT(*) FROM user_study_dates WHERE user_id = u.id), 0)::int as total_days_studied,
-          COALESCE((SELECT SUM(active_seconds) FROM user_daily_activity WHERE user_id = u.id), 0)::int as total_active_seconds
+          COALESCE((SELECT COUNT(*) FROM user_study_dates WHERE user_id = u.id ${dateFilterStudyDates}), 0)::int as total_days_studied,
+          COALESCE((SELECT SUM(active_seconds) FROM user_daily_activity WHERE user_id = u.id ${dateFilterActivity}), 0)::int as total_active_seconds
         FROM users u
         WHERE u.privacy_setting != 'private'
         ORDER BY u.streak DESC, total_days_studied DESC, u.id ASC
