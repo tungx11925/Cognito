@@ -370,9 +370,11 @@ router.get('/documents/:id', authenticate, async (req: AuthRequest, res: Respons
       return res.status(404).json({ error: 'Document not found' });
     }
     
-    // Log study activity and update streak
-    await updateUserStreak(userId);
-    await incrementTaskProgress(userId, 'read_document', 1);
+    // Log study activity and update streak asynchronously in background
+    Promise.all([
+      updateUserStreak(userId),
+      incrementTaskProgress(userId, 'read_document', 1)
+    ]).catch(err => console.error('Error updating study task for read_document:', err));
     
     res.status(200).json(result.rows[0]);
   } catch (error: any) {
