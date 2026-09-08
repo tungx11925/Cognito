@@ -876,10 +876,6 @@ export default function FlashcardDeckPage() {
     const masteredCount = cards.filter((c: any) => c.repetitions > 0).length;
     const masteredPct = cards.length > 0 ? Math.round((masteredCount / cards.length) * 100) : 0;
     
-    // Warm card backgrounds
-    const currentCardBg = isFlipped ? (dark ? "#0e2317" : "#1a3d28") : (dark ? "#1e1e1e" : "#fffdf0");
-    const currentCardBorder = isFlipped ? (dark ? "#10b981" : "#1a3d28") : border;
-    const currentCardShadow = isFlipped ? (dark ? "8px 8px 0px 0px rgba(16,185,129,0.15)" : "8px 8px 0px 0px rgba(26,61,40,0.35)") : shadow;
 
     return (
       <div className="w-full max-w-7xl mx-auto px-4 py-4 z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-in slide-in-from-right duration-300">
@@ -976,82 +972,144 @@ export default function FlashcardDeckPage() {
             </span>
           </div>
 
-          {/* Flashcard container */}
-          <div className="w-full relative" style={{ perspective: 1200 }}>
-            <AnimatePresence mode="wait">
-              {currentCard && (
-                <motion.div
-                  key={`${currentCard.id}-${isFlipped}`}
-                  initial={{ rotateY: isFlipped ? -90 : 90, opacity: 0 }}
-                  animate={{ rotateY: 0, opacity: 1 }}
-                  exit={{ rotateY: isFlipped ? 90 : -90, opacity: 0 }}
-                  transition={{ duration: 0.28, ease: "easeInOut" }}
-                  onClick={() => {
-                    setIsFlipped((f) => !f);
-                    playFlipSound(muted);
-                  }}
-                  className="rounded-2xl cursor-pointer select-none"
-                  style={{
-                    background: currentCardBg,
-                    border: `2px solid ${currentCardBorder}`,
-                    boxShadow: currentCardShadow,
-                    minHeight: 320,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "2.5rem 2rem",
-                    position: "relative",
-                  }}
-                >
-                  {/* Tag and TTS */}
-                  <div className="absolute top-4 left-4 flex gap-2 z-20">
-                    <span
-                      className="text-xs px-2.5 py-1.5 rounded-lg font-bold"
-                      style={{
-                        background: isFlipped ? "rgba(255,255,255,0.12)" : (dark ? "#2a2a2a" : "#f0f0ec"),
-                        color: isFlipped ? "#a7f3d0" : (dark ? "#9ca3af" : "#4b5563"),
-                      }}
-                    >
-                      {currentCard.tag || "Thẻ học tập"}
-                    </span>
-                    <AudioButton 
-                      isPlaying={isPlaying} 
-                      onClick={() => playTTS(isFlipped ? currentCard.back : currentCard.front)} 
-                      dark={dark || isFlipped} 
-                    />
-                  </div>
+          {/* Flashcard container — CSS 3D flip thật */}
+          <style>{`
+            .flip-card-scene { perspective: 1200px; }
+            .flip-card-inner {
+              position: relative;
+              width: 100%;
+              min-height: 320px;
+              transform-style: preserve-3d;
+              transition: transform 0.52s cubic-bezier(0.4, 0.2, 0.2, 1);
+              cursor: pointer;
+            }
+            .flip-card-inner.is-flipped { transform: rotateY(180deg); }
+            .flip-card-face {
+              position: absolute;
+              inset: 0;
+              backface-visibility: hidden;
+              -webkit-backface-visibility: hidden;
+              border-radius: 1rem;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              padding: 2.5rem 2rem;
+            }
+            .flip-card-back { transform: rotateY(180deg); }
+            @keyframes pulse-hint {
+              0%, 100% { opacity: 0.5; }
+              50% { opacity: 1; }
+            }
+          `}</style>
 
-                  {/* Flip hint */}
-                  <span
-                    className="absolute top-4 right-4 text-xs px-2.5 py-1 rounded-lg font-bold"
+          {currentCard && (
+            <div className="flip-card-scene w-full">
+              <motion.div
+                key={currentCard.id}
+                initial={{ opacity: 0, x: direction > 0 ? 60 : -60 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+              >
+                <div
+                  className={`flip-card-inner${isFlipped ? " is-flipped" : ""}`}
+                  onClick={() => { setIsFlipped(f => !f); playFlipSound(muted); }}
+                  role="button"
+                  aria-label={isFlipped ? "Lật lại mặt trước" : "Lật xem đáp án"}
+                  tabIndex={0}
+                  onKeyDown={e => e.key === " " && e.preventDefault()}
+                >
+                  {/* ── FRONT FACE ── */}
+                  <div
+                    className="flip-card-face"
                     style={{
-                      background: isFlipped ? "rgba(52, 211, 153, 0.15)" : (dark ? "#2a2a2a" : "#f0f0ec"),
-                      color: isFlipped ? "#34d399" : textSub,
+                      background: dark ? "#1e1e1e" : "#fffdf0",
+                      border: `2px solid ${border}`,
+                      boxShadow: shadow,
                     }}
                   >
-                    {isFlipped ? "Mặt sau (Định nghĩa)" : "Mặt trước (Khái niệm)"}
-                  </span>
+                    {/* Tag + TTS */}
+                    <div className="absolute top-4 left-4 flex gap-2 z-20">
+                      <span
+                        className="text-xs px-2.5 py-1.5 rounded-lg font-bold"
+                        style={{ background: dark ? "#2a2a2a" : "#f0f0ec", color: dark ? "#9ca3af" : "#4b5563" }}
+                      >
+                        {currentCard.tag || "Thẻ học tập"}
+                      </span>
+                      <AudioButton isPlaying={isPlaying} onClick={() => playTTS(currentCard.front)} dark={dark} />
+                    </div>
 
-                  {!isFlipped ? (
+                    <span
+                      className="absolute top-4 right-4 text-xs px-2.5 py-1 rounded-lg font-bold"
+                      style={{ background: dark ? "#2a2a2a" : "#f0f0ec", color: textSub }}
+                    >
+                      Mặt trước
+                    </span>
+
                     <div className="text-center w-full px-4">
                       <div className="break-words text-2xl md:text-3xl font-bold" style={{ color: textMain, lineHeight: 1.3 }}>
                         {currentCard.front}
                       </div>
-                      <p className="mt-4 text-[10px]" style={{ color: textSub }}>Nhấn để lật xem đáp án</p>
                     </div>
-                  ) : (
+
+                    {/* Flip hint bottom */}
+                    <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-2">
+                      <span className="text-[10px]" style={{ color: textSub, animation: "pulse-hint 2s ease-in-out infinite" }}>
+                        Space / Click để lật xem đáp án
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* ── BACK FACE ── */}
+                  <div
+                    className="flip-card-face flip-card-back"
+                    style={{
+                      background: dark ? "#0e2317" : "#1a3d28",
+                      border: `2px solid ${dark ? "#10b981" : "#1a3d28"}`,
+                      boxShadow: dark ? "8px 8px 0px 0px rgba(16,185,129,0.15)" : "8px 8px 0px 0px rgba(26,61,40,0.35)",
+                    }}
+                  >
+                    {/* Tag + TTS */}
+                    <div className="absolute top-4 left-4 flex gap-2 z-20">
+                      <span
+                        className="text-xs px-2.5 py-1.5 rounded-lg font-bold"
+                        style={{ background: "rgba(255,255,255,0.12)", color: "#a7f3d0" }}
+                      >
+                        {currentCard.tag || "Thẻ học tập"}
+                      </span>
+                      <AudioButton isPlaying={isPlaying} onClick={() => playTTS(currentCard.back)} dark={true} />
+                    </div>
+
+                    <span
+                      className="absolute top-4 right-4 text-xs px-2.5 py-1 rounded-lg font-bold"
+                      style={{ background: "rgba(52,211,153,0.15)", color: "#34d399" }}
+                    >
+                      Mặt sau (Đáp án)
+                    </span>
+
                     <div className="text-center w-full px-4">
                       <div className="break-words text-xl md:text-2xl font-bold text-white whitespace-pre-wrap" style={{ lineHeight: 1.4 }}>
                         {currentCard.back}
                       </div>
-                      <p className="mt-4 text-[10px] text-white/60">Nhấn để lật lại câu hỏi</p>
                     </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+
+                    {/* Rating hint bottom */}
+                    <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-3">
+                      {[
+                        { key: "1", label: "Khó", color: "#ef4444" },
+                        { key: "2", label: "Ổn", color: "#f59e0b" },
+                        { key: "3", label: "Dễ", color: "#10b981" },
+                      ].map(k => (
+                        <span key={k.key} className="text-[9px] font-bold px-2 py-0.5 rounded" style={{ background: k.color + "25", color: k.color }}>
+                          [{k.key}] {k.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
 
           {/* SM-2 Rating Buttons (Show only when card flipped) */}
           <div className="w-full h-14 relative flex justify-center items-center overflow-visible">

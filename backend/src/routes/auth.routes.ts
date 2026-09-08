@@ -11,7 +11,9 @@ import {
   toggleVerification,
   verify2FA,
   changePassword,
-  upgradePremium
+  upgradePremium,
+  forgotPassword,
+  resetPassword
 } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import multer from 'multer';
@@ -55,5 +57,7 @@ router.post('/toggle-verification', authenticate, toggleVerification);
 router.post('/verify-2fa', verify2FA);
 router.put('/change-password', authenticate, changePassword);
 router.post('/upgrade-premium', authenticate, upgradePremium);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 export default router;

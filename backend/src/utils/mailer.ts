@@ -87,6 +87,53 @@ export const sendVerificationEmail = async (email: string, code: string) => {
   }
 };
 
+export const sendPasswordResetEmail = async (email: string, resetLink: string) => {
+  const { host, port, user, pass } = getMailCredentials();
+
+  console.log(`[MAILER] Preparing to send password reset link to ${email}...`);
+
+  if (!user || !pass) {
+    console.log("=========================================");
+    console.log(`[DEV MAILER] NO SMTP SETTINGS DETECTED.`);
+    console.log(`[DEV MAILER] Email: ${email}`);
+    console.log(`[DEV MAILER] Reset Link: ${resetLink}`);
+    console.log("=========================================");
+    return { success: true, devMode: true };
+  }
+
+  try {
+    const transporter = createTransporter(host, port, user, pass);
+
+    const info = await transporter.sendMail({
+      from: `"Cognito" <${user}>`,
+      to: email,
+      subject: 'Đặt lại mật khẩu tài khoản Cognito của bạn',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eef2f3; border-radius: 10px;">
+          <h2 style="color: #2d5a3d; text-align: center;">Đặt lại mật khẩu Cognito</h2>
+          <p>Chào bạn,</p>
+          <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Nhấn vào nút bên dưới để tiếp tục:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetLink}" style="display: inline-block; background-color: #2d5a3d; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-size: 16px; font-weight: bold;">
+              Đặt lại mật khẩu
+            </a>
+          </div>
+          <p style="color: #666; font-size: 13px;">Liên kết này sẽ hết hạn sau <strong>30 phút</strong>. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này — tài khoản của bạn vẫn an toàn.</p>
+          <p style="color: #999; font-size: 12px; word-break: break-all;">Hoặc sao chép đường dẫn này vào trình duyệt: <br/>${resetLink}</p>
+          <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+          <p style="text-align: center; color: #999; font-size: 11px;">Cognito © 2026</p>
+        </div>
+      `,
+    });
+
+    console.log(`[MAILER] Password reset email sent successfully: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('[MAILER] Error sending password reset email:', error);
+    return { success: false, error };
+  }
+};
+
 export const sendWarningEmail = async (email: string, name: string, message: string) => {
   const { host, port, user, pass } = getMailCredentials();
 
