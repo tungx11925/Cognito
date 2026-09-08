@@ -230,6 +230,17 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                 <Link href="/community" className="transition-colors duration-200 text-sm font-semibold text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
                   Cộng đồng
                 </Link>
+                <Link
+                  href="/leaderboard"
+                  className={`transition-colors duration-200 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${
+                    pathname === '/leaderboard'
+                      ? 'bg-amber-500 text-white font-bold'
+                      : 'text-amber-700 hover:text-amber-900 font-bold'
+                  }`}
+                >
+                  <Trophy size={14} className={pathname === '/leaderboard' ? 'text-white fill-white' : 'text-amber-500 fill-amber-500/20'} />
+                  Bảng xếp hạng
+                </Link>
               </>
             ) : (
               <>
@@ -642,12 +653,18 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                     <FileQuestion size={16} /> Bài tập AI
                   </Link>
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
+                  <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">
+                    <Trophy size={16} className="text-amber-500 fill-amber-500/20" /> Bảng xếp hạng
+                  </Link>
                 </>
               ) : (
                 <>
                   <Link href="#features" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tính năng</Link>
                   <Link href="#flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
+                  <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">
+                    <Trophy size={16} className="text-amber-500 fill-amber-500/20" /> Bảng xếp hạng
+                  </Link>
                 </>
               )}
 
