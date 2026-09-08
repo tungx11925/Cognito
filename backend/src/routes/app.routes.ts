@@ -716,14 +716,15 @@ router.post('/flashcards/decks', authenticate, async (req: AuthRequest, res: Res
 });
 
 // Update a deck (Rename, Update description, or set Public/Private)
-router.put('/flashcards/decks/:id', async (req: Request, res: Response) => {
+router.put('/flashcards/decks/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { name, description, is_public } = req.body;
+    const userId = req.user!.id;
 
-    const deckCheck = await db.query('SELECT * FROM flashcard_decks WHERE id = $1', [id]);
+    const deckCheck = await db.query('SELECT * FROM flashcard_decks WHERE id = $1 AND user_id = $2', [id, userId]);
     if (deckCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy bộ bài' });
+      return res.status(404).json({ error: 'Không tìm thấy bộ bài hoặc bạn không có quyền sửa' });
     }
 
     const currentDeck = deckCheck.rows[0];
@@ -732,8 +733,8 @@ router.put('/flashcards/decks/:id', async (req: Request, res: Response) => {
     const newIsPublic = is_public !== undefined ? is_public : currentDeck.is_public;
 
     const result = await db.query(
-      'UPDATE flashcard_decks SET name = $1, description = $2, is_public = $3 WHERE id = $4 RETURNING *',
-      [newName, newDesc, newIsPublic, id]
+      'UPDATE flashcard_decks SET name = $1, description = $2, is_public = $3 WHERE id = $4 AND user_id = $5 RETURNING *',
+      [newName, newDesc, newIsPublic, id, userId]
     );
     
     res.status(200).json(result.rows[0]);
@@ -743,15 +744,16 @@ router.put('/flashcards/decks/:id', async (req: Request, res: Response) => {
 });
 
 // Delete a deck
-router.delete('/flashcards/decks/:id', async (req: Request, res: Response) => {
+router.delete('/flashcards/decks/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const userId = req.user!.id;
     const result = await db.query(
-      'DELETE FROM flashcard_decks WHERE id = $1 RETURNING *',
-      [id]
+      'DELETE FROM flashcard_decks WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, userId]
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy bộ bài để xóa' });
+      return res.status(404).json({ error: 'Không tìm thấy bộ bài để xóa hoặc bạn không có quyền' });
     }
     res.status(200).json({ message: 'Đã xóa bộ bài thành công' });
   } catch (error: any) {
