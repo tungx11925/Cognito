@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown } from "lucide-react";
@@ -64,11 +66,8 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
   }, [dropdownOpen]);
 
   return (
-    <motion.header
-      initial={{ y: -80, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="fixed top-0 left-0 right-0 z-[100] transition-all duration-300"
+    <header
+      className="fixed top-0 left-0 right-0 z-[100] transition-all duration-200"
       style={{
         background: scrolled ? "rgba(245,243,238,0.97)" : "rgba(245,243,238,0.85)",
         backdropFilter: "blur(16px)",
@@ -95,27 +94,49 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           <nav className="hidden md:flex items-center gap-7">
             {isLoggedIn ? (
               <>
-                <Link href="/library" className="transition-colors duration-200 text-sm font-bold" style={{ color: "#1a3d28" }}>
+                <Link
+                  href="/library"
+                  prefetch={true}
+                  className={`transition-colors duration-150 text-sm ${
+                    pathname === '/library'
+                      ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-0.5'
+                      : 'font-semibold text-gray-600 hover:text-[#1a3d28]'
+                  }`}
+                >
                   Thư viện của tôi
                 </Link>
-                <Link href="/library" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
-                  Tài liệu
-                </Link>
-                <Link href="/flashcards" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
+                <Link
+                  href="/flashcards"
+                  prefetch={true}
+                  className={`transition-colors duration-150 text-sm ${
+                    pathname?.startsWith('/flashcards')
+                      ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-0.5'
+                      : 'font-semibold text-gray-600 hover:text-[#1a3d28]'
+                  }`}
+                >
                   Flashcards
                 </Link>
                 <Link
                   href="/ai-test"
-                  className={`transition-colors duration-200 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${
+                  prefetch={true}
+                  className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${
                     pathname === '/ai-test'
-                      ? 'bg-[#1a3d28] text-white'
+                      ? 'bg-[#1a3d28] text-white shadow-sm'
                       : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
                   }`}
                 >
                   <FileQuestion size={13} />
                   Bài tập AI
                 </Link>
-                <Link href="/community" className="transition-colors duration-200 text-sm font-semibold text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
+                <Link
+                  href="/community"
+                  prefetch={true}
+                  className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1 ${
+                    pathname === '/community'
+                      ? 'text-emerald-800 font-bold border-b-2 border-emerald-700 pb-0.5'
+                      : 'text-emerald-600 hover:text-emerald-800'
+                  }`}
+                >
                   Cộng đồng
                 </Link>
               </>
@@ -403,6 +424,6 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.header>
+    </header>
   );
 }

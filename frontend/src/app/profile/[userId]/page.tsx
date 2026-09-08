@@ -180,7 +180,7 @@ export default function TargetUserProfilePage() {
   const router = useRouter();
   const { userId } = useParams();
   const { isAuthenticated, activeUser, showLoginModal, setShowLoginModal } = useStudy();
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

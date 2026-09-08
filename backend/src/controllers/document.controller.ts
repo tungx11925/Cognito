@@ -1,8 +1,8 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
-import { db } from '../db';
+import { documentService } from '../services/document.service';
 
-export const uploadDocument = async (req: AuthRequest, res: Response) => {
+export const uploadDocument = async (req: AuthRequest, res: Response, next: any) => {
   try {
     const file = req.file;
     if (!file) {
@@ -15,30 +15,27 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
     }
 
     const { title, description, category } = req.body;
-    if (!title) {
-      return res.status(400).json({ error: 'Tiêu đề tài liệu là bắt buộc' });
-    }
 
-    // Build the public URL for the uploaded file
     const docUrl = `${req.protocol}://${req.get('host')}/uploads/${file.filename}`;
 
-    const result = await db.query(
-      `INSERT INTO documents (user_id, title, description, category, doc_url)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [userId, title, description || '', category || 'Khác', docUrl]
-    );
+    const document = await documentService.uploadDocument({
+      userId,
+      title,
+      description,
+      category,
+      docUrl
+    });
 
     res.status(201).json({
       message: 'Tải lên tài liệu thành công',
-      document: result.rows[0]
+      document
     });
   } catch (error: any) {
-    console.error('Error uploading document:', error);
-    res.status(500).json({ error: 'Lỗi server khi tải lên tài liệu' });
+    next(error);
   }
 };
 
-export const getDocuments = async (req: AuthRequest, res: Response) => {
+export const getDocuments = async (req: AuthRequest, res: Response, next: any) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -47,53 +44,76 @@ export const getDocuments = async (req: AuthRequest, res: Response) => {
 
     const { search, category } = req.query;
     
-    let query = `SELECT * FROM documents WHERE user_id = $1`;
-    let values: any[] = [userId];
-    let idx = 2;
+    const documents = await documentService.getDocuments(
+      userId, 
+      search as string, 
+      category as string
+    );
 
-    if (search) {
-      query += ` AND title ILIKE $${idx}`;
-      values.push(`%${search}%`);
-      idx++;
-    }
-
-    if (category) {
-      query += ` AND category = $${idx}`;
-      values.push(category);
-      idx++;
-    }
-
-    query += ` ORDER BY created_at DESC`;
-
-    const result = await db.query(query, values);
-    res.status(200).json(result.rows);
+    res.status(200).json(documents);
   } catch (error: any) {
-    console.error('Error getting documents:', error);
-    res.status(500).json({ error: 'Lỗi server khi lấy danh sách tài liệu' });
+    next(error);
   }
 };
 
-export const getDocumentById = async (req: AuthRequest, res: Response) => {
+export const getDocumentById = async (req: AuthRequest, res: Response, next: any) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ error: 'Vui lòng đăng nhập' });
     }
 
-    const docId = req.params.id;
+    const docId = parseInt(req.params.id, 10);
 
-    const result = await db.query(
-      `SELECT * FROM documents WHERE id = $1 AND user_id = $2`,
-      [docId, userId]
-    );
+    const document = await documentService.getDocumentById(docId, userId);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy tài liệu' });
-    }
-
-    res.status(200).json(result.rows[0]);
+    res.status(200).json(document);
   } catch (error: any) {
-    console.error('Error getting document:', error);
-    res.status(500).json({ error: 'Lỗi server khi xem tài liệu' });
+    next(error);
+  }
+};
+
+export const createDocument = async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+
+    const document = await documentService.createDocument({
+      userId,
+      ...req.body
+    });
+
+    res.status(201).json(document);
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+export const updateDocument = async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+
+    const docId = parseInt(req.params.id, 10);
+    const { title, description, category } = req.body;
+
+    const document = await documentService.updateDocument(docId, userId, { title, description, category });
+    res.status(200).json(document);
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+export const deleteDocument = async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+
+    const docId = parseInt(req.params.id, 10);
+    await documentService.deleteDocument(docId, userId);
+    
+    res.status(200).json({ message: 'Document deleted successfully' });
+  } catch (error: any) {
+    next(error);
   }
 };

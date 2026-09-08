@@ -1287,26 +1287,20 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return score;
   };
 
-  // Initial Fetches
+  // Single fetch on auth state — avoids double-fetching on mount
+  // isAuthenticated starts false then flips to true after /auth/me resolves
+  const hasFetchedRef = useRef(false);
   useEffect(() => {
-    fetchDocuments();
-    fetchFlashcardDecks();
-    fetchAnalytics();
-    const token = localStorage.getItem('token');
-    if (token) {
-      fetchTasks();
-      fetchFriends();
-    }
-  }, []);
-
-  // Refetch data when user logs in/authenticates
-  useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       fetchDocuments();
       fetchFlashcardDecks();
       fetchAnalytics();
       fetchTasks();
       fetchFriends();
+    }
+    if (!isAuthenticated) {
+      hasFetchedRef.current = false;
     }
   }, [isAuthenticated]);
 
@@ -1332,30 +1326,31 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [activeDeck]);
 
-  // Study Timer countdown mechanism
-  useEffect(() => {
-    if (timerActive) {
-      timerRef.current = setInterval(() => {
-        if (timerSeconds > 0) {
-          setTimerSeconds(timerSeconds - 1);
-        } else if (timerSeconds === 0) {
-          if (timerMinutes === 0) {
-            handleTimerComplete();
-          } else {
-            setTimerMinutes(timerMinutes - 1);
-            setTimerSeconds(59);
-          }
-        }
-        setElapsedStudyTime(prev => prev + 1);
-      }, 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
+  // Study Timer — use a single stable interval with refs to avoid re-renders every second
+  const timerMinutesRef = useRef(timerMinutes);
+  const timerSecondsRef = useRef(timerSeconds);
+  timerMinutesRef.current = timerMinutes;
+  timerSecondsRef.current = timerSeconds;
 
-    return () => {
+  useEffect(() => {
+    if (!timerActive) {
       if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [timerActive, timerMinutes, timerSeconds]);
+      return;
+    }
+    timerRef.current = setInterval(() => {
+      setElapsedStudyTime(prev => prev + 1);
+      if (timerSecondsRef.current > 0) {
+        setTimerSeconds(s => s - 1);
+      } else if (timerMinutesRef.current === 0) {
+        clearInterval(timerRef.current!);
+        handleTimerComplete();
+      } else {
+        setTimerMinutes(m => m - 1);
+        setTimerSeconds(59);
+      }
+    }, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [timerActive]);
 
   // Active User precise time tracking using Page Visibility API and Idle Detection
   useEffect(() => {
@@ -1471,19 +1466,18 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       window.addEventListener(evt, handleUserActivity, { passive: true });
     });
 
-    // 3. Periodic heartbeat accumulator checker (every 1 second, pinging at 30 seconds)
+    // 3. Periodic heartbeat — check every 5s, flush at 60s to reduce network spam
     const interval = setInterval(() => {
       if (activeTrackerIsUserActiveRef.current && document.visibilityState === 'visible') {
         const elapsedMs = Date.now() - activeTrackerLastActiveTimeRef.current;
         activeTrackerUnsentSecondsRef.current += elapsedMs / 1000;
         activeTrackerLastActiveTimeRef.current = Date.now();
 
-        // Send a heartbeat ping every 30 seconds of accumulated activity
-        if (activeTrackerUnsentSecondsRef.current >= 30) {
+        if (activeTrackerUnsentSecondsRef.current >= 60) {
           flushActiveTime();
         }
       }
-    }, 1000);
+    }, 5000);
 
     // Cleanup when component unmounts or user logs out
     return () => {

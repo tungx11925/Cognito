@@ -18,7 +18,7 @@ export default function ShareModal({ isOpen, onClose, resourceId, resourceType, 
   const [shareUrl, setShareUrl] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
   if (!isOpen) return null;
 

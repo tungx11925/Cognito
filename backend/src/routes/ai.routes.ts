@@ -1,12 +1,45 @@
 import { Router } from 'express';
-import { chatWithDocument, generateFlashcards } from '../controllers/ai.controller';
+import multer from 'multer';
 import { authenticate } from '../middlewares/auth.middleware';
+import { validate } from '../middlewares/validate';
+import { 
+  aiChatSchema, 
+  aiGenerateQuizSchema, 
+  aiGenerateFlashcardsSchema, 
+  aiGenerateFlashcardsFromNoteSchema, 
+  aiGenerateMindmapSchema, 
+  aiGetMindmapSchema 
+} from '../schemas/ai.schema';
+import * as AiController from '../controllers/ai.controller';
 
 const router = Router();
 
-// AI routes (Protected)
-// NOTE: /chat is commented out here because it conflicts with the /ai/chat route in app.routes.ts which supports document_id and rich offline/online fallback features.
-// router.post('/chat', authenticate, chatWithDocument);
-router.post('/flashcards/generate', authenticate, generateFlashcards);
+const uploadMem = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const validMimes = [
+      'application/pdf',
+      'text/plain',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv'
+    ];
+    if (validMimes.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Định dạng không được hỗ trợ.'));
+  }
+});
+
+// Protected routes
+router.use(authenticate);
+
+router.post('/chat', validate(aiChatSchema), AiController.chatWithDocument);
+router.post('/generate-quiz', validate(aiGenerateQuizSchema), AiController.generateQuiz);
+router.post('/generate-flashcards', validate(aiGenerateFlashcardsSchema), AiController.generateFlashcards);
+router.post('/generate-flashcards-from-note', validate(aiGenerateFlashcardsFromNoteSchema), AiController.generateFlashcardsFromNote);
+router.post('/generate-flashcards-from-file', uploadMem.single('document'), AiController.generateFlashcardsFromFile);
+router.get('/mindmap/:docId', validate(aiGetMindmapSchema), AiController.getMindmap);
+router.post('/generate-mindmap', validate(aiGenerateMindmapSchema), AiController.generateMindmap);
 
 export default router;

@@ -43,17 +43,30 @@ const upload = multer({
   }
 });
 
-router.post('/register', register);
-router.post('/login', login);
-router.post('/google', googleLogin);
+import { authRateLimiter } from '../middlewares/rate-limit.middleware';
+import { validate } from '../middlewares/validate';
+import { 
+  registerSchema, 
+  loginSchema, 
+  googleLoginSchema, 
+  checkAvailabilitySchema, 
+  updateProfileSchema, 
+  toggleVerificationSchema, 
+  verify2FASchema, 
+  changePasswordSchema 
+} from '../schemas/auth.schema';
+
+router.post('/register', validate(registerSchema), register);
+router.post('/login', authRateLimiter, validate(loginSchema), login);
+router.post('/google', authRateLimiter, validate(googleLoginSchema), googleLogin);
 router.post('/logout', logout);
-router.post('/check-availability', checkAvailability);
+router.post('/check-availability', validate(checkAvailabilitySchema), checkAvailability);
 router.get('/me', authenticate, getMe);
 router.post('/avatar', authenticate, upload.single('avatar'), updateAvatar);
-router.put('/profile', authenticate, updateProfile);
-router.post('/toggle-verification', authenticate, toggleVerification);
-router.post('/verify-2fa', verify2FA);
-router.put('/change-password', authenticate, changePassword);
+router.put('/profile', authenticate, validate(updateProfileSchema), updateProfile);
+router.post('/toggle-verification', authenticate, validate(toggleVerificationSchema), toggleVerification);
+router.post('/verify-2fa', authRateLimiter, validate(verify2FASchema), verify2FA);
+router.put('/change-password', authenticate, validate(changePasswordSchema), changePassword);
 router.post('/upgrade-premium', authenticate, upgradePremium);
 
 export default router;

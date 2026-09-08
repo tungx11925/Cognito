@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Syne:wght@400..800&family=Space+Grotesk:wght@300..700&family=Outfit:wght@100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,14 +7,30 @@
 @layer base {
   html {
     scrollbar-gutter: stable;
+    /* GPU-accelerated scrolling */
+    scroll-behavior: smooth;
   }
   body {
     @apply antialiased text-slate-800 bg-[#FAF8F5];
     font-family: 'Inter', sans-serif;
+    /* Prevent layout thrashing */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   h1, h2, h3, h4, .font-serif-elegant {
     font-family: 'Inter', sans-serif;
+  }
+
+  /* Hardware accelerate all transitions */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent paint flashing on interactive elements */
+  button, a, [role="button"] {
+    will-change: auto;
   }
 }
 
@@ -32,7 +48,8 @@
 }
 
 .shadow-premium-hover {
-  transition: all 0.3s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  will-change: transform;
 }
 .shadow-premium-hover:hover {
   transform: translateY(-4px);
@@ -59,7 +76,7 @@
 .docx-wrapper { background-color: transparent !important; padding: 24px !important; }
 .docx-wrapper > section.docx { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1) !important; border-radius: 4px; }
 
-/* Scrolling Marquee */
+/* Scrolling Marquee - GPU accelerated */
 @keyframes marquee {
   0% { transform: translateX(0%); }
   100% { transform: translateX(-50%); }
@@ -75,6 +92,7 @@
   display: flex;
   white-space: nowrap;
   animation: marquee 35s linear infinite;
+  will-change: transform;
 }
 
 .animate-marquee-content:hover {
@@ -91,3 +109,13 @@
     linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
 }
 
+/* Smooth page transitions */
+.page-enter {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms ease, transform 200ms ease;
+}

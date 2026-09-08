@@ -188,11 +188,14 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         (window as any).google.accounts.id.initialize({
           client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
           callback: handleGoogleCredentialResponse,
+          ux_mode: 'popup',
         });
         
+        // width phải là số (px), không phải "100%" — tránh lỗi GSI_LOGGER
+        const containerWidth = node.offsetWidth || 380;
         (window as any).google.accounts.id.renderButton(
           node,
-          { theme: "outline", size: "large", width: "100%", shape: "rectangular" }
+          { theme: "outline", size: "large", width: containerWidth, shape: "rectangular" }
         );
       } else {
         setTimeout(initGoogleButton, 100);
