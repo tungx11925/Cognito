@@ -517,13 +517,12 @@ router.post('/study-sessions/active-ping', authenticate, async (req: AuthRequest
     const { seconds } = req.body;
     const userId = req.user!.id;
     
-    if (!seconds || typeof seconds !== 'number' || seconds <= 0) {
-      return res.status(400).json({ error: 'Số giây không hợp lệ' });
+    if (!seconds || typeof seconds !== 'number' || seconds <= 0 || seconds > 300) {
+      return res.status(400).json({ error: 'Số giây không hợp lệ (phải từ 1 đến 300 giây mỗi lần ping)' });
     }
 
     // Determine VN timezone date (UTC+7)
-    const d = new Date(Date.now() + 7 * 60 * 60 * 1000);
-    const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    const dateStr = getVietnamDateString(new Date());
 
     const result = await db.query(
       `INSERT INTO user_daily_activity (user_id, activity_date, active_seconds)
