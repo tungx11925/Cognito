@@ -6,7 +6,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/mailer';
-import { updateUserStreak } from '../routes/app.routes';
+import { updateUserStreak, getVietnamDateString } from '../routes/app.routes';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -26,13 +26,7 @@ async function getUserStudyDates(userId: number): Promise<string[]> {
       'SELECT study_date FROM user_study_dates WHERE user_id = $1 ORDER BY study_date DESC',
       [userId]
     );
-    return datesRes.rows.map(row => {
-      const d = new Date(row.study_date);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    });
+    return datesRes.rows.map(row => getVietnamDateString(new Date(row.study_date)));
   } catch (err) {
     console.error('Error in getUserStudyDates:', err);
     return [];
@@ -143,7 +137,7 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Tài khoản hoặc mật khẩu không chính xác' });
     }
 
-    // Check if 2FA (Verification status) is active/enabled for this user
+    // NOTE: In the database schema, 'is_verified' is utilized as the flag for requiring Email 2FA on login
     if (user.is_verified) {
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
