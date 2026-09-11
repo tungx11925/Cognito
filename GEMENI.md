@@ -59,3 +59,5 @@ Các quy tắc, sub-agents, và skills đã được tổ chức trong `.gemini/
 
 ---
 *Được tạo bởi Antigravity IDE — Mô hình theo cấu trúc .claude/*
+
+xin chao
