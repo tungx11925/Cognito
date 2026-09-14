@@ -8,13 +8,24 @@ import paymentRoutes from './routes/payment.routes';
 import aiRoutes from './routes/ai.routes';
 import marketplaceRoutes from './routes/marketplace.routes';
 import adminRoutes from './routes/admin.routes';
+import aiTestRoutes from './routes/ai-test.routes';
+import { bootstrapAITestSchema } from './db/ai-test-schema';
 import path from 'path';
 
 const app = express();
+app.set('trust proxy', true);
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+].filter(Boolean) as string[];
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    callback(null, origin);
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true
 }));
@@ -31,7 +42,11 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api', aiTestRoutes);
 app.use('/api', appRoutes);
+
+// Run AI test schema migration on startup
+bootstrapAITestSchema();
 
 // Serve static uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

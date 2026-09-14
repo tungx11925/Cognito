@@ -5,6 +5,8 @@ exports.up = pgm => {
     is_verified: { type: 'boolean', default: false },
     verification_code: { type: 'varchar(6)', default: null },
     code_expires_at: { type: 'timestamp', default: null }
+  }, {
+    ifNotExists: true
   });
 };
 

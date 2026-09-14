@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, FileText, DollarSign, Search, Trash2, 
   Loader2, ArrowLeft, ShieldAlert, TrendingUp, BookOpen, 
   Layers, Clock, RefreshCw, ChevronRight, LogOut, CheckCircle,
-  HelpCircle, AlertTriangle, UserPlus, Edit, X, Plus, Mail, Lock, Phone
+  HelpCircle, AlertTriangle, UserPlus, Edit, X, Plus, Mail, Lock, Phone, Eye
 } from "lucide-react";
 import { useStudy } from "@/context/StudyContext";
 import { 
@@ -18,7 +18,9 @@ import {
   deleteAdminUser, 
   getAdminDocuments, 
   deleteAdminDocument,
-  getAdminTransactions 
+  getAdminTransactions,
+  warnAdminUser,
+  getAdminUserDetails
 } from "@/services/admin.service";
 
 type ActiveTab = "dashboard" | "users" | "documents" | "transactions";
@@ -42,6 +44,8 @@ export default function AdminPage() {
   // Search states
   const [userSearch, setUserSearch] = useState("");
   const [docSearch, setDocSearch] = useState("");
+  const lastUserSearchRef = React.useRef("");
+  const lastDocSearchRef = React.useRef("");
 
   // Modals / Actions
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -63,6 +67,30 @@ export default function AdminPage() {
   const [userFormError, setUserFormError] = useState<string | null>(null);
   const [isSubmittingUser, setIsSubmittingUser] = useState(false);
 
+  // Warning Modal states
+  const [warnModalOpen, setWarnModalOpen] = useState(false);
+  const [warningUser, setWarningUser] = useState<any | null>(null);
+  const [warningMessage, setWarningMessage] = useState("");
+  const [isSendingWarning, setIsSendingWarning] = useState(false);
+
+  // User Details Modal states
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [detailsUser, setDetailsUser] = useState<any | null>(null);
+  const [detailsData, setDetailsData] = useState<any | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [detailsTab, setDetailsTab] = useState<"profile" | "docs" | "decks" | "sessions" | "tx">("profile");
+
+  // User pagination states
+  const [userPage, setUserPage] = useState(1);
+  const [userLimit, setUserLimit] = useState(10);
+  const [userPagination, setUserPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: 10,
+    totalPages: 1
+  });
+
   // Check if admin and load initial data
   useEffect(() => {
     if (authLoading) return;
@@ -75,6 +103,32 @@ export default function AdminPage() {
 
     loadDashboardData();
   }, [authLoading, activeUser]);
+
+  // Debounce User Search
+  useEffect(() => {
+    if (activeTab !== "users") return;
+    if (userSearch === lastUserSearchRef.current) return;
+
+    const delayDebounceFn = setTimeout(() => {
+      loadUsers(userSearch, 1);
+      lastUserSearchRef.current = userSearch;
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [userSearch, activeTab]);
+
+  // Debounce Document Search
+  useEffect(() => {
+    if (activeTab !== "documents") return;
+    if (docSearch === lastDocSearchRef.current) return;
+
+    const delayDebounceFn = setTimeout(() => {
+      loadDocuments(docSearch);
+      lastDocSearchRef.current = docSearch;
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [docSearch, activeTab]);
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -120,7 +174,7 @@ export default function AdminPage() {
       setCharts(finalCharts);
 
       // Load specific tab data based on active tab
-      if (activeTab === "users") await loadUsers();
+      if (activeTab === "users") await loadUsers(undefined, 1);
       else if (activeTab === "documents") await loadDocuments();
       else if (activeTab === "transactions") await loadTransactions();
 
@@ -132,14 +186,29 @@ export default function AdminPage() {
     }
   };
 
-  const loadUsers = async (searchVal?: string) => {
+  const loadUsers = async (searchVal?: string, pageNum?: number) => {
     try {
-      const res = await getAdminUsers(searchVal !== undefined ? searchVal : userSearch);
+      const pageToLoad = pageNum !== undefined ? pageNum : userPage;
+      const res = await getAdminUsers(
+        searchVal !== undefined ? searchVal : userSearch,
+        pageToLoad,
+        userLimit
+      );
       if (res.error) throw new Error(res.error);
       setUsers(res.users || []);
+      if (res.pagination) {
+        setUserPagination(res.pagination);
+        setUserPage(res.pagination.page);
+      }
     } catch (err: any) {
       triggerNotification("Lỗi tải danh sách người dùng", "error");
     }
+  };
+
+  const handleUserPageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > userPagination.totalPages) return;
+    setUserPage(newPage);
+    loadUsers(userSearch, newPage);
   };
 
   const loadDocuments = async (searchVal?: string) => {
@@ -161,7 +230,6 @@ export default function AdminPage() {
       triggerNotification("Lỗi tải danh sách giao dịch", "error");
     }
   };
-
   // Handle active tab changes
   const handleTabChange = async (tab: ActiveTab) => {
     setActiveTab(tab);
@@ -170,11 +238,14 @@ export default function AdminPage() {
       if (tab === "dashboard") {
         await loadDashboardData();
       } else if (tab === "users") {
-        await loadUsers("");
+        setUserPage(1);
+        await loadUsers("", 1);
         setUserSearch("");
+        lastUserSearchRef.current = "";
       } else if (tab === "documents") {
         await loadDocuments("");
         setDocSearch("");
+        lastDocSearchRef.current = "";
       } else if (tab === "transactions") {
         await loadTransactions();
       }
@@ -318,6 +389,57 @@ export default function AdminPage() {
     setTimeout(() => setActionSuccess(null), 3500);
   };
 
+  const openWarnModal = (user: any) => {
+    setWarningUser(user);
+    setWarningMessage("");
+    setIsSendingWarning(false);
+    setWarnModalOpen(true);
+  };
+
+  const handleSendWarning = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!warningUser) return;
+    if (!warningMessage.trim()) {
+      triggerNotification("Nội dung cảnh báo không được để trống", "error");
+      return;
+    }
+
+    setIsSendingWarning(true);
+    try {
+      const res = await warnAdminUser(warningUser.id, warningMessage);
+      if (res.error) throw new Error(res.error);
+
+      triggerNotification(`Đã gửi email cảnh báo tới ${warningUser.email} thành công!`, "success");
+      setWarnModalOpen(false);
+    } catch (err: any) {
+      triggerNotification(err.message || "Lỗi gửi email cảnh báo", "error");
+    } finally {
+      setIsSendingWarning(false);
+    }
+  };
+
+  const openDetailsModal = async (user: any) => {
+    setDetailsUser(user);
+    setDetailsData(null);
+    setDetailsLoading(true);
+    setDetailsError(null);
+    setDetailsTab("profile");
+    setDetailsModalOpen(true);
+
+    try {
+      const res = await getAdminUserDetails(user.id);
+      if (res.error) throw new Error(res.error);
+      setDetailsData(res);
+      if (res.user) {
+        setDetailsUser(res.user);
+      }
+    } catch (err: any) {
+      setDetailsError(err.message || "Không thể tải chi tiết thông tin người dùng");
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     await logout();
     router.push("/");
@@ -331,7 +453,7 @@ export default function AdminPage() {
       <div className="admin-dashboard-root h-screen w-full flex flex-col items-center justify-center bg-[#FAF8F5]">
         <style dangerouslySetInnerHTML={{ __html: `
           .admin-dashboard-root, .admin-dashboard-root p {
-            font-family: 'Plus Jakarta Sans', sans-serif !important;
+            font-family: 'Inter', sans-serif !important;
           }
         `}} />
         <Loader2 className="w-10 h-10 animate-spin text-[#0D2B24]" />
@@ -349,7 +471,7 @@ export default function AdminPage() {
           .admin-dashboard-root h1,
           .admin-dashboard-root p,
           .admin-dashboard-root button {
-            font-family: 'Plus Jakarta Sans', sans-serif !important;
+            font-family: 'Inter', sans-serif !important;
           }
         `}} />
         <div className="w-20 h-20 rounded-full bg-red-50 flex items-center justify-center border-2 border-red-200 mb-6">
@@ -388,7 +510,7 @@ export default function AdminPage() {
         .admin-dashboard-root table,
         .admin-dashboard-root th,
         .admin-dashboard-root td {
-          font-family: 'Plus Jakarta Sans', sans-serif !important;
+          font-family: 'Inter', sans-serif !important;
         }
       `}} />
       
@@ -820,6 +942,20 @@ export default function AdminPage() {
                                 <td className="py-4 px-6 text-right">
                                   <div className="flex justify-end gap-2">
                                     <button
+                                      onClick={() => openDetailsModal(u)}
+                                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-55 rounded-lg transition-colors border border-transparent hover:border-blue-100"
+                                      title="Xem chi tiết thông tin, tài liệu, flashcard..."
+                                    >
+                                      <Eye size={15} />
+                                    </button>
+                                    <button
+                                      onClick={() => openWarnModal(u)}
+                                      className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-55 rounded-lg transition-colors border border-transparent hover:border-amber-100"
+                                      title="Gửi email cảnh báo tài khoản"
+                                    >
+                                      <Mail size={15} />
+                                    </button>
+                                    <button
                                       onClick={() => openEditUserModal(u)}
                                       className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100"
                                       title="Chỉnh sửa thông tin"
@@ -842,6 +978,69 @@ export default function AdminPage() {
                       </table>
                     </div>
                   </div>
+
+                  {/* Pagination Controls */}
+                  {userPagination.totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-4 border-t border-gray-100">
+                      <p className="text-xs font-bold text-gray-400">
+                        Hiển thị từ <span className="text-[#0D2B24]">{(userPage - 1) * userLimit + 1}</span> đến{" "}
+                        <span className="text-[#0D2B24]">
+                          {Math.min(userPage * userLimit, userPagination.total)}
+                        </span>{" "}
+                        trong tổng số <span className="text-[#0D2B24]">{userPagination.total}</span> thành viên
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleUserPageChange(userPage - 1)}
+                          disabled={userPage === 1}
+                          className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 select-none active:scale-[0.98]"
+                        >
+                          <ArrowLeft size={12} /> Trước
+                        </button>
+                        
+                        {/* Page Numbers */}
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: userPagination.totalPages }, (_, i) => i + 1).map((p) => {
+                            if (
+                              p === 1 ||
+                              p === userPagination.totalPages ||
+                              Math.abs(p - userPage) <= 1
+                            ) {
+                              return (
+                                <button
+                                  key={p}
+                                  onClick={() => handleUserPageChange(p)}
+                                  className={`w-8 h-8 rounded-xl text-xs font-black transition-all ${
+                                    userPage === p
+                                      ? "bg-[#0D2B24] text-white shadow-sm"
+                                      : "border border-gray-200 bg-white text-gray-600 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  {p}
+                                </button>
+                              );
+                            }
+                            if (p === 2 || p === userPagination.totalPages - 1) {
+                              return (
+                                <span key={p} className="text-xs text-gray-400 font-bold px-1 select-none">
+                                  ...
+                                </span>
+                              );
+                            }
+                            return null;
+                          })}
+                        </div>
+
+                        <button
+                          onClick={() => handleUserPageChange(userPage + 1)}
+                          disabled={userPage === userPagination.totalPages}
+                          className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 select-none active:scale-[0.98]"
+                        >
+                          Sau <ChevronRight size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                 </div>
               )}
@@ -1284,6 +1483,495 @@ export default function AdminPage() {
                 </form>
               </div>
 
+            </motion.div>
+          </div>
+        )}
+
+        {/* WARNING USER MODAL */}
+        {warnModalOpen && warningUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-amber-100 overflow-hidden text-left"
+            >
+              {/* Header */}
+              <div className="bg-amber-50 px-6 py-5 border-b border-amber-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500 text-white rounded-2xl">
+                    <ShieldAlert size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-gray-900">Cảnh báo thành viên</h3>
+                    <p className="text-[10px] font-bold text-amber-800/80">Gửi thông báo vi phạm trực tiếp qua Email</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setWarnModalOpen(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1.5 hover:bg-amber-100/50 rounded-xl transition-all"
+                  disabled={isSendingWarning}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <form onSubmit={handleSendWarning} className="p-6 space-y-4">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-gray-400">Người nhận:</span>
+                    <span className="text-gray-800">{warningUser.name}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-gray-400">Email:</span>
+                    <span className="text-gray-800 font-mono">{warningUser.email}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-extrabold uppercase tracking-wider text-gray-400 mb-1.5">
+                    Nội dung cảnh báo vi phạm
+                  </label>
+                  <textarea
+                    required
+                    rows={6}
+                    value={warningMessage}
+                    onChange={(e) => setWarningMessage(e.target.value)}
+                    placeholder="Nhập chi tiết các hành vi vi phạm hoặc các nội dung cảnh báo tài khoản cần lưu ý gửi tới người dùng..."
+                    className="w-full text-xs p-4 rounded-2xl border border-gray-200 focus:outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 bg-slate-50/50 hover:bg-slate-50 transition-all font-semibold text-gray-800 resize-none"
+                    disabled={isSendingWarning}
+                  />
+                </div>
+
+                <p className="text-[10px] text-gray-400 font-medium">
+                  * Hệ thống sẽ tự động định dạng và gửi email cảnh báo chính thức từ Cognito Admin tới địa chỉ email của thành viên này.
+                </p>
+
+                {/* Footer Buttons */}
+                <div className="flex gap-3 pt-4 border-t border-gray-100 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setWarnModalOpen(false)}
+                    className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 font-bold text-xs text-gray-600 rounded-xl transition-all active:scale-[0.98]"
+                    disabled={isSendingWarning}
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 font-bold text-xs text-white rounded-xl transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2"
+                    disabled={isSendingWarning}
+                  >
+                    {isSendingWarning ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin" /> Đang gửi...
+                      </>
+                    ) : (
+                      <>
+                        <Mail size={14} /> Gửi email cảnh báo
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* USER DETAILS MODAL */}
+        {detailsModalOpen && detailsUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#FAF8F5] rounded-3xl max-w-4xl w-full h-[85vh] shadow-2xl border border-gray-200 overflow-hidden flex flex-col text-left"
+            >
+              {/* Header */}
+              <div className="bg-[#0D2B24] text-white px-6 py-5 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center font-black text-lg border border-white/10">
+                    {detailsUser.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black flex items-center gap-2">
+                      {detailsUser.name}
+                      <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-full border ${
+                        detailsUser.role === "admin" 
+                          ? "bg-red-500/20 text-red-300 border-red-500/30" 
+                          : detailsUser.role === "contributor" 
+                          ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                          : "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                      }`}>
+                        {detailsUser.role === "admin" ? "Quản trị viên" : detailsUser.role === "contributor" ? "Cộng tác viên" : "Thành viên"}
+                      </span>
+                    </h3>
+                    <p className="text-[10px] font-bold text-emerald-300/80 mt-0.5">{detailsUser.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDetailsModalOpen(false)}
+                  className="text-white/60 hover:text-white p-1.5 hover:bg-white/10 rounded-xl transition-all"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Sub-Header / Profile metrics */}
+              <div className="bg-white border-b border-gray-200 px-6 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0 text-left">
+                <div>
+                  <p className="text-[8px] font-extrabold text-gray-400 uppercase tracking-wider">Số điện thoại</p>
+                  <p className="text-xs font-black text-gray-700 mt-1">{detailsUser.phone || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[8px] font-extrabold text-gray-400 uppercase tracking-wider">Số dư tài khoản</p>
+                  <p className="text-xs font-black text-emerald-600 mt-1">{(detailsUser.wallet_balance || 0).toLocaleString()} Xu</p>
+                </div>
+                <div>
+                  <p className="text-[8px] font-extrabold text-gray-400 uppercase tracking-wider">Ngày tham gia</p>
+                  <p className="text-xs font-black text-gray-700 mt-1">{new Date(detailsUser.created_at).toLocaleDateString("vi-VN")}</p>
+                </div>
+                <div>
+                  <p className="text-[8px] font-extrabold text-gray-400 uppercase tracking-wider">ID tài khoản</p>
+                  <p className="text-xs font-black text-gray-700 font-mono mt-1">#{detailsUser.id}</p>
+                </div>
+              </div>
+
+              {/* Tab Navigation inside Modal */}
+              <div className="bg-white border-b border-gray-200 px-6 flex gap-4 shrink-0 overflow-x-auto">
+                <button
+                  onClick={() => setDetailsTab("profile")}
+                  className={`py-3 text-[11px] font-black uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${
+                    detailsTab === "profile"
+                      ? "border-emerald-600 text-emerald-600"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  Thông tin cá nhân
+                </button>
+                <button
+                  onClick={() => setDetailsTab("docs")}
+                  className={`py-3 text-[11px] font-black uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${
+                    detailsTab === "docs"
+                      ? "border-emerald-600 text-emerald-600"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  Tài liệu ({detailsData?.documents?.length || 0})
+                </button>
+                <button
+                  onClick={() => setDetailsTab("decks")}
+                  className={`py-3 text-[11px] font-black uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${
+                    detailsTab === "decks"
+                      ? "border-emerald-600 text-emerald-600"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  Flashcard ({detailsData?.decks?.length || 0})
+                </button>
+                <button
+                  onClick={() => setDetailsTab("sessions")}
+                  className={`py-3 text-[11px] font-black uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${
+                    detailsTab === "sessions"
+                      ? "border-emerald-600 text-emerald-600"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  Lịch sử học ({detailsData?.studySessions?.length || 0})
+                </button>
+                <button
+                  onClick={() => setDetailsTab("tx")}
+                  className={`py-3 text-[11px] font-black uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${
+                    detailsTab === "tx"
+                      ? "border-emerald-600 text-emerald-600"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  Giao dịch ({detailsData?.transactions?.length || 0})
+                </button>
+              </div>
+
+              {/* Tab Contents */}
+              <div className="flex-1 overflow-y-auto p-6 text-left">
+                {detailsLoading ? (
+                  <div className="h-full flex flex-col items-center justify-center py-10">
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+                    <p className="mt-2 text-xs font-bold text-gray-400">Đang tải thông tin chi tiết...</p>
+                  </div>
+                ) : detailsError ? (
+                  <div className="h-full flex flex-col items-center justify-center py-10 text-red-500">
+                    <AlertTriangle className="w-8 h-8" />
+                    <p className="mt-2 text-xs font-bold">{detailsError}</p>
+                  </div>
+                ) : detailsData ? (
+                  <>
+                    {/* 0. PROFILE TAB */}
+                    {detailsTab === "profile" && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Basic Info Card */}
+                        <div className="bg-white rounded-3xl p-6 border border-gray-200 shadow-sm space-y-4">
+                          <h4 className="text-xs font-black text-[#0D2B24] uppercase tracking-wider border-b border-gray-100 pb-2">
+                            Thông tin cơ bản
+                          </h4>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Họ và tên:</span>
+                              <span className="text-gray-800">{detailsUser.name}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Địa chỉ Email:</span>
+                              <span className="text-gray-800 font-mono">{detailsUser.email}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Số điện thoại:</span>
+                              <span className="text-gray-800">{detailsUser.phone || "Chưa cập nhật"}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Học vấn:</span>
+                              <span className="text-gray-800">{detailsUser.education || "Chưa cập nhật"}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Địa chỉ:</span>
+                              <span className="text-gray-800">{detailsUser.address || "Chưa cập nhật"}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Vai trò hệ thống:</span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] ${
+                                detailsUser.role === "admin" 
+                                  ? "bg-red-50 text-red-700 border border-red-200" 
+                                  : detailsUser.role === "contributor" 
+                                  ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                  : "bg-blue-50 text-blue-700 border border-blue-200"
+                              }`}>
+                                {detailsUser.role === "admin" ? "Quản trị viên" : detailsUser.role === "contributor" ? "Cộng tác viên" : "Thành viên"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Ngày tham gia:</span>
+                              <span className="text-gray-800">{new Date(detailsUser.created_at).toLocaleString("vi-VN")}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Mã tài khoản (ID):</span>
+                              <span className="text-gray-500 font-mono">#{detailsUser.id}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Activity Summary Card */}
+                        <div className="bg-white rounded-3xl p-6 border border-gray-200 shadow-sm space-y-4">
+                          <h4 className="text-xs font-black text-[#0D2B24] uppercase tracking-wider border-b border-gray-100 pb-2">
+                            Hoạt động & Tài chính
+                          </h4>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Số dư ví hiện tại:</span>
+                              <span className="text-emerald-600 font-black text-sm">{(detailsUser.wallet_balance || 0).toLocaleString()} Xu</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Tài liệu đã tải lên:</span>
+                              <span className="text-gray-800">{detailsData?.documents?.length || 0} tài liệu</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Số bộ thẻ Flashcard:</span>
+                              <span className="text-gray-800">{detailsData?.decks?.length || 0} bộ thẻ</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Tổng số lượt tự học:</span>
+                              <span className="text-gray-800">{detailsData?.studySessions?.length || 0} lượt</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-gray-400">Tổng số giao dịch:</span>
+                              <span className="text-gray-800">{detailsData?.transactions?.length || 0} giao dịch</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 1. DOCUMENTS TAB */}
+                    {detailsTab === "docs" && (
+                      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 text-[9px] font-extrabold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                                <th className="py-3 px-4">Tên tài liệu</th>
+                                <th className="py-3 px-4">Danh mục</th>
+                                <th className="py-3 px-4">Giá bán</th>
+                                <th className="py-3 px-4">Chế độ</th>
+                                <th className="py-3 px-4">Ngày đăng</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 text-xs font-bold text-gray-600">
+                              {detailsData.documents.length === 0 ? (
+                                <tr>
+                                  <td colSpan={5} className="text-center py-8 text-gray-400">Người dùng chưa đăng tải tài liệu nào</td>
+                                </tr>
+                              ) : (
+                                detailsData.documents.map((doc: any) => (
+                                  <tr key={doc.id} className="hover:bg-slate-50/50">
+                                    <td className="py-3 px-4 text-gray-900 font-extrabold">{doc.title}</td>
+                                    <td className="py-3 px-4">{doc.category || "Chưa phân loại"}</td>
+                                    <td className="py-3 px-4 text-emerald-600 font-black">{doc.price === 0 ? "Miễn phí" : `${doc.price} Xu`}</td>
+                                    <td className="py-3 px-4">
+                                      <span className={`px-2 py-0.5 rounded text-[9px] ${
+                                        doc.visibility === "public" ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-600"
+                                      }`}>
+                                        {doc.visibility === "public" ? "Công khai" : "Cá nhân"}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 text-gray-400 font-medium">{new Date(doc.created_at).toLocaleDateString("vi-VN")}</td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 2. FLASHCARDS TAB */}
+                    {detailsTab === "decks" && (
+                      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 text-[9px] font-extrabold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                                <th className="py-3 px-4">Tên bộ thẻ</th>
+                                <th className="py-3 px-4">Mô tả</th>
+                                <th className="py-3 px-4">Số thẻ</th>
+                                <th className="py-3 px-4">Ngày tạo</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 text-xs font-bold text-gray-600">
+                              {detailsData.decks.length === 0 ? (
+                                <tr>
+                                  <td colSpan={4} className="text-center py-8 text-gray-400">Người dùng chưa tạo bộ thẻ học nào</td>
+                                </tr>
+                              ) : (
+                                detailsData.decks.map((deck: any) => (
+                                  <tr key={deck.id} className="hover:bg-slate-50/50">
+                                    <td className="py-3 px-4 text-gray-900 font-extrabold">{deck.name}</td>
+                                    <td className="py-3 px-4 font-medium text-gray-400">{deck.description || "—"}</td>
+                                    <td className="py-3 px-4 text-indigo-600 font-black">{deck.cards_count} thẻ</td>
+                                    <td className="py-3 px-4 text-gray-400 font-medium">{new Date(deck.created_at).toLocaleDateString("vi-VN")}</td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 3. STUDY SESSIONS TAB */}
+                    {detailsTab === "sessions" && (
+                      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 text-[9px] font-extrabold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                                <th className="py-3 px-4">Tài liệu học</th>
+                                <th className="py-3 px-4">Thời lượng</th>
+                                <th className="py-3 px-4">Thời gian bắt đầu</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 text-xs font-bold text-gray-600">
+                              {detailsData.studySessions.length === 0 ? (
+                                <tr>
+                                  <td colSpan={3} className="text-center py-8 text-gray-400">Chưa ghi nhận thời gian tự học của thành viên này</td>
+                                </tr>
+                              ) : (
+                                detailsData.studySessions.map((session: any) => {
+                                  const mins = Math.floor(session.duration_seconds / 60);
+                                  const secs = session.duration_seconds % 60;
+                                  return (
+                                    <tr key={session.id} className="hover:bg-slate-50/50">
+                                      <td className="py-3 px-4 text-gray-900 font-extrabold">{session.doc_title}</td>
+                                      <td className="py-3 px-4 text-amber-600 font-black">
+                                        {mins > 0 ? `${mins} phút ` : ""}{secs} giây
+                                      </td>
+                                      <td className="py-3 px-4 text-gray-400 font-medium">
+                                        {new Date(session.started_at).toLocaleString("vi-VN")}
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 4. TRANSACTIONS TAB */}
+                    {detailsTab === "tx" && (
+                      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 text-[9px] font-extrabold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                                <th className="py-3 px-4">Mã giao dịch</th>
+                                <th className="py-3 px-4">Loại giao dịch</th>
+                                <th className="py-3 px-4">Số lượng</th>
+                                <th className="py-3 px-4">Trạng thái</th>
+                                <th className="py-3 px-4">Thời gian</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 text-xs font-bold text-gray-600">
+                              {detailsData.transactions.length === 0 ? (
+                                <tr>
+                                  <td colSpan={5} className="text-center py-8 text-gray-400">Không tìm thấy giao dịch nào</td>
+                                </tr>
+                              ) : (
+                                detailsData.transactions.map((tx: any) => {
+                                  const isNegative = tx.amount < 0;
+                                  return (
+                                    <tr key={tx.id} className="hover:bg-slate-50/50">
+                                      <td className="py-3 px-4 text-gray-400 font-mono">#{tx.id}</td>
+                                      <td className="py-3 px-4">
+                                        {tx.doc_title ? (
+                                          <span className="text-gray-800">Mua tài liệu: <span className="font-extrabold text-gray-900">{tx.doc_title}</span></span>
+                                        ) : (
+                                          <span className="text-emerald-700">Nạp xu vào tài khoản</span>
+                                        )}
+                                      </td>
+                                      <td className={`py-3 px-4 font-black ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
+                                        {isNegative ? "-" : "+"}{Math.abs(tx.amount).toLocaleString()} Xu
+                                      </td>
+                                      <td className="py-3 px-4">
+                                        <span className={`px-2 py-0.5 rounded text-[9px] ${
+                                          tx.status === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                                        }`}>
+                                          {tx.status === "success" ? "Thành công" : "Thất bại"}
+                                        </span>
+                                      </td>
+                                      <td className="py-3 px-4 text-gray-400 font-medium">
+                                        {new Date(tx.created_at).toLocaleString("vi-VN")}
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : null}
+              </div>
+
+              {/* Footer */}
+              <div className="bg-white border-t border-gray-200 px-6 py-4 flex justify-end shrink-0">
+                <button
+                  onClick={() => setDetailsModalOpen(false)}
+                  className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 font-bold text-xs text-gray-600 rounded-xl transition-all active:scale-[0.98]"
+                >
+                  Đóng cửa sổ
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

@@ -3,5 +3,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-EXPOSE 5000
-CMD ["sh", "-c", "npm run migrate:up && npm run dev"]
+RUN npm run build
+EXPOSE 10000
+CMD ["node", "dist/server.js"]

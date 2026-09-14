@@ -233,7 +233,7 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
                   </div>
                 </div>
 
-                <h3 className="text-lg font-bold text-gray-800 mb-4 font-serif">Tài liệu gần đây</h3>
+                <h3 className="text-lg font-bold text-gray-800 mb-4 font-sans">Tài liệu gần đây</h3>
 
                 {/* Grid of Cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">

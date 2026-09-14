@@ -5,6 +5,8 @@ exports.up = (pgm) => {
       notNull: true,
       default: 'public'
     }
+  }, {
+    ifNotExists: true
   });
 };
 

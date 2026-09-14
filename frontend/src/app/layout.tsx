@@ -1,7 +1,9 @@
 import './globals.css';
 import { StudyContextProvider } from '../context/StudyContext';
 import { TaskNotifications } from '@/components/TaskNotifications';
+import GlobalModals from '@/components/layout/GlobalModals';
 import Script from 'next/script';
+import { Toaster } from 'react-hot-toast';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -11,7 +13,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <StudyContextProvider>
+          <Toaster position="top-center" reverseOrder={false} />
           <TaskNotifications />
+          <GlobalModals />
           {children}
         </StudyContextProvider>
       </body>

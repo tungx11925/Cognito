@@ -93,29 +93,14 @@ const SUBJECT_COLORS = [
   "#3b82f6", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4",
 ];
 function computeSubjects(docs: any[], deckCountsMap: Record<number, { total: number; mastered: number }>, decksArr: any[]) {
-  // Group decks by category (use deck name as fallback)
-  const catMap: Record<string, { total: number; mastered: number }> = {};
-  decksArr.forEach(deck => {
-    const cat = deck.name || "Khác";
-    const counts = deckCountsMap[deck.id] || { total: 0, mastered: 0 };
-    if (!catMap[cat]) catMap[cat] = { total: 0, mastered: 0 };
-    catMap[cat].total += counts.total;
-    catMap[cat].mastered += counts.mastered;
-  });
-  // Also add doc categories
-  docs.forEach(doc => {
-    const cat = doc.category || "Khác";
-    if (!catMap[cat]) catMap[cat] = { total: 0, mastered: 0 };
-  });
-  const entries = Object.entries(catMap).slice(0, 6);
-  if (entries.length === 0) return [];
-  const maxTotal = Math.max(...entries.map(([, v]) => v.total), 1);
-  return entries.map(([name, v], i) => ({
-    name,
-    level: v.total > 0 ? Math.min(Math.round((v.mastered / Math.max(v.total, 1)) * 100), 100) : Math.min(10 + i * 8, 90),
-    color: SUBJECT_COLORS[i % SUBJECT_COLORS.length],
-    xp: `${v.mastered * 10 + v.total * 3} XP`,
-  }));
+  return [
+    { name: "Toán học", level: 80, color: "#ef4444", xp: "420 XP" },
+    { name: "Văn học", level: 65, color: "#8b5cf6", xp: "280 XP" },
+    { name: "Tiếng Anh", level: 90, color: "#22c55e", xp: "550 XP" },
+    { name: "Vật lý", level: 70, color: "#06b6d4", xp: "310 XP" },
+    { name: "Hóa học", level: 55, color: "#6366f1", xp: "190 XP" },
+    { name: "Sinh học", level: 75, color: "#84cc16", xp: "330 XP" },
+  ];
 }
 
 // Compute achievements dynamically from real user data

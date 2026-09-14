@@ -1,9 +1,57 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown, CheckCheck, MessageSquare } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  time: string;
+  type: 'system' | 'task' | 'ai' | 'community';
+  read: boolean;
+  link?: string;
+}
+
+const INITIAL_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: '1',
+    title: 'Nhiệm vụ Pomodoro',
+    message: 'Bạn vừa hoàn thành phiên học tập 25 phút. Thống kê tích lũy đã được cập nhật!',
+    time: 'Vừa xong',
+    type: 'task',
+    read: false,
+    link: '/profile'
+  },
+  {
+    id: '2',
+    title: 'Trợ lý AI sẵn sàng',
+    message: 'Đã sẵn sàng tạo Flashcards & Mindmap tự động từ tài liệu học tập mới.',
+    time: '15 phút trước',
+    type: 'ai',
+    read: false,
+    link: '/flashcards'
+  },
+  {
+    id: '3',
+    title: 'Hệ thống EduShare AI',
+    message: 'Chào mừng bạn đến với EduShare AI! Hãy trải nghiệm kho tài liệu học tập phong phú.',
+    time: '1 giờ trước',
+    type: 'system',
+    read: false,
+  },
+  {
+    id: '4',
+    title: 'Cộng đồng học tập',
+    message: 'Đã có 50+ tài liệu chất lượng cao được chia sẻ mới trên hệ thống.',
+    time: 'Hôm qua',
+    type: 'community',
+    read: true,
+    link: '/community'
+  }
+];
 
 interface NavbarProps {
   isLoggedIn: boolean;
@@ -16,15 +64,74 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  
+  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [notifTab, setNotifTab] = useState<'all' | 'unread'>('all');
+
+  // Load notifications from localStorage on client side mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('edushare_notifications');
+      if (saved) {
+        try {
+          setNotifications(JSON.parse(saved));
+        } catch (e) {
+          console.error("Failed to parse saved notifications", e);
+        }
+      }
+    }
+  }, []);
+
+  // Persist notifications whenever they update
+  const updateNotifications = (newNotifs: NotificationItem[] | ((prev: NotificationItem[]) => NotificationItem[])) => {
+    setNotifications(prev => {
+      const updated = typeof newNotifs === 'function' ? newNotifs(prev) : newNotifs;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('edushare_notifications', JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
   const router = useRouter();
+  const pathname = usePathname();
   const { logout, taskCompletionToast, setTaskCompletionToast, setShowPremiumModal } = useStudy();
   const [toastProgress, setToastProgress] = useState(60);
   const [showToast, setShowToast] = useState(false);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const markAllAsRead = () => {
+    updateNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const handleNotificationClick = (item: NotificationItem) => {
+    updateNotifications(prev => prev.map(n => n.id === item.id ? { ...n, read: true } : n));
+    if (item.link) {
+      setNotificationsOpen(false);
+      router.push(item.link);
+    }
+  };
 
   useEffect(() => {
     if (taskCompletionToast) {
       setToastProgress(50);
       setShowToast(true);
+
+      // Dynamically add a task notification when a task completes
+      updateNotifications(prev => [
+        {
+          id: Date.now().toString(),
+          title: 'Nhiệm vụ hoàn thành! 🎉',
+          message: taskCompletionToast.title,
+          time: 'Vừa xong',
+          type: 'task',
+          read: false,
+          link: '/profile'
+        },
+        ...prev
+      ]);
       
       const timer1 = setTimeout(() => {
         setToastProgress(100);
@@ -56,10 +163,17 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
       if (dropdownOpen && !target.closest(".profile-dropdown-container")) {
         setDropdownOpen(false);
       }
+      if (notificationsOpen && !target.closest(".notifications-dropdown-container")) {
+        setNotificationsOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [dropdownOpen]);
+  }, [dropdownOpen, notificationsOpen]);
+
+  const filteredNotifications = notifTab === 'unread'
+    ? notifications.filter(n => !n.read)
+    : notifications;
 
   return (
     <motion.header
@@ -102,8 +216,30 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                 <Link href="/flashcards" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
                   Flashcards
                 </Link>
+                <Link
+                  href="/ai-test"
+                  className={`transition-colors duration-200 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${
+                    pathname === '/ai-test'
+                      ? 'bg-[#1a3d28] text-white'
+                      : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
+                  }`}
+                >
+                  <FileQuestion size={13} />
+                  Bài tập AI
+                </Link>
                 <Link href="/community" className="transition-colors duration-200 text-sm font-semibold text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
                   Cộng đồng
+                </Link>
+                <Link
+                  href="/leaderboard"
+                  className={`transition-colors duration-200 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${
+                    pathname === '/leaderboard'
+                      ? 'bg-amber-500 text-white font-bold'
+                      : 'text-amber-700 hover:text-amber-900 font-bold'
+                  }`}
+                >
+                  <Trophy size={14} className={pathname === '/leaderboard' ? 'text-white fill-white' : 'text-amber-500 fill-amber-500/20'} />
+                  Bảng xếp hạng
                 </Link>
               </>
             ) : (
@@ -125,23 +261,205 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           <div className="hidden md:flex items-center gap-3">
             {isLoggedIn ? (
               <>
-                <button
-                  onClick={() => setShowPremiumModal(true)}
-                  className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5"
-                  style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", border: "none", cursor: "pointer", boxShadow: "0 2px 10px rgba(245, 158, 11, 0.2)" }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 12px rgba(245, 158, 11, 0.3)"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 10px rgba(245, 158, 11, 0.2)"; }}
-                >
-                  <Sparkles size={14} />
-                  Nâng cấp Premium
-                </button>
+                {activeUser?.role === 'premium' || activeUser?.role === 'admin' ? (
+                  <button
+                    onClick={() => router.push('/premium')}
+                    className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 border border-amber-500/30 animate-pulse"
+                    style={{ background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)", color: "#fbbf24", cursor: "pointer", boxShadow: "0 2px 10px rgba(251, 191, 36, 0.1)" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 12px rgba(251, 191, 36, 0.25)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 10px rgba(251, 191, 36, 0.1)"; }}
+                  >
+                    <Crown size={14} className="fill-amber-400 text-amber-400" />
+                    Premium
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => router.push('/premium')}
+                    className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5"
+                    style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", border: "none", cursor: "pointer", boxShadow: "0 2px 10px rgba(245, 158, 11, 0.2)" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 12px rgba(245, 158, 11, 0.3)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 10px rgba(245, 158, 11, 0.2)"; }}
+                  >
+                    <Sparkles size={14} />
+                    Nâng cấp Premium
+                  </button>
+                )}
                 
+                {/* Notification Dropdown Container */}
+                <div className="relative notifications-dropdown-container">
+                  <button
+                    onClick={() => {
+                      setNotificationsOpen(!notificationsOpen);
+                      if (dropdownOpen) setDropdownOpen(false);
+                    }}
+                    className="relative p-2 rounded-xl text-gray-700 hover:bg-[#1a3d28]/10 transition-colors flex items-center justify-center cursor-pointer"
+                    title="Thông báo"
+                  >
+                    <Bell size={18} className={unreadCount > 0 ? "text-[#1a3d28]" : "text-gray-600"} />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[9px] font-black flex items-center justify-center animate-pulse border-2 border-[#f5f3ee]">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <AnimatePresence>
+                    {notificationsOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-80 md:w-96 rounded-2xl bg-white border border-gray-200/80 shadow-2xl z-[115] text-gray-800 overflow-hidden"
+                        style={{ boxShadow: "0 12px 30px -5px rgba(26,61,40,0.18)" }}
+                      >
+                        {/* Header */}
+                        <div className="p-3.5 bg-gray-50/80 border-b border-gray-100 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-xs font-black text-gray-900 uppercase tracking-wider">Thông báo</h3>
+                            {unreadCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                {unreadCount} mới
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {unreadCount > 0 && (
+                              <button
+                                onClick={markAllAsRead}
+                                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 transition-colors flex items-center gap-1"
+                              >
+                                <CheckCheck size={13} />
+                                Đọc tất cả
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Filter Tabs */}
+                        <div className="flex border-b border-gray-100 bg-white px-3 pt-2">
+                          <button
+                            onClick={() => setNotifTab('all')}
+                            className={`pb-2 px-3 text-xs font-bold transition-all relative ${
+                              notifTab === 'all' ? 'text-[#1a3d28]' : 'text-gray-400 hover:text-gray-600'
+                            }`}
+                          >
+                            Tất cả ({notifications.length})
+                            {notifTab === 'all' && (
+                              <motion.div layoutId="notifTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1a3d28] rounded-full" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => setNotifTab('unread')}
+                            className={`pb-2 px-3 text-xs font-bold transition-all relative ${
+                              notifTab === 'unread' ? 'text-[#1a3d28]' : 'text-gray-400 hover:text-gray-600'
+                            }`}
+                          >
+                            Chưa đọc ({unreadCount})
+                            {notifTab === 'unread' && (
+                              <motion.div layoutId="notifTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1a3d28] rounded-full" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Notifications List */}
+                        <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+                          {filteredNotifications.length === 0 ? (
+                            <div className="py-8 text-center px-4 flex flex-col items-center justify-center">
+                              <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2">
+                                <Bell size={18} />
+                              </div>
+                              <p className="text-xs font-bold text-gray-700">Không có thông báo nào</p>
+                              <p className="text-[11px] text-gray-400 mt-0.5">Bạn đã xem hết các cập nhật quan trọng!</p>
+                            </div>
+                          ) : (
+                            filteredNotifications.map((n) => {
+                              const renderIcon = () => {
+                                switch (n.type) {
+                                  case 'task':
+                                    return <Trophy size={14} className="text-amber-500" />;
+                                  case 'ai':
+                                    return <Sparkles size={14} className="text-purple-500" />;
+                                  case 'community':
+                                    return <MessageSquare size={14} className="text-emerald-500" />;
+                                  default:
+                                    return <Shield size={14} className="text-blue-500" />;
+                                }
+                              };
+
+                              const renderBg = () => {
+                                switch (n.type) {
+                                  case 'task':
+                                    return 'bg-amber-50 border-amber-200';
+                                  case 'ai':
+                                    return 'bg-purple-50 border-purple-200';
+                                  case 'community':
+                                    return 'bg-emerald-50 border-emerald-200';
+                                  default:
+                                    return 'bg-blue-50 border-blue-200';
+                                }
+                              };
+
+                              return (
+                                <div
+                                  key={n.id}
+                                  onClick={() => handleNotificationClick(n)}
+                                  className={`p-3.5 transition-all flex items-start gap-3 cursor-pointer ${
+                                    !n.read ? 'bg-emerald-50/40 hover:bg-emerald-50/70' : 'hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 mt-0.5 ${renderBg()}`}>
+                                    {renderIcon()}
+                                  </div>
+
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <h4 className={`text-xs font-bold truncate ${!n.read ? 'text-gray-900 font-extrabold' : 'text-gray-700'}`}>
+                                        {n.title}
+                                      </h4>
+                                      <span className="text-[10px] text-gray-400 shrink-0 font-medium">{n.time}</span>
+                                    </div>
+                                    <p className="text-[11px] text-gray-600 line-clamp-2 mt-0.5 leading-relaxed">
+                                      {n.message}
+                                    </p>
+                                  </div>
+
+                                  {!n.read && (
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-1.5" />
+                                  )}
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-2 bg-gray-50 border-t border-gray-100 text-center">
+                          <button
+                            onClick={() => {
+                              setNotificationsOpen(false);
+                              router.push('/profile');
+                            }}
+                            className="text-[11px] font-bold text-gray-600 hover:text-[#1a3d28] transition-colors"
+                          >
+                            Xem nhật ký hoạt động
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
                 {/* Profile Dropdown Container */}
                 <div className="relative profile-dropdown-container">
                   <div 
                     className="w-7 h-7 rounded-full overflow-hidden bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center font-bold text-xs cursor-pointer select-none transition-colors duration-150" 
                     style={{ border: "2px solid rgba(26,61,40,0.2)" }}
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                    onClick={() => {
+                      setDropdownOpen(!dropdownOpen);
+                      if (notificationsOpen) setNotificationsOpen(false);
+                    }}
                   >
                     {activeUser?.avatar_url ? (
                       <img 
@@ -331,24 +649,45 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link href="/library" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Thư viện của tôi</Link>
                   <Link href="/library" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tài liệu</Link>
                   <Link href="/flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
+                  <Link href="/ai-test" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
+                    <FileQuestion size={16} /> Bài tập AI
+                  </Link>
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
+                  <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">
+                    <Trophy size={16} className="text-amber-500 fill-amber-500/20" /> Bảng xếp hạng
+                  </Link>
                 </>
               ) : (
                 <>
                   <Link href="#features" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tính năng</Link>
                   <Link href="#flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
+                  <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">
+                    <Trophy size={16} className="text-amber-500 fill-amber-500/20" /> Bảng xếp hạng
+                  </Link>
                 </>
               )}
+
               {isLoggedIn ? (
-                <button 
-                  onClick={() => { setMobileOpen(false); setShowPremiumModal(true); }}
-                  className="w-full py-2.5 rounded-lg mt-1 flex items-center justify-center gap-2" 
-                  style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", fontWeight: 600, border: "none", cursor: "pointer" }}
-                >
-                  <Sparkles size={16} />
-                  Nâng cấp Premium
-                </button>
+                activeUser?.role === 'premium' || activeUser?.role === 'admin' ? (
+                  <button 
+                    onClick={() => { setMobileOpen(false); router.push('/premium'); }}
+                    className="w-full py-2.5 rounded-lg mt-1 flex items-center justify-center gap-2 border border-amber-500/30 animate-pulse" 
+                    style={{ background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)", color: "#fbbf24", fontWeight: 600, border: "none", cursor: "pointer" }}
+                  >
+                    <Crown size={16} className="fill-amber-400 text-amber-400" />
+                    Premium
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => { setMobileOpen(false); router.push('/premium'); }}
+                    className="w-full py-2.5 rounded-lg mt-1 flex items-center justify-center gap-2" 
+                    style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", fontWeight: 600, border: "none", cursor: "pointer" }}
+                  >
+                    <Sparkles size={16} />
+                    Nâng cấp Premium
+                  </button>
+                )
               ) : (
                 <button 
                   onClick={() => { setMobileOpen(false); onSignInClick(); }}

@@ -10,8 +10,12 @@ export const getAdminStats = () => apiFetch('/admin/stats', {
     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }
 });
 
-export const getAdminUsers = (search?: string) => {
-    const query = search ? `?search=${encodeURIComponent(search)}` : '';
+export const getAdminUsers = (search?: string, page?: number, limit?: number) => {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (page) params.append('page', page.toString());
+    if (limit) params.append('limit', limit.toString());
+    const query = params.toString() ? `?${params.toString()}` : '';
     return apiFetch(`/admin/users${query}`, {
         method: 'GET',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }
@@ -51,4 +55,15 @@ export const updateAdminUser = (id: number, userData: any) => apiFetch(`/admin/u
     method: 'PUT',
     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(userData)
+});
+
+export const warnAdminUser = (id: number, message: string) => apiFetch(`/admin/users/${id}/warn`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message })
+});
+
+export const getAdminUserDetails = (id: number) => apiFetch(`/admin/users/${id}/details`, {
+    method: 'GET',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }
 });

@@ -63,14 +63,15 @@ interface StudyContextType {
   setShowLanding: (show: boolean) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  activeUser: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null;
-  setActiveUser: (user: { id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null) => void;
+  activeUser: { id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null;
+  setActiveUser: (user: { id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null) => void;
   updateWalletBalance: (amount: number) => void;
   updateAvatar: (file: File) => Promise<boolean>;
   updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string; privacy_setting?: string }) => Promise<boolean>;
   toggleVerification: (enable: boolean) => Promise<boolean>;
   verify2FA: (email: string, code: string) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  upgradePremium: () => Promise<boolean>;
   searchQuery: string;
 
   setSearchQuery: (query: string) => void;
@@ -342,7 +343,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null>(null);
+  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null>(null);
 
   const updateWalletBalance = (amount: number) => {
     setActiveUser(prev => prev ? { ...prev, wallet_balance: (prev.wallet_balance || 0) + amount } : null);
@@ -520,6 +521,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setActiveUser(null);
     setIsAuthenticated(false);
     triggerMessage('Đăng xuất thành công', 'success');
+    // Force a full reload and redirect to landing page to completely reset Google Sign-in libraries
+    window.location.href = '/';
   };
 
   const updateAvatar = async (file: File): Promise<boolean> => {
@@ -676,6 +679,35 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
+  const upgradePremium = async (): Promise<boolean> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      triggerMessage("Bạn chưa đăng nhập", "error");
+      return false;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/upgrade-premium`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setActiveUser(data.user);
+        triggerMessage(data.message || "Nâng cấp Premium thành công", "success");
+        return true;
+      } else {
+        triggerMessage(data.error || "Nâng cấp thất bại", "error");
+        return false;
+      }
+    } catch (e) {
+      triggerMessage("Lỗi kết nối máy chủ", "error");
+      return false;
+    }
+  };
+
   useEffect(() => {
     const fetchMe = async () => {
       const token = localStorage.getItem('token');
@@ -717,10 +749,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) {
-          setDocuments(data);
-          return;
-        }
+        setDocuments(data || []);
+        return;
       }
       setDocuments(MOCK_DOCUMENTS);
     } catch (e) {
@@ -737,10 +767,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) {
-          setDecks(data);
-          return;
-        }
+        setDecks(data || []);
+        return;
       }
       setDecks(MOCK_DECKS);
     } catch (e) {
@@ -835,6 +863,62 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       console.error("Error fetching friends:", e);
     }
   };
+
+  // Real-time SSE Connection for Daily Tasks, Streaks & Live Notifications
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    // Fetch initial tasks on login/auth
+    fetchTasks();
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!token) return;
+
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(`${API_BASE_URL}/notifications/stream?token=${encodeURIComponent(token)}`);
+
+      eventSource.addEventListener('TASK_COMPLETED', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data && data.task) {
+            setTasks(prev => prev.map(t => t.task_type === data.task.task_type ? { ...t, ...data.task, is_completed: true, completed: true } : t));
+            setTaskCompletionToast({
+              type: data.taskType || data.task.task_type,
+              title: data.title || data.task.title
+            });
+            triggerMessage(`🎉 Xuất sắc! Bạn vừa hoàn thành nhiệm vụ "${data.title || data.task.title}"!`, 'success');
+          }
+        } catch (err) {
+          console.error('Error handling SSE TASK_COMPLETED event:', err);
+        }
+      });
+
+      eventSource.addEventListener('TASK_PROGRESS', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data && data.task) {
+            setTasks(prev => prev.map(t => t.task_type === data.task.task_type ? { ...t, ...data.task } : t));
+          }
+        } catch (err) {
+          console.error('Error handling SSE TASK_PROGRESS event:', err);
+        }
+      });
+
+      eventSource.onerror = (err) => {
+        // EventSource will automatically retry in background
+        console.warn('SSE notification stream reconnecting...');
+      };
+    } catch (e) {
+      console.error('Failed to initialize SSE connection:', e);
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [isAuthenticated]);
 
   const triggerTaskProgress = async (taskType: string, increment: number = 1) => {
     try {
@@ -1474,6 +1558,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       toggleVerification,
       verify2FA,
       changePassword,
+      upgradePremium,
       showLanding,
       setShowLanding,
       showLoginModal,

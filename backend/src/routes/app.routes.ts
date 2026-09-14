@@ -9,6 +9,9 @@ import multer from 'multer';
 const pdfParse = require('pdf-parse');
 import xlsx from 'xlsx';
 import { authenticate, AuthRequest } from '../middlewares/auth.middleware';
+import { generateMindmapWithAI } from '../utils/ai-engine.service';
+import { sseService } from '../utils/sse.service';
+import jwt from 'jsonwebtoken';
 const router = Router();
 
 export function getVietnamDateString(date: Date): string {
@@ -180,13 +183,37 @@ export async function incrementTaskProgress(userId: number, taskType: string, in
       if (task.current_value >= task.target_value && !task.completed) {
         const completedRes = await db.query(
           `UPDATE user_daily_tasks
-           SET completed = true
+           SET completed = true, is_notified = true
            WHERE id = $1
            RETURNING *`,
           [task.id]
         );
-        return { task: completedRes.rows[0], justCompleted: true };
+        const completedTask = completedRes.rows[0] || task;
+
+        // Broadcast real-time SSE event to all connected sessions of this user
+        sseService.sendToUser(userId, 'TASK_COMPLETED', {
+          task: completedTask,
+          taskType,
+          title: completedTask.title,
+          description: completedTask.description,
+          rewardXP: 50,
+          timestamp: new Date().toISOString()
+        });
+
+        return { task: completedTask, justCompleted: true };
       }
+
+      // Broadcast progress update event
+      sseService.sendToUser(userId, 'TASK_PROGRESS', {
+        task,
+        taskType,
+        currentValue: task.current_value,
+        targetValue: task.target_value,
+        title: task.title,
+        description: task.description,
+        timestamp: new Date().toISOString()
+      });
+
       return { task, justCompleted: false };
     }
   } catch (error) {
@@ -195,6 +222,43 @@ export async function incrementTaskProgress(userId: number, taskType: string, in
   return null;
 }
 
+
+// ==========================================
+// REAL-TIME NOTIFICATIONS (SSE)
+// ==========================================
+
+// Real-time Server-Sent Events stream for tasks, streak & live notifications
+router.get('/notifications/stream', async (req: Request, res: Response) => {
+  let token = req.headers.authorization?.split(' ')[1] || (req.query.token as string);
+  if (!token && req.headers.cookie) {
+    const match = req.headers.cookie.match(/token=([^;]+)/);
+    if (match) token = match[1];
+  }
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: missing token for SSE' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY || 'your_64_character_secret_key_here') as any;
+    const userId = decoded.id;
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+
+    sseService.addClient(userId, res);
+
+    req.on('close', () => {
+      sseService.removeClient(res);
+    });
+  } catch (err: any) {
+    return res.status(401).json({ error: 'Invalid authentication token' });
+  }
+});
 
 // ==========================================
 // TASKS & FRIENDS ENDPOINTS
@@ -369,9 +433,11 @@ router.get('/documents/:id', authenticate, async (req: AuthRequest, res: Respons
       return res.status(404).json({ error: 'Document not found' });
     }
     
-    // Log study activity and update streak
-    await updateUserStreak(userId);
-    await incrementTaskProgress(userId, 'read_document', 1);
+    // Log study activity and update streak asynchronously in background
+    Promise.all([
+      updateUserStreak(userId),
+      incrementTaskProgress(userId, 'read_document', 1)
+    ]).catch(err => console.error('Error updating study task for read_document:', err));
     
     res.status(200).json(result.rows[0]);
   } catch (error: any) {
@@ -516,13 +582,12 @@ router.post('/study-sessions/active-ping', authenticate, async (req: AuthRequest
     const { seconds } = req.body;
     const userId = req.user!.id;
     
-    if (!seconds || typeof seconds !== 'number' || seconds <= 0) {
-      return res.status(400).json({ error: 'Số giây không hợp lệ' });
+    if (!seconds || typeof seconds !== 'number' || seconds <= 0 || seconds > 300) {
+      return res.status(400).json({ error: 'Số giây không hợp lệ (phải từ 1 đến 300 giây mỗi lần ping)' });
     }
 
     // Determine VN timezone date (UTC+7)
-    const d = new Date(Date.now() + 7 * 60 * 60 * 1000);
-    const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    const dateStr = getVietnamDateString(new Date());
 
     const result = await db.query(
       `INSERT INTO user_daily_activity (user_id, activity_date, active_seconds)
@@ -715,14 +780,15 @@ router.post('/flashcards/decks', authenticate, async (req: AuthRequest, res: Res
 });
 
 // Update a deck (Rename, Update description, or set Public/Private)
-router.put('/flashcards/decks/:id', async (req: Request, res: Response) => {
+router.put('/flashcards/decks/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { name, description, is_public } = req.body;
+    const userId = req.user!.id;
 
-    const deckCheck = await db.query('SELECT * FROM flashcard_decks WHERE id = $1', [id]);
+    const deckCheck = await db.query('SELECT * FROM flashcard_decks WHERE id = $1 AND user_id = $2', [id, userId]);
     if (deckCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy bộ bài' });
+      return res.status(404).json({ error: 'Không tìm thấy bộ bài hoặc bạn không có quyền sửa' });
     }
 
     const currentDeck = deckCheck.rows[0];
@@ -731,8 +797,8 @@ router.put('/flashcards/decks/:id', async (req: Request, res: Response) => {
     const newIsPublic = is_public !== undefined ? is_public : currentDeck.is_public;
 
     const result = await db.query(
-      'UPDATE flashcard_decks SET name = $1, description = $2, is_public = $3 WHERE id = $4 RETURNING *',
-      [newName, newDesc, newIsPublic, id]
+      'UPDATE flashcard_decks SET name = $1, description = $2, is_public = $3 WHERE id = $4 AND user_id = $5 RETURNING *',
+      [newName, newDesc, newIsPublic, id, userId]
     );
     
     res.status(200).json(result.rows[0]);
@@ -742,15 +808,16 @@ router.put('/flashcards/decks/:id', async (req: Request, res: Response) => {
 });
 
 // Delete a deck
-router.delete('/flashcards/decks/:id', async (req: Request, res: Response) => {
+router.delete('/flashcards/decks/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const userId = req.user!.id;
     const result = await db.query(
-      'DELETE FROM flashcard_decks WHERE id = $1 RETURNING *',
-      [id]
+      'DELETE FROM flashcard_decks WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, userId]
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy bộ bài để xóa' });
+      return res.status(404).json({ error: 'Không tìm thấy bộ bài để xóa hoặc bạn không có quyền' });
     }
     res.status(200).json({ message: 'Đã xóa bộ bài thành công' });
   } catch (error: any) {
@@ -784,22 +851,27 @@ router.post('/flashcards', authenticate, async (req: AuthRequest, res: Response)
 });
 
 // Update a flashcard
-router.put('/flashcards/:id', async (req: Request, res: Response) => {
+router.put('/flashcards/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { front, back } = req.body;
+    const userId = req.user!.id;
     
     if (!front || !back || front.trim() === '' || back.trim() === '') {
       return res.status(400).json({ error: 'Nội dung Front và Back không được để trống' });
     }
 
     const result = await db.query(
-      'UPDATE flashcards SET front = $1, back = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *',
-      [front, back, id]
+      `UPDATE flashcards f
+       SET front = $1, back = $2, updated_at = CURRENT_TIMESTAMP
+       FROM flashcard_decks d
+       WHERE f.deck_id = d.id AND f.id = $3 AND d.user_id = $4
+       RETURNING f.*`,
+      [front, back, id, userId]
     );
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+      return res.status(404).json({ error: 'Flashcard không tồn tại hoặc bạn không có quyền sửa' });
     }
     
     res.status(200).json(result.rows[0]);
@@ -809,13 +881,20 @@ router.put('/flashcards/:id', async (req: Request, res: Response) => {
 });
 
 // Delete a flashcard
-router.delete('/flashcards/:id', async (req: Request, res: Response) => {
+router.delete('/flashcards/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await db.query('DELETE FROM flashcards WHERE id = $1 RETURNING id', [id]);
+    const userId = req.user!.id;
+    const result = await db.query(
+      `DELETE FROM flashcards f
+       USING flashcard_decks d
+       WHERE f.deck_id = d.id AND f.id = $1 AND d.user_id = $2
+       RETURNING f.id`,
+      [id, userId]
+    );
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+      return res.status(404).json({ error: 'Flashcard không tồn tại hoặc bạn không có quyền xóa' });
     }
     
     res.status(200).json({ message: 'Đã xóa thẻ thành công' });
@@ -829,14 +908,19 @@ router.put('/flashcards/:id/star', authenticate, async (req: AuthRequest, res: R
   try {
     const { id } = req.params;
     const { is_starred } = req.body;
+    const userId = req.user!.id;
     
     const result = await db.query(
-      'UPDATE flashcards SET is_starred = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
-      [is_starred, id]
+      `UPDATE flashcards f
+       SET is_starred = $1, updated_at = CURRENT_TIMESTAMP
+       FROM flashcard_decks d
+       WHERE f.deck_id = d.id AND f.id = $2 AND d.user_id = $3
+       RETURNING f.*`,
+      [is_starred, id, userId]
     );
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Flashcard không tồn tại' });
+      return res.status(404).json({ error: 'Flashcard không tồn tại hoặc bạn không có quyền sửa' });
     }
     
     res.status(200).json(result.rows[0]);
@@ -1054,22 +1138,21 @@ router.post('/ai/chat', authenticate, async (req: AuthRequest, res: Response) =>
     const geminiApiKey = process.env.GEMINI_API_KEY;
     const groqApiKey = process.env.GROQ_API_KEY;
 
-    // IF GROQ API KEY IS PROVIDED, USE GROQ AI
+    // 1. TRY GROQ AI
     if (groqApiKey && !groqApiKey.includes('your_')) {
       try {
         let documentText = '';
-        
-        // 1. Try to read the actual document text using mammoth
         if (document && document.doc_url && document.doc_url.endsWith('.docx')) {
-          const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
-          const textResult = await mammoth.extractRawText({ buffer: response.data });
-          documentText = textResult.value;
+          try {
+            const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
+            const textResult = await mammoth.extractRawText({ buffer: response.data });
+            documentText = textResult.value;
+          } catch (fetchError) {
+            console.warn("[Groq AI] Failed to fetch docx:", fetchError);
+          }
         }
 
-        // 2. Setup Groq AI
         const groq = new Groq({ apiKey: groqApiKey });
-        
-        // 3. Construct prompt
         const systemPrompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy và hỗ trợ học tập toàn diện như ChatGPT.
 Tên tài liệu người dùng đang xem: ${docTitle}
 Mô tả: ${docDesc}
@@ -1084,47 +1167,46 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
 5. Trình bày nội dung đẹp mắt bằng Markdown (in đậm, danh sách, blockquote, hoặc MathJax/LaTeX nếu là công thức toán).`;
 
         let apiMessages: any[] = [{ role: "system", content: systemPrompt }];
-        
         if (history && Array.isArray(history)) {
-          // Truncate history to save tokens: only keep the last 4 turns
           const recentHistory = history.slice(-4);
           apiMessages = apiMessages.concat(recentHistory);
         }
-        
         apiMessages.push({ role: "user", content: message });
 
         const completion = await groq.chat.completions.create({
           messages: apiMessages,
-          model: "llama-3.1-8b-instant",
+          model: process.env.GROQ_CHAT_MODEL || "groq/compound-mini",
           temperature: 0.7,
           max_tokens: 1024,
         });
 
-        reply = completion.choices[0]?.message?.content || "Không có phản hồi từ AI.";
-
-        return res.status(200).json({ reply });
+        reply = completion.choices[0]?.message?.content || "";
+        if (reply) {
+          return res.status(200).json({ reply });
+        }
       } catch (aiError) {
-        console.error("Groq AI Error:", aiError);
-        reply = "Hệ thống AI (Groq) hiện đang bận hoặc cấu hình API Key có vấn đề. Chuyển sang chế độ dự phòng...\n\n";
+        console.error("Groq AI Error in /ai/chat, falling back to Gemini:", aiError);
       }
     }
-    // IF GEMINI API KEY IS PROVIDED, USE GEMINI AI
-    else if (geminiApiKey && !geminiApiKey.includes('your_')) {
+
+    // 2. TRY GEMINI AI (Fallback if Groq fails or no Groq key)
+    if (geminiApiKey && !geminiApiKey.includes('your_')) {
       try {
         let documentText = '';
-        
-        // 1. Try to read the actual document text using mammoth
         if (document && document.doc_url && document.doc_url.endsWith('.docx')) {
-          const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
-          const textResult = await mammoth.extractRawText({ buffer: response.data });
-          documentText = textResult.value;
+          try {
+            const response = await axios.get(document.doc_url, { responseType: 'arraybuffer' });
+            const textResult = await mammoth.extractRawText({ buffer: response.data });
+            documentText = textResult.value;
+          } catch (fetchError) {
+            console.warn("[Gemini AI] Failed to fetch docx:", fetchError);
+          }
         }
 
-        // 2. Setup Gemini AI
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+        const model = genAI.getGenerativeModel({ model: modelName });
         
-        // 3. Construct prompt
         const prompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy và hỗ trợ học tập toàn diện như ChatGPT.
 Tên tài liệu người dùng đang xem: ${docTitle}
 Mô tả: ${docDesc}
@@ -1142,11 +1224,11 @@ Câu hỏi của người dùng: "${message}"`;
 
         const result = await model.generateContent(prompt);
         reply = result.response.text();
-
-        return res.status(200).json({ reply });
+        if (reply) {
+          return res.status(200).json({ reply });
+        }
       } catch (aiError) {
-        console.error("Gemini AI Error:", aiError);
-        reply = "Hệ thống AI hiện đang bận hoặc cấu hình API Key có vấn đề. Chuyển sang chế độ dự phòng...\n\n";
+        console.error("Gemini AI Error in /ai/chat:", aiError);
       }
     }
 
@@ -1530,7 +1612,7 @@ const uploadMem = multer({
   }
 });
 
-router.post('/ai/generate-flashcards-from-file', uploadMem.single('document'), async (req: Request, res: Response) => {
+router.post('/ai/generate-flashcards-from-file', authenticate, uploadMem.single('document'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Vui lòng chọn file' });
 
@@ -1570,7 +1652,7 @@ Yêu cầu đầu ra BẮT BUỘC phải là một mảng JSON có cấu trúc c
         { role: "system", content: systemPrompt },
         { role: "user", content: `NỘI DUNG TÀI LIỆU:\n${truncatedText}` }
       ],
-      model: "llama-3.3-70b-versatile", // Use latest supported Groq model
+      model: "groq/compound", // Use latest supported Groq model
       temperature: 0.2,
     });
 
@@ -1591,6 +1673,308 @@ Yêu cầu đầu ra BẮT BUỘC phải là một mảng JSON có cấu trúc c
   } catch (error: any) {
     console.error("Lỗi AI Flashcard Generator:", error);
     res.status(500).json({ error: error.message || 'Lỗi server nội bộ' });
+  }
+});
+
+// Get saved mindmap for document
+router.get('/ai/mindmap/:docId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { docId } = req.params;
+    const userId = req.user!.id;
+
+    const result = await db.query(
+      'SELECT * FROM mindmaps WHERE document_id = $1 AND user_id = $2',
+      [docId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Chưa có sơ đồ tư duy nào được lưu.' });
+    }
+
+    res.status(200).json({ success: true, mindmap: result.rows[0] });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI Mindmap Generator Route (with DB cache & UPSERT)
+router.post('/ai/generate-mindmap', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { document_id, title, content, force_regenerate } = req.body;
+    const userId = req.user!.id;
+    let docTitle = title || 'Sơ Đồ Tư Duy';
+    let docContent = content || '';
+
+    // 1. If not forcing regeneration and document_id is present, check DB cache first
+    if (document_id && !force_regenerate) {
+      const cached = await db.query(
+        'SELECT * FROM mindmaps WHERE document_id = $1 AND user_id = $2',
+        [document_id, userId]
+      );
+      if (cached.rows.length > 0) {
+        return res.status(200).json({
+          success: true,
+          cached: true,
+          title: docTitle,
+          mermaidCode: cached.rows[0].mermaid_code,
+        });
+      }
+    }
+
+    // 2. Fetch document content from DB if document_id is passed
+    if (document_id) {
+      const docResult = await db.query('SELECT title, description, solution_text, doc_url FROM documents WHERE id = $1', [document_id]);
+      if (docResult.rows.length > 0) {
+        const row = docResult.rows[0];
+        docTitle = row.title || docTitle;
+        // Prioritize solution_text or full document text over short description
+        docContent = row.solution_text || '';
+
+        // If solution_text is short or empty and doc_url exists, parse file from disk
+        if ((!docContent || docContent.length < 50) && row.doc_url) {
+          try {
+            const fs = require('fs');
+            const path = require('path');
+            const fileName = path.basename(row.doc_url);
+            const filePath = path.join(__dirname, '../../uploads', fileName);
+
+            if (fs.existsSync(filePath)) {
+              const fileBuffer = fs.readFileSync(filePath);
+              const ext = path.extname(filePath).toLowerCase();
+
+              if (ext === '.pdf') {
+                const pdfData = await pdfParse(fileBuffer);
+                if (pdfData.text && pdfData.text.trim()) docContent = pdfData.text;
+              } else if (ext === '.docx') {
+                const docxData = await mammoth.extractRawText({ buffer: fileBuffer });
+                if (docxData.value && docxData.value.trim()) docContent = docxData.value;
+              } else if (ext === '.txt') {
+                docContent = fileBuffer.toString('utf-8');
+              }
+            }
+          } catch (fileErr) {
+            console.error('[Mindmap] Lỗi khi đọc file tài liệu từ đĩa:', fileErr);
+          }
+        }
+
+        // Fallback to description if still empty
+        if (!docContent || docContent.trim().length === 0) {
+          docContent = row.description || docTitle;
+        }
+
+        // If title is generic (like test/testtt), try to derive a better title from first line of content
+        if (docTitle.toLowerCase().includes('test') && docContent.trim().length > 0) {
+          const firstLine = docContent.split('\n')[0].replace(/^[#*\s\d.]+/g, '').trim();
+          if (firstLine && firstLine.length > 3 && firstLine.length < 50) {
+            docTitle = firstLine;
+          }
+        }
+      }
+    }
+
+    if (!docContent.trim()) {
+      return res.status(400).json({ error: 'Nội dung tài liệu trống, không thể tạo mindmap.' });
+    }
+
+    // 3. Call AI engine to generate Mermaid Mindmap
+    const mermaidCode = await generateMindmapWithAI(docTitle, docContent);
+
+    // 4. Save/Cache in DB if document_id exists
+    if (document_id) {
+      await db.query(
+        `INSERT INTO mindmaps (document_id, user_id, mermaid_code)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (document_id, user_id)
+         DO UPDATE SET mermaid_code = EXCLUDED.mermaid_code, updated_at = CURRENT_TIMESTAMP`,
+        [document_id, userId, mermaidCode]
+      );
+    }
+
+    res.status(200).json({ success: true, cached: false, title: docTitle, mermaidCode });
+  } catch (error: any) {
+    console.error('Lỗi sinh Mindmap AI:', error);
+    res.status(500).json({ error: error.message || 'Không thể tạo Mindmap lúc này.' });
+  }
+});
+
+// ==========================================
+// SYSTEM-WIDE LEADERBOARD
+// ==========================================
+// ==========================================
+// SYSTEM-WIDE LEADERBOARD
+// ==========================================
+router.get('/leaderboard', async (req: Request, res: Response) => {
+  try {
+    const { category = 'streak', period = 'weekly', limit = 50 } = req.query;
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 50));
+
+    // Optional auth extraction to identify current user's rank
+    let currentUserId: number | null = null;
+    let authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY || 'your_64_character_secret_key_here') as any;
+        currentUserId = decoded.id;
+      } catch {}
+    }
+
+    let items: any[] = [];
+
+    if (category === 'study_time') {
+      let dateFilter = '';
+      if (period === 'weekly') {
+        dateFilter = "AND uda.activity_date >= CURRENT_DATE - INTERVAL '7 days'";
+      } else if (period === 'monthly') {
+        dateFilter = "AND uda.activity_date >= CURRENT_DATE - INTERVAL '30 days'";
+      }
+
+      const query = `
+        SELECT 
+          u.id, 
+          u.name, 
+          u.avatar_url, 
+          u.role, 
+          u.streak,
+          u.created_at,
+          COALESCE(SUM(uda.active_seconds), 0)::int as score_seconds,
+          ROUND(COALESCE(SUM(uda.active_seconds), 0) / 60.0, 1)::float as score_minutes
+        FROM users u
+        LEFT JOIN user_daily_activity uda ON u.id = uda.user_id ${dateFilter}
+        WHERE u.privacy_setting != 'private'
+        GROUP BY u.id, u.name, u.avatar_url, u.role, u.streak, u.created_at
+        ORDER BY score_seconds DESC, u.streak DESC, u.id ASC
+        LIMIT $1
+      `;
+      const result = await db.query(query, [limitNum]);
+      items = result.rows.map((row, idx) => ({
+        rank: idx + 1,
+        id: row.id,
+        name: row.name,
+        avatar_url: row.avatar_url,
+        role: row.role,
+        streak: row.streak,
+        score: row.score_minutes,
+        unit: 'phút',
+        isCurrentUser: currentUserId === row.id
+      }));
+    } else if (category === 'quiz') {
+      let dateFilterTasks = '';
+      let dateFilterTestSets = '';
+      if (period === 'weekly') {
+        dateFilterTasks = "AND activity_date >= CURRENT_DATE - INTERVAL '7 days'";
+        dateFilterTestSets = "AND created_at >= CURRENT_DATE - INTERVAL '7 days'";
+      } else if (period === 'monthly') {
+        dateFilterTasks = "AND activity_date >= CURRENT_DATE - INTERVAL '30 days'";
+        dateFilterTestSets = "AND created_at >= CURRENT_DATE - INTERVAL '30 days'";
+      }
+
+      const query = `
+        SELECT 
+          u.id, 
+          u.name, 
+          u.avatar_url, 
+          u.role, 
+          u.streak,
+          u.created_at,
+          (
+            COALESCE((SELECT COUNT(*) * 50 FROM user_daily_tasks WHERE user_id = u.id AND completed = true ${dateFilterTasks}), 0) +
+            COALESCE((SELECT COUNT(*) * 100 FROM test_sets WHERE created_by = u.id ${dateFilterTestSets}), 0) +
+            COALESCE((SELECT COUNT(*) * 10 FROM flashcards f JOIN flashcard_decks d ON f.deck_id = d.id WHERE d.user_id = u.id), 0)
+          )::int as score,
+          COALESCE((SELECT COUNT(*) FROM user_daily_tasks WHERE user_id = u.id AND completed = true ${dateFilterTasks}), 0)::int as tasks_completed,
+          COALESCE((SELECT COUNT(*) FROM test_sets WHERE created_by = u.id ${dateFilterTestSets}), 0)::int as test_sets_count
+        FROM users u
+        WHERE u.privacy_setting != 'private'
+        ORDER BY score DESC, u.streak DESC, u.id ASC
+        LIMIT $1
+      `;
+      const result = await db.query(query, [limitNum]);
+      items = result.rows.map((row, idx) => ({
+        rank: idx + 1,
+        id: row.id,
+        name: row.name,
+        avatar_url: row.avatar_url,
+        role: row.role,
+        streak: row.streak,
+        score: row.score,
+        unit: 'điểm',
+        tasks_completed: row.tasks_completed,
+        test_sets_count: row.test_sets_count,
+        isCurrentUser: currentUserId === row.id
+      }));
+    } else {
+      // Default: 'streak'
+      let dateFilterStudyDates = '';
+      let dateFilterActivity = '';
+      if (period === 'weekly') {
+        dateFilterStudyDates = "AND study_date >= CURRENT_DATE - INTERVAL '7 days'";
+        dateFilterActivity = "AND activity_date >= CURRENT_DATE - INTERVAL '7 days'";
+      } else if (period === 'monthly') {
+        dateFilterStudyDates = "AND study_date >= CURRENT_DATE - INTERVAL '30 days'";
+        dateFilterActivity = "AND activity_date >= CURRENT_DATE - INTERVAL '30 days'";
+      }
+
+      const query = `
+        SELECT 
+          u.id, 
+          u.name, 
+          u.avatar_url, 
+          u.role, 
+          u.streak,
+          u.created_at,
+          COALESCE((SELECT COUNT(*) FROM user_study_dates WHERE user_id = u.id ${dateFilterStudyDates}), 0)::int as total_days_studied,
+          COALESCE((SELECT SUM(active_seconds) FROM user_daily_activity WHERE user_id = u.id ${dateFilterActivity}), 0)::int as total_active_seconds
+        FROM users u
+        WHERE u.privacy_setting != 'private'
+        ORDER BY u.streak DESC, total_days_studied DESC, u.id ASC
+        LIMIT $1
+      `;
+      const result = await db.query(query, [limitNum]);
+      items = result.rows.map((row, idx) => ({
+        rank: idx + 1,
+        id: row.id,
+        name: row.name,
+        avatar_url: row.avatar_url,
+        role: row.role,
+        streak: row.streak,
+        score: row.streak,
+        unit: 'ngày',
+        total_days_studied: row.total_days_studied,
+        isCurrentUser: currentUserId === row.id
+      }));
+    }
+
+    // Find current user's entry in items or compute their rank
+    let currentUserRank = items.find(item => item.isCurrentUser) || null;
+    if (!currentUserRank && currentUserId) {
+      const userRes = await db.query('SELECT id, name, avatar_url, role, streak FROM users WHERE id = $1', [currentUserId]);
+      if (userRes.rows[0]) {
+        const u = userRes.rows[0];
+        currentUserRank = {
+          rank: 99,
+          id: u.id,
+          name: u.name,
+          avatar_url: u.avatar_url,
+          role: u.role,
+          streak: u.streak,
+          score: category === 'study_time' ? 0 : u.streak,
+          unit: category === 'study_time' ? 'phút' : (category === 'quiz' ? 'điểm' : 'ngày'),
+          isCurrentUser: true
+        };
+      }
+    }
+
+    res.status(200).json({
+      category,
+      period,
+      totalParticipants: items.length,
+      leaderboard: items,
+      currentUserRank
+    });
+  } catch (error: any) {
+    console.error('Error fetching leaderboard:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
