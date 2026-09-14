@@ -1,12 +1,8 @@
 import { Request, Response } from 'express';
-import { db } from '../db';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
-import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/mailer';
-import { updateUserStreak, getVietnamDateString } from '../routes/app.routes';
+import { authService } from '../services/auth.service';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -20,19 +16,6 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phoneRegex = /^(03|05|07|08|09)\d{8}$/;
 
-async function getUserStudyDates(userId: number): Promise<string[]> {
-  try {
-    const datesRes = await db.query(
-      'SELECT study_date FROM user_study_dates WHERE user_id = $1 ORDER BY study_date DESC',
-      [userId]
-    );
-    return datesRes.rows.map(row => getVietnamDateString(new Date(row.study_date)));
-  } catch (err) {
-    console.error('Error in getUserStudyDates:', err);
-    return [];
-  }
-}
-
 export const register = async (req: Request, res: Response) => {
   try {
     const { name, phone, email, password } = req.body;
@@ -40,18 +23,14 @@ export const register = async (req: Request, res: Response) => {
     if (!name || name.trim().length < 2) {
       return res.status(400).json({ error: 'Tên người dùng phải có ít nhất 2 ký tự' });
     }
-
     if (!phone || !phoneRegex.test(phone)) {
       return res.status(400).json({ error: 'Số điện thoại không hợp lệ' });
     }
-
     const formattedEmail = email ? email.toLowerCase().trim() : '';
-
     if (!emailRegex.test(formattedEmail)) {
       return res.status(400).json({ error: 'Email không hợp lệ' });
     }
 
-    // Password validation logic
     if (password.length < 10) {
       return res.status(400).json({ error: 'Mật khẩu tối thiểu 10 ký tự' });
     }
@@ -62,35 +41,7 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Mật khẩu phải chứa ít nhất 1 chữ số hoặc ký tự đặc biệt' });
     }
 
-    const existingName = await db.query('SELECT * FROM users WHERE name = $1', [name.trim()]);
-    if (existingName.rows.length > 0) {
-      return res.status(400).json({ error: 'Tên người dùng đã được sử dụng' });
-    }
-
-    const existingEmail = await db.query('SELECT * FROM users WHERE email = $1', [formattedEmail]);
-    if (existingEmail.rows.length > 0) {
-      return res.status(400).json({ error: 'Email đã được sử dụng' });
-    }
-
-    const existingPhone = await db.query('SELECT * FROM users WHERE phone = $1', [phone]);
-    if (existingPhone.rows.length > 0) {
-      return res.status(400).json({ error: 'Số điện thoại đã được sử dụng' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    const result = await db.query(
-      'INSERT INTO users (email, phone, password, name) VALUES ($1, $2, $3, $4) RETURNING id, email, phone, name, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role',
-      [formattedEmail, phone, hashedPassword, name]
-    );
-    
-    const user = result.rows[0];
-
-    const token = jwt.sign(
-      { id: user.id, email: user.email }, 
-      process.env.JWT_SECRET_KEY || 'your_64_character_secret_key_here', 
-      { expiresIn: '24h' }
-    );
+    const { user, token } = await authService.register({ name, phone, email, password });
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -100,6 +51,9 @@ export const register = async (req: Request, res: Response) => {
 
     res.status(201).json({ message: 'Đăng ký thành công', token, user: { ...user, study_dates: [] } });
   } catch (error: any) {
+    if (error.message.includes('đã được sử dụng')) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('Register error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
@@ -113,64 +67,17 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Vui lòng nhập email và mật khẩu' });
     }
 
-    const formattedIdentifier = email.trim();
-    const formattedEmail = formattedIdentifier.toLowerCase();
-    
-    // Check if the input is an email, otherwise treat as username
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formattedIdentifier);
-    
-    let result;
-    if (isEmail) {
-      result = await db.query('SELECT * FROM users WHERE email = $1', [formattedEmail]);
-    } else {
-      result = await db.query('SELECT * FROM users WHERE name = $1', [formattedIdentifier]);
-    }
-    
-    const user = result.rows[0];
-    
-    if (!user) {
-      return res.status(401).json({ error: 'Tài khoản hoặc mật khẩu không chính xác' });
-    }
-    
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
-      return res.status(401).json({ error: 'Tài khoản hoặc mật khẩu không chính xác' });
-    }
+    const result = await authService.login({ email, password });
 
-    // NOTE: In the database schema, 'is_verified' is utilized as the flag for requiring Email 2FA on login
-    if (user.is_verified) {
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
-
-      await db.query(
-        'UPDATE users SET verification_code = $1, code_expires_at = $2 WHERE id = $3',
-        [code, expires, user.id]
-      );
-
-      // Send the email code
-      await sendVerificationEmail(user.email, code);
-
+    if (result.requires2FA) {
       return res.status(200).json({
         requires2FA: true,
-        email: user.email,
+        email: result.email,
         message: 'Mã xác thực đã được gửi về email của bạn'
       });
     }
-    
-    const token = jwt.sign(
-      { id: user.id, email: user.email }, 
-      process.env.JWT_SECRET_KEY || 'your_64_character_secret_key_here', 
-      { expiresIn: '24h' }
-    );
 
-    // Update login study activity streak
-    const updatedStreak = await updateUserStreak(user.id);
-    const userRes = await db.query('SELECT streak, last_study_date FROM users WHERE id = $1', [user.id]);
-    const finalStreak = userRes.rows[0]?.streak ?? user.streak;
-    const finalLastStudyDate = userRes.rows[0]?.last_study_date ?? user.last_study_date;
-    const studyDates = await getUserStudyDates(user.id);
-
-    res.cookie('token', token, {
+    res.cookie('token', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 24 * 60 * 60 * 1000
@@ -178,25 +85,13 @@ export const login = async (req: Request, res: Response) => {
     
     res.status(200).json({ 
       message: 'Đăng nhập thành công', 
-      token, 
-      user: { 
-        id: user.id, 
-        email: user.email, 
-        name: user.name, 
-        phone: user.phone, 
-        education: user.education, 
-        address: user.address, 
-        website: user.website, 
-        avatar_url: user.avatar_url,
-        is_verified: user.is_verified,
-        streak: finalStreak,
-        last_study_date: finalLastStudyDate,
-        study_dates: studyDates,
-        privacy_setting: user.privacy_setting,
-        role: user.role
-      } 
+      token: result.token, 
+      user: result.user
     });
   } catch (error: any) {
+    if (error.message === 'Tài khoản hoặc mật khẩu không chính xác') {
+      return res.status(401).json({ error: error.message });
+    }
     console.error('Login error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
@@ -209,39 +104,9 @@ export const verify2FA = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Vui lòng cung cấp đầy đủ email và mã xác thực' });
     }
 
-    const formattedEmail = email.trim().toLowerCase();
-    const result = await db.query('SELECT * FROM users WHERE email = $1', [formattedEmail]);
-    const user = result.rows[0];
+    const result = await authService.verify2FA({ email, code });
 
-    if (!user) {
-      return res.status(404).json({ error: 'Người dùng không tồn tại' });
-    }
-
-    if (!user.verification_code || user.verification_code !== code.trim()) {
-      return res.status(400).json({ error: 'Mã xác thực không chính xác' });
-    }
-
-    if (new Date() > new Date(user.code_expires_at)) {
-      return res.status(400).json({ error: 'Mã xác thực đã hết hạn' });
-    }
-
-    // Reset verification details
-    await db.query('UPDATE users SET verification_code = null, code_expires_at = null WHERE id = $1', [user.id]);
-
-    // Update login study activity streak
-    const updatedStreak = await updateUserStreak(user.id);
-    const userRes = await db.query('SELECT streak, last_study_date FROM users WHERE id = $1', [user.id]);
-    const finalStreak = userRes.rows[0]?.streak ?? user.streak;
-    const finalLastStudyDate = userRes.rows[0]?.last_study_date ?? user.last_study_date;
-    const studyDates = await getUserStudyDates(user.id);
-
-    const token = jwt.sign(
-      { id: user.id, email: user.email }, 
-      process.env.JWT_SECRET_KEY || 'your_64_character_secret_key_here', 
-      { expiresIn: '24h' }
-    );
-
-    res.cookie('token', token, {
+    res.cookie('token', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 24 * 60 * 60 * 1000
@@ -249,25 +114,14 @@ export const verify2FA = async (req: Request, res: Response) => {
 
     res.status(200).json({
       message: 'Đăng nhập thành công',
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        phone: user.phone,
-        education: user.education,
-        address: user.address,
-        website: user.website,
-        avatar_url: user.avatar_url,
-        is_verified: user.is_verified,
-        streak: finalStreak,
-        last_study_date: finalLastStudyDate,
-        study_dates: studyDates,
-        privacy_setting: user.privacy_setting,
-        role: user.role
-      }
+      token: result.token,
+      user: result.user
     });
   } catch (error: any) {
+    if (error.message === 'Người dùng không tồn tại' || error.message.includes('Mã xác thực')) {
+      const status = error.message === 'Người dùng không tồn tại' ? 404 : 400;
+      return res.status(status).json({ error: error.message });
+    }
     console.error('Verify2FA error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
@@ -278,25 +132,16 @@ export const toggleVerification = async (req: any, res: Response) => {
     const userId = req.user.id;
     const { enable } = req.body;
 
-    const result = await db.query(
-      'UPDATE users SET is_verified = $1 WHERE id = $2 RETURNING id, email, name, phone, education, address, website, avatar_url, is_verified, streak, last_study_date',
-      [enable === true, userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Người dùng không tồn tại' });
-    }
-
-    const studyDates = await getUserStudyDates(userId);
+    const user = await authService.toggleVerification(userId, enable);
 
     res.status(200).json({
       message: enable ? 'Kích hoạt xác thực tài khoản thành công' : 'Đã tắt xác thực tài khoản',
-      user: {
-        ...result.rows[0],
-        study_dates: studyDates
-      }
+      user
     });
   } catch (error: any) {
+    if (error.message === 'Người dùng không tồn tại') {
+      return res.status(404).json({ error: error.message });
+    }
     console.error('ToggleVerification error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
@@ -305,7 +150,6 @@ export const toggleVerification = async (req: any, res: Response) => {
 export const googleLogin = async (req: Request, res: Response) => {
   try {
     const { token } = req.body;
-    if (!token) return res.status(400).json({ error: 'Thiếu token Google' });
 
     const ticket = await client.verifyIdToken({
       idToken: token,
@@ -318,36 +162,10 @@ export const googleLogin = async (req: Request, res: Response) => {
     }
 
     const { email, name, sub: googleId } = payload;
-    let userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     
-    let user;
-    if (userResult.rows.length === 0) {
-      // User doesn't exist, create a new one
-      const dummyPassword = await bcrypt.hash(Math.random().toString(36).slice(-10), 10);
-      const insertResult = await db.query(
-        'INSERT INTO users (email, name, password) VALUES ($1, $2, $3) RETURNING id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting',
-        [email, name || 'Google User', dummyPassword]
-      );
-      user = insertResult.rows[0];
-    } else {
-      user = userResult.rows[0];
-    }
+    const result = await authService.googleLogin({ email, name, googleId });
 
-    // Google logins do not enforce email 2FA because email ownership is verified by Google
-    const authToken = jwt.sign(
-      { id: user.id, email: user.email }, 
-      process.env.JWT_SECRET_KEY || 'your_64_character_secret_key_here', 
-      { expiresIn: '24h' }
-    );
-
-    // Update login study activity streak
-    const updatedStreak = await updateUserStreak(user.id);
-    const userRes = await db.query('SELECT streak, last_study_date FROM users WHERE id = $1', [user.id]);
-    const finalStreak = userRes.rows[0]?.streak ?? user.streak;
-    const finalLastStudyDate = userRes.rows[0]?.last_study_date ?? user.last_study_date;
-    const studyDates = await getUserStudyDates(user.id);
-
-    res.cookie('token', authToken, {
+    res.cookie('token', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 24 * 60 * 60 * 1000
@@ -355,23 +173,8 @@ export const googleLogin = async (req: Request, res: Response) => {
 
     res.status(200).json({
       message: 'Đăng nhập Google thành công',
-      token: authToken,
-      user: { 
-        id: user.id, 
-        email: user.email, 
-        name: user.name, 
-        phone: user.phone, 
-        education: user.education, 
-        address: user.address, 
-        website: user.website, 
-        avatar_url: user.avatar_url,
-        is_verified: user.is_verified,
-        streak: finalStreak,
-        last_study_date: finalLastStudyDate,
-        study_dates: studyDates,
-        privacy_setting: user.privacy_setting,
-        role: user.role
-      }
+      token: result.token,
+      user: result.user
     });
   } catch (error: any) {
     console.error('Google login error:', error);
@@ -382,25 +185,13 @@ export const googleLogin = async (req: Request, res: Response) => {
 export const getMe = async (req: any, res: Response) => {
   try {
     const userId = req.user.id;
+    const user = await authService.getMe(userId);
     
-    // Automatically update/calculate streak on session check
-    await updateUserStreak(userId);
-    
-    const result = await db.query('SELECT id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role FROM users WHERE id = $1', [userId]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Người dùng không tồn tại' });
-    }
-
-    const studyDates = await getUserStudyDates(userId);
-    
-    res.status(200).json({
-      user: {
-        ...result.rows[0],
-        study_dates: studyDates
-      }
-    });
+    res.status(200).json({ user });
   } catch (error: any) {
+    if (error.message === 'Người dùng không tồn tại') {
+      return res.status(404).json({ error: error.message });
+    }
     console.error('GetMe error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
@@ -419,25 +210,10 @@ export const logout = async (req: Request, res: Response) => {
 export const checkAvailability = async (req: Request, res: Response) => {
   try {
     const { field, value } = req.body;
-    if (!field || !value) {
-      return res.status(400).json({ error: 'Thiếu thông tin' });
-    }
-    let query = '';
-    let val = value;
-    if (field === 'email') {
-      query = 'SELECT id FROM users WHERE email = $1';
-      val = value.toLowerCase().trim();
-    } else if (field === 'phone') {
-      query = 'SELECT id FROM users WHERE phone = $1';
-    } else if (field === 'name') {
-      query = 'SELECT id FROM users WHERE name = $1';
-      val = value.trim();
-    } else {
-      return res.status(400).json({ error: 'Trường không hợp lệ' });
-    }
 
-    const result = await db.query(query, [val]);
-    if (result.rows.length > 0) {
+    const exists = await authService.checkAvailability(field, value);
+
+    if (exists) {
       let errorMsg = '';
       if (field === 'email') errorMsg = 'Email đã được sử dụng';
       if (field === 'phone') errorMsg = 'Số điện thoại đã được sử dụng';
@@ -463,7 +239,6 @@ export const updateAvatar = async (req: any, res: Response) => {
     const filePath = req.file.path;
     console.log('Uploading file to Cloudinary:', filePath);
     
-    // Upload image to Cloudinary
     const result = await cloudinary.uploader.upload(filePath, {
       folder: 'cognito_avatars',
       transformation: [
@@ -471,38 +246,32 @@ export const updateAvatar = async (req: any, res: Response) => {
       ]
     });
 
-    // Remove local temp file
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    try {
+      if (filePath) await fs.promises.unlink(filePath);
+    } catch (err) {
+      console.warn('Failed to remove temp file:', err);
     }
 
     const avatarUrl = result.secure_url;
     console.log('Cloudinary upload success, URL:', avatarUrl);
 
-    // Update user in database
-    const dbResult = await db.query(
-      'UPDATE users SET avatar_url = $1 WHERE id = $2 RETURNING id, email, name, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role',
-      [avatarUrl, userId]
-    );
-
-    const user = dbResult.rows[0];
-    const studyDates = await getUserStudyDates(userId);
+    const user = await authService.updateAvatar(userId, avatarUrl);
 
     res.status(200).json({
       message: 'Cập nhật ảnh đại diện thành công',
-      user: {
-        ...user,
-        study_dates: studyDates
-      },
+      user,
       avatarUrl
     });
   } catch (error: any) {
     console.error('Update avatar error:', error);
-    // Cleanup file in case of error
-    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    if (req.file && req.file.path) {
+      try {
+        await fs.promises.unlink(req.file.path);
+      } catch (err) {
+        console.warn('Failed to remove temp file on error:', err);
+      }
     }
-    res.status(500).json({ error: 'Lỗi khi tải ảnh lên Cloudinary' });
+    res.status(500).json({ error: 'Lỗi khi tải ảnh lên Cloudinary hoặc cập nhật DB' });
   }
 };
 
@@ -511,36 +280,17 @@ export const updateProfile = async (req: any, res: Response) => {
     const userId = req.user.id;
     const { name, phone, education, address, privacy_setting } = req.body;
 
-    if (!name || name.trim().length < 2) {
-      return res.status(400).json({ error: 'Tên người dùng phải có ít nhất 2 ký tự' });
-    }
-
-    let normalizedPhone = phone ? phone.replace(/[\s\-\(\)\+]/g, '') : null;
-    if (normalizedPhone && normalizedPhone.startsWith('84')) {
-      normalizedPhone = '0' + normalizedPhone.slice(2);
-    }
-
-    if (normalizedPhone && !phoneRegex.test(normalizedPhone)) {
-      return res.status(400).json({ error: 'Số điện thoại không hợp lệ' });
-    }
-
-    const validPrivacySettings = ['public', 'private', 'friends'];
-    const finalPrivacySetting = validPrivacySettings.includes(privacy_setting) ? privacy_setting : 'public';
-
-    const dbResult = await db.query(
-      'UPDATE users SET name = $1, phone = $2, education = $3, address = $4, privacy_setting = $5 WHERE id = $6 RETURNING id, email, name, phone, education, address, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role',
-      [name.trim(), normalizedPhone, education || '', address || '', finalPrivacySetting, userId]
-    );
-
-    const user = dbResult.rows[0];
-    const studyDates = await getUserStudyDates(userId);
+    const user = await authService.updateProfile(userId, {
+      name: name,
+      phone: phone,
+      education: education || '',
+      address: address || '',
+      privacy_setting: privacy_setting
+    });
 
     res.status(200).json({
       message: 'Cập nhật thông tin cá nhân thành công',
-      user: {
-        ...user,
-        study_dates: studyDates
-      }
+      user
     });
   } catch (error: any) {
     console.error('Update profile error:', error);
@@ -553,43 +303,14 @@ export const changePassword = async (req: any, res: Response) => {
     const userId = req.user.id;
     const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Vui lòng điền đầy đủ mật khẩu hiện tại và mật khẩu mới' });
-    }
-
-    // Retrieve user and their hashed password
-    const userResult = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
-    const user = userResult.rows[0];
-
-    if (!user) {
-      return res.status(404).json({ error: 'Người dùng không tồn tại' });
-    }
-
-    // Verify current password
-    const isValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isValid) {
-      return res.status(400).json({ error: 'Mật khẩu hiện tại không chính xác' });
-    }
-
-    // Password validation logic matching register
-    if (newPassword.length < 10) {
-      return res.status(400).json({ error: 'Mật khẩu mới tối thiểu 10 ký tự' });
-    }
-    if (!/(?=.*[a-zA-Z])/.test(newPassword)) {
-      return res.status(400).json({ error: 'Mật khẩu mới phải chứa ít nhất 1 chữ cái' });
-    }
-    if (!/(?=.*[\d#?!&@$%*])/.test(newPassword)) {
-      return res.status(400).json({ error: 'Mật khẩu mới phải chứa ít nhất 1 chữ số hoặc ký tự đặc biệt' });
-    }
-
-    // Hash new password
-    const hashed = await bcrypt.hash(newPassword, 10);
-
-    // Update password in DB
-    await db.query('UPDATE users SET password = $1 WHERE id = $2', [hashed, userId]);
+    await authService.changePassword(userId, currentPassword, newPassword);
 
     res.status(200).json({ message: 'Thay đổi mật khẩu thành công!' });
   } catch (error: any) {
+    if (error.message === 'Người dùng không tồn tại' || error.message === 'Mật khẩu hiện tại không chính xác') {
+      const status = error.message === 'Người dùng không tồn tại' ? 404 : 400;
+      return res.status(status).json({ error: error.message });
+    }
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
@@ -599,25 +320,16 @@ export const upgradePremium = async (req: any, res: Response) => {
   try {
     const userId = req.user.id;
 
-    const result = await db.query(
-      'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, email, name, role, phone, education, address, website, avatar_url, is_verified, streak, last_study_date, privacy_setting',
-      ['premium', userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Người dùng không tồn tại' });
-    }
-
-    const studyDates = await getUserStudyDates(userId);
+    const user = await authService.upgradePremium(userId);
 
     res.status(200).json({
       message: 'Nâng cấp Premium thành công! Chào mừng bạn đến với thế giới không giới hạn.',
-      user: {
-        ...result.rows[0],
-        study_dates: studyDates
-      }
+      user
     });
   } catch (error: any) {
+    if (error.message === 'Người dùng không tồn tại') {
+      return res.status(404).json({ error: error.message });
+    }
     console.error('UpgradePremium error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
@@ -630,38 +342,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Vui lòng nhập email' });
     }
 
-    const formattedEmail = email.trim().toLowerCase();
-
-    // Always return success to avoid email enumeration
-    const result = await db.query('SELECT id, email FROM users WHERE email = $1', [formattedEmail]);
-    if (result.rows.length === 0) {
-      return res.status(200).json({ message: 'Nếu email tồn tại, liên kết đặt lại mật khẩu đã được gửi.' });
-    }
-
-    const user = result.rows[0];
-
-    // Generate a secure random token
-    const crypto = await import('crypto');
-    const token = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
-
-    await db.query(
-      'UPDATE users SET reset_password_token = $1, reset_password_expires = $2 WHERE id = $3',
-      [token, expires, user.id]
-    );
-
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
-
-    const mailResult = await sendPasswordResetEmail(user.email, resetLink);
-
-    if (mailResult.devMode) {
-      console.log(`[FORGOT-PWD] Dev mode - no SMTP configured.`);
-    } else if (!mailResult.success) {
-      console.error(`[FORGOT-PWD] Email send FAILED to ${user.email}:`, (mailResult as any).error?.message);
-    } else {
-      console.log(`[FORGOT-PWD] Email sent successfully to ${user.email} (MessageID: ${(mailResult as any).messageId})`);
-    }
+    await authService.forgotPassword(email);
 
     return res.status(200).json({ message: 'Nếu email tồn tại, liên kết đặt lại mật khẩu đã được gửi.' });
   } catch (error: any) {
@@ -678,39 +359,16 @@ export const resetPassword = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Thiếu token hoặc mật khẩu mới' });
     }
 
-    // Find user by token and check expiry
-    const result = await db.query(
-      'SELECT * FROM users WHERE reset_password_token = $1 AND reset_password_expires > NOW()',
-      [token]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(400).json({ error: 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn' });
-    }
-
-    const user = result.rows[0];
-
-    // Password validation
-    if (newPassword.length < 10) {
-      return res.status(400).json({ error: 'Mật khẩu tối thiểu 10 ký tự' });
-    }
-    if (!/(?=.*[a-zA-Z])/.test(newPassword)) {
-      return res.status(400).json({ error: 'Mật khẩu phải chứa ít nhất 1 chữ cái' });
-    }
-    if (!/(?=.*[\d#?!&@$%*])/.test(newPassword)) {
-      return res.status(400).json({ error: 'Mật khẩu phải chứa ít nhất 1 chữ số hoặc ký tự đặc biệt' });
-    }
-
-    const hashed = await bcrypt.hash(newPassword, 10);
-
-    // Update password and clear token
-    await db.query(
-      'UPDATE users SET password = $1, reset_password_token = NULL, reset_password_expires = NULL WHERE id = $2',
-      [hashed, user.id]
-    );
+    await authService.resetPassword(token, newPassword);
 
     return res.status(200).json({ message: 'Mật khẩu đã được đặt lại thành công. Bạn có thể đăng nhập ngay.' });
   } catch (error: any) {
+    if (error.message.includes('hết hạn') || error.message.includes('không hợp lệ')) {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.message.includes('tối thiểu') || error.message.includes('phải chứa')) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('ResetPassword error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }

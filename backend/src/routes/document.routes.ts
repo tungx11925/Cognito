@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { uploadDocument, getDocuments, getDocumentById, deleteDocument } from '../controllers/document.controller';
+import { uploadDocument, getDocuments, getDocumentById, createDocument, updateDocument, deleteDocument } from '../controllers/document.controller';
 import { authenticate } from '../middlewares/auth.middleware';
+import { validate } from '../middlewares/validate';
+import { uploadDocumentSchema, getDocumentsSchema, getDocumentByIdSchema, createDocumentSchema, updateDocumentSchema } from '../schemas/document.schema';
 import multer from 'multer';
 
 const router = Router();
@@ -29,9 +31,11 @@ const upload = multer({
 
 router.use(authenticate);
 
-router.post('/upload', upload.single('file'), uploadDocument);
-router.get('/', getDocuments);
-router.get('/:id', getDocumentById);
+router.post('/upload', upload.single('file'), validate(uploadDocumentSchema), uploadDocument);
+router.post('/', validate(createDocumentSchema), createDocument);
+router.get('/', validate(getDocumentsSchema), getDocuments);
+router.get('/:id', validate(getDocumentByIdSchema), getDocumentById);
+router.put('/:id', validate(updateDocumentSchema), updateDocument);
 router.delete('/:id', deleteDocument);
 
 export default router;

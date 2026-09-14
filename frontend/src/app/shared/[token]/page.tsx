@@ -33,7 +33,7 @@ export default function SharedWorkspacePage() {
   const [resource, setResource] = useState<SharedResource | null>(null);
   const [accessType, setAccessType] = useState<'viewer' | 'editor' | 'forker'>('viewer');
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
   useEffect(() => {
     if (token) {

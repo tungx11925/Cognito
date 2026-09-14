@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
-import { db } from '../db';
+import { documentService } from '../services/document.service';
+import { activityService } from '../services/activity.service';
 import cloudinary from '../config/cloudinary';
 import { UploadApiResponse } from 'cloudinary';
 
@@ -30,7 +31,7 @@ function getResourceType(mimetype: string): 'auto' | 'image' {
 }
 
 // ─── POST /api/documents/upload ───────────────────────────────────────────────
-export const uploadDocument = async (req: AuthRequest, res: Response) => {
+export const uploadDocument = async (req: AuthRequest, res: Response, next: any) => {
   try {
     const file = req.file;
     if (!file) {
@@ -43,6 +44,7 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
     }
 
     const { title, description, category } = req.body;
+
     if (!title || title.trim() === '') {
       return res.status(400).json({ error: 'Tiêu đề tài liệu là bắt buộc' });
     }
@@ -59,40 +61,28 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
       overwrite: false,
     });
 
-    const docUrl = cloudinaryResult.secure_url;
-    const publicId = cloudinaryResult.public_id;
-    const fileType = file.mimetype;
-    const fileSize = file.size;
-
-    const result = await db.query(
-      `INSERT INTO documents (user_id, title, description, category, doc_url, file_type, file_size, cloudinary_public_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [
-        userId,
-        title.trim(),
-        description?.trim() || '',
-        category?.trim() || 'Khác',
-        docUrl,
-        fileType,
-        fileSize,
-        publicId,
-      ]
-    );
+    const document = await documentService.uploadDocument({
+      userId,
+      title: title.trim(),
+      description,
+      category,
+      docUrl: cloudinaryResult.secure_url,
+      fileType: file.mimetype,
+      fileSize: file.size,
+      publicId: cloudinaryResult.public_id,
+    });
 
     res.status(201).json({
       message: 'Tải lên tài liệu thành công',
-      document: result.rows[0],
+      document
     });
   } catch (error: any) {
-    console.error('Error uploading document:', error);
-    // Cloudinary errors have a specific structure
-    const message = error?.message || 'Lỗi server khi tải lên tài liệu';
-    res.status(500).json({ error: message });
+    next(error);
   }
 };
 
 // ─── GET /api/documents ───────────────────────────────────────────────────────
-export const getDocuments = async (req: AuthRequest, res: Response) => {
+export const getDocuments = async (req: AuthRequest, res: Response, next: any) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -101,95 +91,83 @@ export const getDocuments = async (req: AuthRequest, res: Response) => {
 
     const { search, category } = req.query;
 
-    let query = `SELECT * FROM documents WHERE user_id = $1`;
-    const values: any[] = [userId];
-    let idx = 2;
+    const documents = await documentService.getDocuments(
+      userId, 
+      search as string, 
+      category as string
+    );
 
-    if (search) {
-      query += ` AND title ILIKE $${idx}`;
-      values.push(`%${search}%`);
-      idx++;
-    }
-
-    if (category) {
-      query += ` AND category = $${idx}`;
-      values.push(category);
-      idx++;
-    }
-
-    query += ` ORDER BY created_at DESC`;
-
-    const result = await db.query(query, values);
-    res.status(200).json(result.rows);
+    res.status(200).json(documents);
   } catch (error: any) {
-    console.error('Error getting documents:', error);
-    res.status(500).json({ error: 'Lỗi server khi lấy danh sách tài liệu' });
+    next(error);
   }
 };
 
 // ─── GET /api/documents/:id ───────────────────────────────────────────────────
-export const getDocumentById = async (req: AuthRequest, res: Response) => {
+export const getDocumentById = async (req: AuthRequest, res: Response, next: any) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ error: 'Vui lòng đăng nhập' });
     }
 
-    const docId = req.params.id;
+    const docId = parseInt(req.params.id, 10);
 
-    const result = await db.query(
-      `SELECT * FROM documents WHERE id = $1 AND user_id = $2`,
-      [docId, userId]
-    );
+    const document = await documentService.getDocumentById(docId, userId);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy tài liệu' });
-    }
+    // Log study activity and update streak asynchronously in background
+    Promise.all([
+      activityService.updateUserStreak(userId),
+      activityService.incrementTaskProgress(userId, 'read_document', 1)
+    ]).catch(err => console.error('Error updating study task for read_document:', err));
 
-    res.status(200).json(result.rows[0]);
+    res.status(200).json(document);
   } catch (error: any) {
-    console.error('Error getting document:', error);
-    res.status(500).json({ error: 'Lỗi server khi xem tài liệu' });
+    next(error);
   }
 };
 
-// ─── DELETE /api/documents/:id ────────────────────────────────────────────────
-export const deleteDocument = async (req: AuthRequest, res: Response) => {
+export const createDocument = async (req: AuthRequest, res: Response, next: any) => {
   try {
     const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'Vui lòng đăng nhập' });
-    }
+    if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
 
-    const docId = req.params.id;
+    const document = await documentService.createDocument({
+      userId,
+      ...req.body
+    });
 
-    // Fetch document to get Cloudinary public_id before deleting
-    const docResult = await db.query(
-      `SELECT cloudinary_public_id, file_type FROM documents WHERE id = $1 AND user_id = $2`,
-      [docId, userId]
-    );
+    res.status(201).json(document);
+  } catch (error: any) {
+    next(error);
+  }
+};
 
-    if (docResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy tài liệu hoặc bạn không có quyền xóa' });
-    }
+export const updateDocument = async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
 
-    const { cloudinary_public_id, file_type } = docResult.rows[0];
+    const docId = parseInt(req.params.id, 10);
+    const { title, description, category } = req.body;
 
-    // Delete from DB first
-    await db.query(`DELETE FROM documents WHERE id = $1`, [docId]);
+    const document = await documentService.updateDocument(docId, userId, { title, description, category });
+    res.status(200).json(document);
+  } catch (error: any) {
+    next(error);
+  }
+};
 
-    // Delete from Cloudinary (non-blocking — best-effort)
-    if (cloudinary_public_id) {
-      const resourceType = getResourceType(file_type || '') as 'auto' | 'image' | 'raw' | 'video';
-      // Try both 'image' and 'raw' for deletion since resource_type stored may differ
-      cloudinary.uploader.destroy(cloudinary_public_id, { resource_type: resourceType === 'image' ? 'image' : 'raw' })
-        .catch(() => cloudinary.uploader.destroy(cloudinary_public_id, { resource_type: 'raw' })
-          .catch(err => console.error('Cloudinary delete error (non-fatal):', err)));
-    }
+export const deleteDocument = async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+
+    const docId = parseInt(req.params.id, 10);
+    await documentService.deleteDocument(docId, userId);
 
     res.status(200).json({ message: 'Đã xóa tài liệu thành công' });
   } catch (error: any) {
-    console.error('Error deleting document:', error);
-    res.status(500).json({ error: 'Lỗi server khi xóa tài liệu' });
+    next(error);
   }
 };

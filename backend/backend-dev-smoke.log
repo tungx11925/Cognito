@@ -1,0 +1,22 @@
+
+> backend@1.0.0 dev
+> nodemon --watch src --ext ts --exec ts-node --transpile-only src/server.ts
+
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): src\**\*[39m
+[33m[nodemon] watching extensions: ts[39m
+[32m[nodemon] starting `ts-node --transpile-only src/server.ts`[39m
+🚀 Backend server running on port 5000
+AI Test schema bootstrapped successfully.
+ValidationError: The Express 'trust proxy' setting is true, which allows anyone to trivially bypass IP-based rate limiting. See https://express-rate-limit.github.io/ERR_ERL_PERMISSIVE_TRUST_PROXY/ for more information.
+    at Object.trustProxy (D:\Ky_7\EXE101\Cognito\backend\node_modules\express-rate-limit\dist\index.cjs:383:13)
+    at Object.wrappedValidations.<computed> [as trustProxy] (D:\Ky_7\EXE101\Cognito\backend\node_modules\express-rate-limit\dist\index.cjs:725:22)
+    at Object.keyGenerator (D:\Ky_7\EXE101\Cognito\backend\node_modules\express-rate-limit\dist\index.cjs:834:20)
+    at D:\Ky_7\EXE101\Cognito\backend\node_modules\express-rate-limit\dist\index.cjs:925:32
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async D:\Ky_7\EXE101\Cognito\backend\node_modules\express-rate-limit\dist\index.cjs:878:5 {
+  code: 'ERR_ERL_PERMISSIVE_TRUST_PROXY',
+  help: 'https://express-rate-limit.github.io/ERR_ERL_PERMISSIVE_TRUST_PROXY/'
+}
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m

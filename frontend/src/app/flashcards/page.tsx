@@ -303,31 +303,15 @@ export default function FlashcardsPage() {
       if (data && Array.isArray(data)) {
         setDecks(data);
 
-        // Fetch cards for all decks to calculate counts
+        // Build counts map directly from backend aggregation
         const countsMap: Record<number, { total: number; mastered: number; due: number }> = {};
-        await Promise.all(
-          data.map(async (deck: Deck) => {
-            try {
-              const cardsList = await getAllFlashcards(deck.id);
-              if (Array.isArray(cardsList)) {
-                const total = cardsList.length;
-                // progress/mastered is now based on repetitions > 0 so progress registers immediately
-                const mastered = cardsList.filter((c: any) => c.repetitions > 0).length;
-                // Cards due to review (next_review_at <= now or null)
-                const due = cardsList.filter((c: any) => {
-                  if (!c.next_review_at) return true;
-                  return new Date(c.next_review_at) <= new Date();
-                }).length;
-
-                countsMap[deck.id] = { total, mastered, due };
-              } else {
-                countsMap[deck.id] = { total: 0, mastered: 0, due: 0 };
-              }
-            } catch (e) {
-              countsMap[deck.id] = { total: 0, mastered: 0, due: 0 };
-            }
-          })
-        );
+        data.forEach((deck: any) => {
+          countsMap[deck.id] = {
+            total: Number(deck.card_count || 0),
+            mastered: Number(deck.mastered_count || 0),
+            due: Number(deck.due_count || 0),
+          };
+        });
         setDeckCounts(countsMap);
       } else {
         setDecks([]);

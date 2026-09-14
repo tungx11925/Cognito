@@ -1,3 +1,5 @@
+"use client";
+
 const footerLinks = {
   "Sản Phẩm": ["Tính năng", "Tích hợp AI", "Bảng giá"],
   "Tài Nguyên": ["Tài liệu hướng dẫn", "Flashcards mẫu", "Cộng đồng"],
