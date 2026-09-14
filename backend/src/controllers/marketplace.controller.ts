@@ -5,43 +5,65 @@ import { db } from '../db';
 export const getMarketplaceResources = async (req: AuthRequest, res: Response) => {
   try {
     const { type, search, page = 1, limit = 20 } = req.query;
-    const offset = (Number(page) - 1) * Number(limit);
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Math.min(100, Number(limit) || 20));
+    const offset = (pageNum - 1) * limitNum;
 
-    let query = `
-      SELECT 'document' as type, d.id, d.title, d.description, d.price, u.name as author_name, d.created_at
-      FROM documents d
-      JOIN users u ON d.user_id = u.id
-      WHERE d.visibility = 'public'
-    `;
     const params: any[] = [];
-
-    if (search) {
-      params.push(`%${search}%`);
-      query += ` AND d.title ILIKE $${params.length}`;
-    }
-
-    let deckQuery = `
-      SELECT 'deck' as type, c.id, c.name as title, c.description, c.price, u.name as author_name, c.created_at
-      FROM flashcard_decks c
-      JOIN users u ON c.user_id = u.id
-      WHERE c.visibility = 'public'
-    `;
-
-    if (search) {
-      deckQuery += ` AND c.name ILIKE $${params.length}`;
-    }
-
     let finalQuery = '';
+
     if (type === 'document') {
+      let query = `
+        SELECT 'document' as type, d.id, d.title, d.description, d.price, u.name as author_name, d.created_at
+        FROM documents d
+        JOIN users u ON d.user_id = u.id
+        WHERE d.visibility = 'public'
+      `;
+      if (search) {
+        params.push(`%${search}%`);
+        query += ` AND d.title ILIKE $${params.length}`;
+      }
+      query += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limitNum, offset);
       finalQuery = query;
     } else if (type === 'deck') {
+      let deckQuery = `
+        SELECT 'deck' as type, c.id, c.name as title, c.description, c.price, u.name as author_name, c.created_at
+        FROM flashcard_decks c
+        JOIN users u ON c.user_id = u.id
+        WHERE c.visibility = 'public'
+      `;
+      if (search) {
+        params.push(`%${search}%`);
+        deckQuery += ` AND c.name ILIKE $${params.length}`;
+      }
+      deckQuery += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limitNum, offset);
       finalQuery = deckQuery;
     } else {
-      finalQuery = `${query} UNION ALL ${deckQuery}`;
+      let docWhere = `d.visibility = 'public'`;
+      let deckWhere = `c.visibility = 'public'`;
+      if (search) {
+        params.push(`%${search}%`);
+        const searchIdx = `$${params.length}`;
+        docWhere += ` AND d.title ILIKE ${searchIdx}`;
+        deckWhere += ` AND c.name ILIKE ${searchIdx}`;
+      }
+      finalQuery = `
+        SELECT 'document' as type, d.id, d.title, d.description, d.price, u.name as author_name, d.created_at
+        FROM documents d
+        JOIN users u ON d.user_id = u.id
+        WHERE ${docWhere}
+        UNION ALL
+        SELECT 'deck' as type, c.id, c.name as title, c.description, c.price, u.name as author_name, c.created_at
+        FROM flashcard_decks c
+        JOIN users u ON c.user_id = u.id
+        WHERE ${deckWhere}
+        ORDER BY created_at DESC
+        LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      `;
+      params.push(limitNum, offset);
     }
-
-    finalQuery += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    params.push(limit, offset);
 
     const result = await db.query(finalQuery, params);
     

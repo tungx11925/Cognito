@@ -2,12 +2,12 @@ import { db } from '../db';
 import { PoolClient } from 'pg';
 
 class DocumentRepository {
-  async createDocument(data: { userId: number, title: string, description: string, category: string, docUrl: string }, client?: PoolClient) {
+  async createDocument(data: { userId: number, title: string, description: string, category: string, docUrl: string, fileType?: string, fileSize?: number, publicId?: string }, client?: PoolClient) {
     const q = client || db;
     const result = await q.query(
-      `INSERT INTO documents (user_id, title, description, category, doc_url)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [data.userId, data.title, data.description, data.category, data.docUrl]
+      `INSERT INTO documents (user_id, title, description, category, doc_url, file_type, file_size, cloudinary_public_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [data.userId, data.title, data.description, data.category, data.docUrl, data.fileType || null, data.fileSize || null, data.publicId || null]
     );
     return result.rows[0];
   }

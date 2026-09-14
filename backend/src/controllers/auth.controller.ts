@@ -334,3 +334,42 @@ export const upgradePremium = async (req: any, res: Response) => {
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
 };
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Vui lòng nhập email' });
+    }
+
+    await authService.forgotPassword(email);
+
+    return res.status(200).json({ message: 'Nếu email tồn tại, liên kết đặt lại mật khẩu đã được gửi.' });
+  } catch (error: any) {
+    console.error('ForgotPassword error:', error);
+    res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: 'Thiếu token hoặc mật khẩu mới' });
+    }
+
+    await authService.resetPassword(token, newPassword);
+
+    return res.status(200).json({ message: 'Mật khẩu đã được đặt lại thành công. Bạn có thể đăng nhập ngay.' });
+  } catch (error: any) {
+    if (error.message.includes('hết hạn') || error.message.includes('không hợp lệ')) {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.message.includes('tối thiểu') || error.message.includes('phải chứa')) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('ResetPassword error:', error);
+    res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+  }
+};

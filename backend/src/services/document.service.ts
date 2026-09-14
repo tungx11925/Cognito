@@ -1,14 +1,18 @@
 import { documentRepository } from '../repositories/document.repository';
 import { AppError } from '../utils/AppError';
+import cloudinary from '../config/cloudinary';
 
 class DocumentService {
-  async uploadDocument(data: { userId: number, title: string, description?: string, category?: string, docUrl: string }) {
+  async uploadDocument(data: { userId: number, title: string, description?: string, category?: string, docUrl: string, fileType?: string, fileSize?: number, publicId?: string }) {
     const document = await documentRepository.createDocument({
       userId: data.userId,
       title: data.title,
       description: data.description || '',
       category: data.category || 'Khác',
-      docUrl: data.docUrl
+      docUrl: data.docUrl,
+      fileType: data.fileType,
+      fileSize: data.fileSize,
+      publicId: data.publicId,
     });
     return document;
   }
@@ -53,6 +57,16 @@ class DocumentService {
       throw new AppError('Bạn không có quyền xóa tài liệu này hoặc tài liệu không tồn tại', 403);
     }
     await documentRepository.deleteDocument(docId, userId);
+
+    // Delete from Cloudinary (non-blocking — best-effort)
+    const cloudinaryPublicId = doc.cloudinary_public_id;
+    if (cloudinaryPublicId) {
+      const isImage = (doc.file_type || '').startsWith('image/');
+      // Try both 'image' and 'raw' for deletion since resource_type stored may differ
+      cloudinary.uploader.destroy(cloudinaryPublicId, { resource_type: isImage ? 'image' : 'raw' })
+        .catch(() => cloudinary.uploader.destroy(cloudinaryPublicId, { resource_type: 'raw' })
+          .catch(err => console.error('Cloudinary delete error (non-fatal):', err)));
+    }
   }
 }
 

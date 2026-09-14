@@ -61,7 +61,7 @@ class ActivityRepository {
   async markTaskCompleted(taskId: number) {
     const res = await db.query(
       `UPDATE user_daily_tasks
-       SET completed = true
+       SET completed = true, is_notified = true
        WHERE id = $1
        RETURNING *`,
       [taskId]

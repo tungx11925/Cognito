@@ -213,14 +213,31 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     }
   }, [isOpen]);
 
+  const [forgotLoading, setForgotLoading] = useState(false);
+
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailRegex.test(email)) {
       setErrors({...errors, email: 'Vui lòng nhập đúng định dạng email'});
       return;
     }
-    triggerMessage("Đã gửi liên kết khôi phục. Vui lòng kiểm tra email!", "success");
-    setIsForgotPasswordMode(false);
+
+    setForgotLoading(true);
+    try {
+      const rawApiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
+      const apiUrl = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
+      const res = await fetch(`${apiUrl}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      triggerMessage('Nếu email tồn tại, liên kết đặt lại mật khẩu đã được gửi. Vui lòng kiểm tra hộp thư (kể cả mục Spam)!', 'success');
+      setIsForgotPasswordMode(false);
+    } catch {
+      triggerMessage('Không thể kết nối đến máy chủ. Vui lòng thử lại.', 'error');
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   const validateField = async (field: string, val: string, currentData: any) => {
@@ -638,11 +655,21 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
                   
                   <button 
                     type="submit" 
-                    disabled={!emailRegex.test(email)}
-                    className={`w-full py-3.5 mt-2 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md ${!emailRegex.test(email) ? 'bg-[#0D2B24]/40 cursor-not-allowed' : 'bg-[#00c495] hover:bg-[#00b085] active:scale-[0.98]'}`}
+                    disabled={!emailRegex.test(email) || forgotLoading}
+                    className={`w-full py-3.5 mt-2 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md flex items-center justify-center gap-2 ${(!emailRegex.test(email) || forgotLoading) ? 'bg-[#0D2B24]/40 cursor-not-allowed' : 'bg-[#00c495] hover:bg-[#00b085] active:scale-[0.98]'}`}
                     style={{ fontFamily: "'Outfit', sans-serif" }}
                   >
-                    Gửi yêu cầu khôi phục
+                    {forgotLoading ? (
+                      <>
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Đang gửi...
+                      </>
+                    ) : (
+                      'Gửi yêu cầu khôi phục'
+                    )}
                   </button>
                   
                   <div className="text-center pt-2">

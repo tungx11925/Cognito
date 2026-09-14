@@ -4,6 +4,10 @@ import * as ActivityController from '../controllers/activity.controller';
 
 const router = Router();
 
+// Public routes (optional auth / SSE)
+router.get('/notifications/stream', ActivityController.streamNotifications);
+router.get('/leaderboard', ActivityController.getLeaderboard);
+
 // Protected routes
 router.use(authenticate);
 

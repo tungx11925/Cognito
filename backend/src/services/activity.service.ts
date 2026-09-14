@@ -1,5 +1,6 @@
 import { activityRepository } from '../repositories/activity.repository';
 import { getVietnamDateString } from '../utils/date.util';
+import { sseService } from '../utils/sse.service';
 
 class ActivityService {
   async updateUserStreak(userId: number) {
@@ -118,8 +119,31 @@ class ActivityService {
       if (task) {
         if (task.current_value >= task.target_value && !task.completed) {
           const completedTask = await activityRepository.markTaskCompleted(task.id);
+
+          // Broadcast real-time SSE event to all connected sessions of this user
+          sseService.sendToUser(userId, 'TASK_COMPLETED', {
+            task: completedTask,
+            taskType,
+            title: completedTask.title,
+            description: completedTask.description,
+            rewardXP: 50,
+            timestamp: new Date().toISOString()
+          });
+
           return { task: completedTask, justCompleted: true };
         }
+
+        // Broadcast progress update event
+        sseService.sendToUser(userId, 'TASK_PROGRESS', {
+          task,
+          taskType,
+          currentValue: task.current_value,
+          targetValue: task.target_value,
+          title: task.title,
+          description: task.description,
+          timestamp: new Date().toISOString()
+        });
+
         return { task, justCompleted: false };
       }
     } catch (error) {

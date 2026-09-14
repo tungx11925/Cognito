@@ -18,8 +18,8 @@ export const activePing = async (req: AuthRequest, res: Response, next: any) => 
     const { seconds } = req.body;
     const userId = req.user!.id;
     
-    if (!seconds || typeof seconds !== 'number' || seconds <= 0) {
-      return res.status(400).json({ error: 'Số giây không hợp lệ' });
+    if (!seconds || typeof seconds !== 'number' || seconds <= 0 || seconds > 300) {
+      return res.status(400).json({ error: 'Số giây không hợp lệ (phải từ 1 đến 300 giây mỗi lần ping)' });
     }
 
     const activeSeconds = await studyService.activePing(userId, seconds);

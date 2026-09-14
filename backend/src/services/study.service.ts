@@ -1,4 +1,5 @@
 import { db } from '../db';
+import { getVietnamDateString } from '../utils/date.util';
 
 export class StudyService {
   async getStats(userId: number) {
@@ -57,8 +58,8 @@ export class StudyService {
   }
 
   async activePing(userId: number, seconds: number) {
-    const d = new Date(Date.now() + 7 * 60 * 60 * 1000);
-    const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    // Determine VN timezone date (UTC+7)
+    const dateStr = getVietnamDateString(new Date());
 
     const result = await db.query(
       `INSERT INTO user_daily_activity (user_id, activity_date, active_seconds)

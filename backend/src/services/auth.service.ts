@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { userRepository } from '../repositories/user.repository';
-import { sendVerificationEmail } from '../utils/mailer';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/mailer';
 import { activityService } from './activity.service';
 import { db } from '../db';
 
@@ -222,6 +222,72 @@ export class AuthService {
     if (field === 'name') val = value.trim();
 
     return await userRepository.checkAvailability(field, val);
+  }
+
+  async forgotPassword(email: string) {
+    const formattedEmail = email.trim().toLowerCase();
+
+    // Always return success to avoid email enumeration
+    const user = await userRepository.findByEmail(formattedEmail);
+    if (!user) {
+      return;
+    }
+
+    // Generate a secure random token
+    const crypto = await import('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    await db.query(
+      'UPDATE users SET reset_password_token = $1, reset_password_expires = $2 WHERE id = $3',
+      [token, expires, user.id]
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+
+    const mailResult = await sendPasswordResetEmail(user.email, resetLink);
+
+    if (mailResult.devMode) {
+      console.log(`[FORGOT-PWD] Dev mode - no SMTP configured.`);
+    } else if (!mailResult.success) {
+      console.error(`[FORGOT-PWD] Email send FAILED to ${user.email}:`, (mailResult as any).error?.message);
+    } else {
+      console.log(`[FORGOT-PWD] Email sent successfully to ${user.email} (MessageID: ${(mailResult as any).messageId})`);
+    }
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    // Find user by token and check expiry
+    const result = await db.query(
+      'SELECT * FROM users WHERE reset_password_token = $1 AND reset_password_expires > NOW()',
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
+    }
+
+    const user = result.rows[0];
+
+    // Password validation
+    if (newPassword.length < 10) {
+      throw new Error('Mật khẩu tối thiểu 10 ký tự');
+    }
+    if (!/(?=.*[a-zA-Z])/.test(newPassword)) {
+      throw new Error('Mật khẩu phải chứa ít nhất 1 chữ cái');
+    }
+    if (!/(?=.*[\d#?!&@$%*])/.test(newPassword)) {
+      throw new Error('Mật khẩu phải chứa ít nhất 1 chữ số hoặc ký tự đặc biệt');
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear token
+    await db.query(
+      'UPDATE users SET password = $1, reset_password_token = NULL, reset_password_expires = NULL WHERE id = $2',
+      [hashed, user.id]
+    );
   }
 }
 
