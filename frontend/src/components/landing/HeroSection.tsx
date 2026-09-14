@@ -1,3 +1,5 @@
+"use client";
+
 import { motion } from "framer-motion";
 import { ArrowRight, Play, Hourglass, BookText, MessageSquare, Layers, FileText, Search, Bell } from "lucide-react";
 

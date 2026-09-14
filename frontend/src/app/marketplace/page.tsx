@@ -36,7 +36,7 @@ export default function MarketplacePage() {
   const [activeTab, setActiveTab] = useState<'all' | 'document' | 'deck'>('all');
   const [unlocking, setUnlocking] = useState<number | null>(null);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
   useEffect(() => {
     fetchResources();

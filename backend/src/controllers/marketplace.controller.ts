@@ -14,7 +14,7 @@ export const getMarketplaceResources = async (req: AuthRequest, res: Response) =
 
     if (type === 'document') {
       let query = `
-        SELECT 'document' as type, d.id, d.title, d.description, d.price, u.username as author_name, d.created_at
+        SELECT 'document' as type, d.id, d.title, d.description, d.price, u.name as author_name, d.created_at
         FROM documents d
         JOIN users u ON d.user_id = u.id
         WHERE d.visibility = 'public'
@@ -28,7 +28,7 @@ export const getMarketplaceResources = async (req: AuthRequest, res: Response) =
       finalQuery = query;
     } else if (type === 'deck') {
       let deckQuery = `
-        SELECT 'deck' as type, c.id, c.name as title, c.description, c.price, u.username as author_name, c.created_at
+        SELECT 'deck' as type, c.id, c.name as title, c.description, c.price, u.name as author_name, c.created_at
         FROM flashcard_decks c
         JOIN users u ON c.user_id = u.id
         WHERE c.visibility = 'public'
@@ -50,12 +50,12 @@ export const getMarketplaceResources = async (req: AuthRequest, res: Response) =
         deckWhere += ` AND c.name ILIKE ${searchIdx}`;
       }
       finalQuery = `
-        SELECT 'document' as type, d.id, d.title, d.description, d.price, u.username as author_name, d.created_at
+        SELECT 'document' as type, d.id, d.title, d.description, d.price, u.name as author_name, d.created_at
         FROM documents d
         JOIN users u ON d.user_id = u.id
         WHERE ${docWhere}
         UNION ALL
-        SELECT 'deck' as type, c.id, c.name as title, c.description, c.price, u.username as author_name, c.created_at
+        SELECT 'deck' as type, c.id, c.name as title, c.description, c.price, u.name as author_name, c.created_at
         FROM flashcard_decks c
         JOIN users u ON c.user_id = u.id
         WHERE ${deckWhere}
