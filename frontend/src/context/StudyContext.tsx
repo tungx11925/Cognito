@@ -1365,7 +1365,22 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const IDLE_TIMEOUT_MS = 60 * 1000; // 60 seconds
     let idleTimer: NodeJS.Timeout | null = null;
 
+    let authFailed = false;
+
+    // Khi token hết hạn (401): dừng toàn bộ tracker, xoá token và buộc đăng nhập lại.
+    // Tránh việc spam request 401 liên tục khiến trang bị chậm/lag.
+    const handleAuthExpired = () => {
+      if (authFailed) return;
+      authFailed = true;
+      activeTrackerIsUserActiveRef.current = false;
+      localStorage.removeItem('token');
+      setActiveUser(null);
+      setIsAuthenticated(false);
+      triggerMessage('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại', 'error');
+    };
+
     const sendPing = (seconds: number) => {
+      if (authFailed) return;
       fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
         method: 'POST',
         headers: {
@@ -1375,6 +1390,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         body: JSON.stringify({ seconds })
       })
       .then(res => {
+        if (res.status === 401) {
+          handleAuthExpired();
+          return;
+        }
         if (res.ok) return res.json();
       })
       .then(data => {
@@ -1393,6 +1412,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
 
     const sendBeaconPing = (seconds: number) => {
+      if (authFailed) return;
       const token = localStorage.getItem('token');
       if (!token) return;
       const url = `${API_BASE_URL}/study-sessions/active-ping?token=${encodeURIComponent(token)}`;
@@ -1403,6 +1423,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
 
     const flushActiveTime = (isUnloading = false) => {
+      if (authFailed) return;
       if (activeTrackerIsUserActiveRef.current) {
         const elapsedMs = Date.now() - activeTrackerLastActiveTimeRef.current;
         activeTrackerUnsentSecondsRef.current += elapsedMs / 1000;
@@ -1468,6 +1489,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     // 3. Periodic heartbeat — check every 5s, flush at 60s to reduce network spam
     const interval = setInterval(() => {
+      if (authFailed) return;
       if (activeTrackerIsUserActiveRef.current && document.visibilityState === 'visible') {
         const elapsedMs = Date.now() - activeTrackerLastActiveTimeRef.current;
         activeTrackerUnsentSecondsRef.current += elapsedMs / 1000;

@@ -10,6 +10,8 @@ import aiRoutes from './routes/ai.routes';
 import marketplaceRoutes from './routes/marketplace.routes';
 import adminRoutes from './routes/admin.routes';
 import studyRoutes from './routes/study.routes';
+import aiTestRoutes from './routes/ai-test.routes';
+import { bootstrapAITestSchema } from './db/ai-test-schema';
 import path from 'path';
 
 // Validate essential environment variables before starting
@@ -47,6 +49,10 @@ app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', activityRoutes);
 app.use('/api', studyRoutes);
+app.use('/api', aiTestRoutes);
+
+// Tạo các bảng phục vụ tính năng "Bài tập AI" (ai_task_configs, test_sets, questions) nếu chưa có
+bootstrapAITestSchema().catch(err => console.error('AI test schema bootstrap failed:', err));
 
 import { errorHandler } from './middlewares/errorHandler';
 

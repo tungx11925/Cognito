@@ -21,6 +21,27 @@ const nextConfig = {
     optimizeCss: false,
   },
 
+  // Tăng tốc Fast Refresh/HMR khi dev: không theo dõi các thư mục nặng ngoài frontend
+  // (tránh tình trạng "[Fast Refresh] rebuilding" kéo dài hàng chục giây)
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: [
+          '**/node_modules/**',
+          '**/.git/**',
+          '**/.next/**',
+          '**/backend/**',
+          '**/.agents/**',
+          '**/.gemini/**',
+          '**/_bmad/**',
+          '**/_bmad-output/**',
+        ],
+      };
+    }
+    return config;
+  },
+
   // Cache static asset headers
   async headers() {
     return [

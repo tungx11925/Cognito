@@ -8,7 +8,7 @@ export const getMarketplaceResources = async (req: AuthRequest, res: Response) =
     const offset = (Number(page) - 1) * Number(limit);
 
     let query = `
-      SELECT 'document' as type, d.id, d.title, d.description, d.price, u.username as author_name, d.created_at
+      SELECT 'document' as type, d.id, d.title, d.description, d.price, u.name as author_name, d.created_at
       FROM documents d
       JOIN users u ON d.user_id = u.id
       WHERE d.visibility = 'public'
@@ -21,7 +21,7 @@ export const getMarketplaceResources = async (req: AuthRequest, res: Response) =
     }
 
     let deckQuery = `
-      SELECT 'deck' as type, c.id, c.name as title, c.description, c.price, u.username as author_name, c.created_at
+      SELECT 'deck' as type, c.id, c.name as title, c.description, c.price, u.name as author_name, c.created_at
       FROM flashcard_decks c
       JOIN users u ON c.user_id = u.id
       WHERE c.visibility = 'public'

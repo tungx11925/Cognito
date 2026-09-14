@@ -87,7 +87,7 @@ class FlashcardRepository {
 
   async getCommunityDecks() {
     const result = await db.query(`
-      SELECT d.*, u.username as author_name, u.avatar_url,
+      SELECT d.*, u.name as author_name, u.avatar_url,
              (SELECT COUNT(*) FROM flashcards WHERE deck_id = d.id) as card_count,
              (SELECT COUNT(*) FROM flashcard_decks WHERE forked_from_id = d.id) as fork_count
       FROM flashcard_decks d
