@@ -5,11 +5,20 @@ const getAuthHeaders = (): Record<string, string> => {
     return token ? { 'Authorization': `Bearer ${token}` } : {};
 };
 
-export const chatWithAI = (document_id: number, message: string, history?: any[]) => apiFetch('/ai/chat', {
-    method: 'POST',
-    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ document_id, message, history })
-});
+export const chatWithAI = (document_id: number, message: string, history?: any[], images?: string[] | string) => {
+    const imagesPayload = Array.isArray(images) ? images : (images ? [images] : []);
+    return apiFetch('/ai/chat', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            document_id, 
+            message, 
+            history, 
+            images: imagesPayload,
+            image: imagesPayload[0] || undefined 
+        })
+    });
+};
 
 export const generateQuiz = (document_id: number) => apiFetch('/ai/generate-quiz', {
     method: 'POST',
