@@ -6,6 +6,13 @@ import { Send, Bot, User, Brain, AlertCircle, PlayCircle, Loader2, Trash2, Image
 import toast from 'react-hot-toast';
 import { useStudy } from '@/context/StudyContext';
 
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
+import 'katex/dist/katex.min.css';
+
 interface Props {
   documentId: number;
   documentTitle: string;
@@ -26,6 +33,87 @@ interface Message {
   type?: 'text' | 'quiz' | 'flashcards';
   data?: any;
 }
+
+const MarkdownRenderer = ({ content, isUser }: { content: string; isUser: boolean }) => {
+  return (
+    <div className={`text-[14px] leading-relaxed break-words overflow-hidden ${isUser ? 'text-white' : 'text-gray-800'}`}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex, rehypeRaw]}
+        components={{
+          h1: ({ node, ...props }) => (
+            <h1 className={`text-xl font-bold mt-3 mb-2 pb-1 ${isUser ? 'text-white border-b border-white/20' : 'text-[#0D2B24] border-b border-gray-200'}`} {...props} />
+          ),
+          h2: ({ node, ...props }) => (
+            <h2 className={`text-lg font-bold mt-3 mb-1.5 pb-1 ${isUser ? 'text-white border-b border-white/20' : 'text-[#0D2B24] border-b border-gray-200'}`} {...props} />
+          ),
+          h3: ({ node, ...props }) => (
+            <h3 className={`text-base font-bold mt-2.5 mb-1 ${isUser ? 'text-white' : 'text-[#0D2B24]'}`} {...props} />
+          ),
+          p: ({ node, ...props }) => (
+            <p className="my-1.5 leading-relaxed" {...props} />
+          ),
+          strong: ({ node, ...props }) => (
+            <strong className={`font-bold ${isUser ? 'text-white underline decoration-white/40' : 'text-[#0D2B24]'}`} {...props} />
+          ),
+          em: ({ node, ...props }) => (
+            <em className={`italic ${isUser ? 'text-white/90' : 'text-gray-700 font-medium'}`} {...props} />
+          ),
+          ul: ({ node, ...props }) => (
+            <ul className="list-disc ml-5 my-1.5 space-y-0.5" {...props} />
+          ),
+          ol: ({ node, ...props }) => (
+            <ol className="list-decimal ml-5 my-1.5 space-y-0.5" {...props} />
+          ),
+          li: ({ node, ...props }) => (
+            <li className={`leading-relaxed ${isUser ? 'text-white' : 'text-gray-800'}`} {...props} />
+          ),
+          blockquote: ({ node, ...props }) => (
+            <blockquote className={`border-l-4 pl-3 py-1 my-2 italic rounded-r ${isUser ? 'border-emerald-400 bg-white/10 text-white/90' : 'border-[#0D2B24] bg-gray-50 text-gray-700'}`} {...props} />
+          ),
+          code: ({ node, inline, className, children, ...props }: any) => {
+            return !inline ? (
+              <pre className={`p-3 rounded-xl overflow-x-auto my-2 text-xs font-mono border ${isUser ? 'bg-black/40 text-emerald-300 border-white/20' : 'bg-gray-900 text-gray-100 border-gray-700'}`}>
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              </pre>
+            ) : (
+              <code className={`px-1.5 py-0.5 rounded font-mono text-[12.5px] ${isUser ? 'bg-white/20 text-white border border-white/20' : 'bg-gray-100 text-[#0D2B24] border border-gray-200'}`} {...props}>
+                {children}
+              </code>
+            );
+          },
+          table: ({ node, ...props }) => (
+            <div className="overflow-x-auto my-3 rounded-xl border border-gray-200 shadow-xs">
+              <table className={`min-w-full divide-y text-xs text-left ${isUser ? 'divide-white/20 text-white' : 'divide-gray-200 text-gray-800'}`} {...props} />
+            </div>
+          ),
+          thead: ({ node, ...props }) => (
+            <thead className={isUser ? 'bg-white/10' : 'bg-[#0D2B24]/10 text-[#0D2B24] font-bold'} {...props} />
+          ),
+          tbody: ({ node, ...props }) => (
+            <tbody className={`divide-y ${isUser ? 'divide-white/10' : 'divide-gray-100'}`} {...props} />
+          ),
+          tr: ({ node, ...props }) => (
+            <tr className={`transition-colors ${isUser ? 'hover:bg-white/5' : 'hover:bg-gray-50/80'}`} {...props} />
+          ),
+          th: ({ node, ...props }) => (
+            <th className="px-3 py-2 font-bold uppercase tracking-wider text-[11px]" {...props} />
+          ),
+          td: ({ node, ...props }) => (
+            <td className="px-3 py-2 whitespace-normal align-top leading-relaxed" {...props} />
+          ),
+          a: ({ node, ...props }) => (
+            <a className={`underline font-medium hover:opacity-80 transition-opacity ${isUser ? 'text-emerald-300' : 'text-emerald-700'}`} target="_blank" rel="noopener noreferrer" {...props} />
+          )
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+};
 
 export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -223,125 +311,6 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
     }
   };
 
-  const renderMarkdown = (text: string, isUser: boolean = false) => {
-    // Basic Markdown Parser (headers, bold, lists, quotes)
-    const lines = text.split('\n');
-    return lines.map((line, lineIdx) => {
-      let trimmed = line.trim();
-      let content = line;
-
-      // Heading 3
-      if (trimmed.startsWith('### ')) {
-        return (
-          <h3 
-            key={lineIdx} 
-            className={`text-base font-bold mt-3 mb-1.5 pb-1 ${
-              isUser ? 'text-white border-b border-white/20' : 'text-[#0D2B24] border-b border-gray-200'
-            }`}
-          >
-            {trimmed.replace('### ', '')}
-          </h3>
-        );
-      }
-      // Heading 2
-      if (trimmed.startsWith('## ')) {
-        return (
-          <h2 
-            key={lineIdx} 
-            className={`text-lg font-bold mt-4 mb-2 pb-1 ${
-              isUser ? 'text-white border-b border-white/20' : 'text-[#0D2B24] border-b border-gray-200'
-            }`}
-          >
-            {trimmed.replace('## ', '')}
-          </h2>
-        );
-      }
-      // Heading 1
-      if (trimmed.startsWith('# ')) {
-        return (
-          <h1 
-            key={lineIdx} 
-            className={`text-xl font-bold mt-4 mb-2 pb-1 ${
-              isUser ? 'text-white border-b-2 border-white/30' : 'text-[#0D2B24] border-b-2 border-gray-300'
-            }`}
-          >
-            {trimmed.replace('# ', '')}
-          </h1>
-        );
-      }
-      // Unordered list
-      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-        return (
-          <li key={lineIdx} className={`ml-4 list-disc my-0.5 ${isUser ? 'text-white' : 'text-gray-700'}`}>
-            {renderInlineMarkdown(trimmed.substring(2), isUser)}
-          </li>
-        );
-      }
-      // Ordered list
-      const numMatch = trimmed.match(/^(\d+)\.\s+(.*)/);
-      if (numMatch) {
-        return (
-          <li key={lineIdx} className={`ml-4 list-decimal my-0.5 ${isUser ? 'text-white' : 'text-gray-700'}`}>
-            {renderInlineMarkdown(numMatch[2], isUser)}
-          </li>
-        );
-      }
-      // Blockquote
-      if (trimmed.startsWith('> ')) {
-        return (
-          <blockquote 
-            key={lineIdx} 
-            className={`border-l-4 pl-3 py-1 my-2 italic rounded-r ${
-              isUser 
-                ? 'border-emerald-400 bg-white/10 text-white/90' 
-                : 'border-[#0D2B24] bg-gray-50 text-gray-700'
-            }`}
-          >
-            {renderInlineMarkdown(trimmed.replace('> ', ''), isUser)}
-          </blockquote>
-        );
-      }
-      // Regular paragraph / blank line
-      if (trimmed === '') {
-        return <div key={lineIdx} className="h-2" />;
-      }
-      return (
-        <p key={lineIdx} className={`my-1 ${isUser ? 'text-white font-normal' : 'text-gray-800'}`}>
-          {renderInlineMarkdown(content, isUser)}
-        </p>
-      );
-    });
-  };
-
-  const renderInlineMarkdown = (text: string, isUser: boolean = false) => {
-    // Regex for bold, code, link
-    const parts = text.split(/(\*\*.*?\*\*|\`.*?\`)/g);
-    return parts.map((part, idx) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return (
-          <strong key={idx} className={`font-bold ${isUser ? 'text-white underline decoration-white/40' : 'text-[#0D2B24]'}`}>
-            {part.slice(2, -2)}
-          </strong>
-        );
-      }
-      if (part.startsWith('`') && part.endsWith('`')) {
-        return (
-          <code 
-            key={idx} 
-            className={`px-1.5 py-0.5 rounded font-mono text-xs ${
-              isUser 
-                ? 'bg-white/20 text-white border border-white/20' 
-                : 'bg-gray-100 text-[#0D2B24] border border-gray-200'
-            }`}
-          >
-            {part.slice(1, -1)}
-          </code>
-        );
-      }
-      return part;
-    });
-  };
-
   const clearHistory = () => {
     toast((t) => (
       <div className="flex flex-col gap-2 p-1">
@@ -432,9 +401,7 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
                     </div>
                   )}
 
-                  <div className={`whitespace-pre-wrap ${isUser ? 'text-white' : 'text-gray-800'}`}>
-                    {renderMarkdown(msg.content, isUser)}
-                  </div>
+                  <MarkdownRenderer content={msg.content} isUser={isUser} />
                   
                   {msg.id === 'welcome' && (
                     <div className="mt-4 flex flex-wrap gap-2">
