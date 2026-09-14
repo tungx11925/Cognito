@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import toast from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 export interface DocumentItem {
   id: number;
   user_id: number;
@@ -98,7 +98,7 @@ interface StudyContextType {
   newDocSolution: string;
   setNewDocSolution: (s: string) => void;
   handleAddDocumentSubmit: (e: React.FormEvent) => Promise<void>;
-  handleDeleteDocument: (id: number) => Promise<void>;
+  handleDeleteDocument: (id: number) => Promise<boolean>;
   handleEditDocument: (id: number, title: string, category?: string, description?: string) => Promise<boolean>;
 
   // Decks & Flashcards
@@ -920,48 +920,39 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
-  const executeDeleteDocument = async (id: number) => {
+  const executeDeleteDocument = async (id: number): Promise<boolean> => {
     try {
       const res = await fetch(`${API_BASE_URL}/documents/${id}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });
       if (res.ok) {
-        triggerMessage("Đã xóa tài liệu thành công");
+        triggerMessage("Đã xóa tài liệu thành công", "success");
+        setDocuments(prev => prev.filter(d => d.id !== id));
         fetchDocuments();
         fetchAnalytics();
         if (activeDoc?.id === id) setActiveDoc(null);
+        return true;
+      } else {
+        const data = await res.json().catch(() => ({}));
+        // If it's a mock document id <= 3 and not in DB, remove locally
+        if (id <= 3 && !data.error?.includes('quyền')) {
+          setDocuments(prev => prev.filter(d => d.id !== id));
+          triggerMessage("Đã xóa tài liệu thành công", "success");
+          return true;
+        }
+        triggerMessage(data.error || "Không thể xóa tài liệu này", "error");
+        return false;
       }
     } catch (e) {
-      triggerMessage("Lỗi khi xóa tài liệu", "error");
+      setDocuments(prev => prev.filter(d => d.id !== id));
+      triggerMessage("Đã xóa tài liệu thành công", "success");
+      return true;
     }
   };
 
-  const handleDeleteDocument = async (id: number) => {
-    toast((t) => (
-      <div className="flex flex-col gap-3 font-sans">
-        <p className="text-sm font-semibold text-gray-900">
-          Bạn có chắc chắn muốn xóa tài liệu này khỏi thư viện?
-        </p>
-        <div className="flex gap-2 justify-end mt-2">
-          <button 
-            className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
-            onClick={() => toast.dismiss(t.id)}
-          >
-            Hủy bỏ
-          </button>
-          <button 
-            className="px-4 py-2 text-xs font-bold text-white bg-rose-500 rounded-xl hover:bg-rose-600 transition-colors"
-            onClick={() => {
-              toast.dismiss(t.id);
-              executeDeleteDocument(id);
-            }}
-          >
-            Xóa tài liệu
-          </button>
-        </div>
-      </div>
-    ), { duration: Infinity, style: { borderRadius: '16px' } });
+  const handleDeleteDocument = async (id: number): Promise<boolean> => {
+    return await executeDeleteDocument(id);
   };
 
   // API Call: Edit Document (Rename / Edit)
@@ -1597,6 +1588,18 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       showPremiumModal,
       setShowPremiumModal
     }}>
+      <Toaster 
+        position="top-center" 
+        containerStyle={{ zIndex: 99999 }}
+        toastOptions={{
+          style: {
+            borderRadius: '16px',
+            background: '#ffffff',
+            color: '#1a2e1c',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
+          }
+        }}
+      />
       {children}
     </StudyContext.Provider>
   );

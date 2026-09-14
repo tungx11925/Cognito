@@ -100,7 +100,7 @@ function DocCard({
   dark: boolean;
   starred: boolean;
   onStar: (id: number) => void;
-  onDelete: (id: number) => void;
+  onDelete: (doc: any) => void;
   onEdit: (doc: any) => void;
   onShare: (doc: any) => void;
   onSelect: () => void;
@@ -154,7 +154,7 @@ function DocCard({
             <Share2 size={14} />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
+            onClick={(e) => { e.stopPropagation(); onDelete(doc); }}
             style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}
             className="text-gray-400 hover:text-rose-500 transition-colors"
             title="Xóa tài liệu"
@@ -202,7 +202,7 @@ function DocRow({
   dark: boolean;
   starred: boolean;
   onStar: (id: number) => void;
-  onDelete: (id: number) => void;
+  onDelete: (doc: any) => void;
   onEdit: (doc: any) => void;
   onShare: (doc: any) => void;
   onSelect: () => void;
@@ -263,7 +263,7 @@ function DocRow({
           <Share2 size={13} />
         </button>
         <button
-          onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
+          onClick={(e) => { e.stopPropagation(); onDelete(doc); }}
           style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}
           className="text-gray-400 hover:text-rose-500 transition-colors"
           title="Xóa tài liệu"
@@ -304,6 +304,8 @@ export default function LibraryPage() {
   const [editingDoc, setEditingDoc] = useState<any | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [deletingDoc, setDeletingDoc] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [shareDoc, setShareDoc] = useState<any | null>(null);
 
@@ -311,6 +313,25 @@ export default function LibraryPage() {
     setEditingDoc(doc);
     setEditTitle(doc.title || "");
     setEditCategory(doc.category || "");
+  };
+
+  const handleStartDelete = (doc: any) => {
+    setDeletingDoc(doc);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingDoc) return;
+    setIsDeleting(true);
+    try {
+      const ok = await handleDeleteDocument(deletingDoc.id);
+      if (ok) {
+        setDeletingDoc(null);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleShareClick = (doc: any) => {
@@ -702,7 +723,7 @@ export default function LibraryPage() {
                     dark={dark}
                     starred={starredIds.includes(doc.id)}
                     onStar={handleToggleStar}
-                    onDelete={handleDeleteDocument}
+                    onDelete={handleStartDelete}
                     onEdit={handleStartEdit}
                     onShare={handleShareClick}
                     onSelect={() => handleDocSelect(doc)}
@@ -746,7 +767,7 @@ export default function LibraryPage() {
                     dark={dark}
                     starred={starredIds.includes(doc.id)}
                     onStar={handleToggleStar}
-                    onDelete={handleDeleteDocument}
+                    onDelete={handleStartDelete}
                     onEdit={handleStartEdit}
                     onShare={handleShareClick}
                     onSelect={() => handleDocSelect(doc)}
@@ -892,6 +913,97 @@ export default function LibraryPage() {
                   }}
                 >
                   Lưu thay đổi
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deletingDoc && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isDeleting && setDeletingDoc(null)}
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-sm border-2 rounded-2xl shadow-2xl p-6 overflow-hidden z-10"
+              style={{
+                background: dark ? "#1e1e1e" : "#ffffff",
+                borderColor: dark ? "#3a3a3a" : "rgba(26,46,28,0.22)",
+                color: textMain,
+                fontFamily: "'Outfit', sans-serif"
+              }}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div 
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: "rgba(239, 68, 68, 0.12)", color: "#ef4444" }}
+                >
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold" style={{ color: textMain }}>
+                    Xác nhận xóa tài liệu
+                  </h3>
+                  <p className="text-xs" style={{ color: textSub }}>
+                    Hành động này không thể hoàn tác
+                  </p>
+                </div>
+              </div>
+
+              <div 
+                className="p-3.5 rounded-xl border mb-5 text-xs font-medium leading-relaxed"
+                style={{
+                  background: dark ? "#252525" : "#f8f8f6",
+                  borderColor: dark ? "#333333" : "rgba(26,46,28,0.1)",
+                  color: textMain
+                }}
+              >
+                Bạn có chắc muốn xóa tài liệu <span className="font-bold text-rose-500">"{deletingDoc.title}"</span> khỏi thư viện không?
+              </div>
+
+              <div className="flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setDeletingDoc(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 disabled:opacity-50"
+                  style={{
+                    border: `2px solid ${dark ? "#3a3a3a" : "rgba(26,46,28,0.15)"}`,
+                    background: dark ? "#2a2a2a" : "#f3f3f0",
+                    color: textSub,
+                    cursor: isDeleting ? "not-allowed" : "pointer"
+                  }}
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-white transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-500/20"
+                  style={{ cursor: isDeleting ? "not-allowed" : "pointer" }}
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      Đang xóa...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={13} />
+                      Xóa tài liệu
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>
