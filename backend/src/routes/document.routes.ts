@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { uploadDocument, getDocuments, getDocumentById, createDocument, updateDocument, deleteDocument } from '../controllers/document.controller';
+import { uploadDocument, getDocuments, getDocumentById, getDocumentStatus, reprocessDocument, createDocument, updateDocument, deleteDocument } from '../controllers/document.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate';
-import { uploadDocumentSchema, getDocumentsSchema, getDocumentByIdSchema, createDocumentSchema, updateDocumentSchema } from '../schemas/document.schema';
+import { uploadDocumentSchema, getDocumentsSchema, getDocumentByIdSchema, getDocumentStatusSchema, createDocumentSchema, updateDocumentSchema } from '../schemas/document.schema';
 import multer from 'multer';
 
 const router = Router();
@@ -34,7 +34,9 @@ router.use(authenticate);
 router.post('/upload', upload.single('file'), validate(uploadDocumentSchema), uploadDocument);
 router.post('/', validate(createDocumentSchema), createDocument);
 router.get('/', validate(getDocumentsSchema), getDocuments);
+router.get('/:id/status', validate(getDocumentStatusSchema), getDocumentStatus);
 router.get('/:id', validate(getDocumentByIdSchema), getDocumentById);
+router.post('/:id/reprocess', validate(getDocumentStatusSchema), reprocessDocument);
 router.put('/:id', validate(updateDocumentSchema), updateDocument);
 router.delete('/:id', deleteDocument);
 

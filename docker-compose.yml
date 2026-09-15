@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: postgres:15-alpine
+    # pgvector/pgvector:pg15 = PostgreSQL 15 + pgvector extension (bắt buộc cho RAG embedding search)
+    image: pgvector/pgvector:pg15
     container_name: myproject-postgres
     ports:
       - "5432:5432"

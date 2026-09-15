@@ -2,12 +2,23 @@ import { db } from '../db';
 import { PoolClient } from 'pg';
 
 class DocumentRepository {
-  async createDocument(data: { userId: number, title: string, description: string, category: string, docUrl: string, fileType?: string, fileSize?: number, publicId?: string }, client?: PoolClient) {
+  async createDocument(data: { userId: number, title: string, description: string, category: string, docUrl: string, fileType?: string, fileSize?: number, publicId?: string, status?: string }, client?: PoolClient) {
     const q = client || db;
     const result = await q.query(
-      `INSERT INTO documents (user_id, title, description, category, doc_url, file_type, file_size, cloudinary_public_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [data.userId, data.title, data.description, data.category, data.docUrl, data.fileType || null, data.fileSize || null, data.publicId || null]
+      `INSERT INTO documents (user_id, title, description, category, doc_url, file_type, file_size, cloudinary_public_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, 'UPLOADING')) RETURNING *`,
+      [data.userId, data.title, data.description, data.category, data.docUrl, data.fileType || null, data.fileSize || null, data.publicId || null, data.status || null]
+    );
+    return result.rows[0];
+  }
+
+  async findDocumentStatus(docId: number, userId: number, client?: PoolClient) {
+    const q = client || db;
+    const result = await q.query(
+      `SELECT id, status, processing_error, processed_at,
+              (SELECT COUNT(*)::int FROM document_chunks WHERE document_id = documents.id) AS chunk_count
+       FROM documents WHERE id = $1 AND user_id = $2`,
+      [docId, userId]
     );
     return result.rows[0];
   }

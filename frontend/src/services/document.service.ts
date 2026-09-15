@@ -32,6 +32,25 @@ export const getDocumentById = (id: string | number) => apiFetch(`/documents/${i
     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
 });
 
+/** Trạng thái pipeline xử lý tài liệu: UPLOADING → PROCESSING → INDEXING → READY/FAILED */
+export interface DocumentProcessingStatus {
+    id: number;
+    status: 'UPLOADING' | 'PROCESSING' | 'INDEXING' | 'READY' | 'FAILED';
+    processing_error?: string | null;
+    processed_at?: string | null;
+    chunk_count?: number;
+}
+
+export const getDocumentStatus = (id: string | number) => apiFetch(`/documents/${id}/status`, {
+    method: 'GET',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+});
+
+export const reprocessDocument = (id: string | number) => apiFetch(`/documents/${id}/reprocess`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+});
+
 export const deleteDocument = (id: string | number) => apiFetch(`/documents/${id}`, {
     method: 'DELETE',
     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },

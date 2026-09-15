@@ -21,6 +21,8 @@ export const getDocumentByIdSchema = z.object({
   }),
 });
 
+export const getDocumentStatusSchema = getDocumentByIdSchema;
+
 export const createDocumentSchema = z.object({
   body: z.object({
     title: z.string({ message: 'Tiêu đề tài liệu là bắt buộc' }).min(1, 'Tiêu đề tài liệu là bắt buộc').trim(),

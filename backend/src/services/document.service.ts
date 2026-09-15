@@ -1,6 +1,7 @@
 import { documentRepository } from '../repositories/document.repository';
 import { AppError } from '../utils/AppError';
 import cloudinary from '../config/cloudinary';
+import { processingService } from './processing.service';
 
 class DocumentService {
   async uploadDocument(data: { userId: number, title: string, description?: string, category?: string, docUrl: string, fileType?: string, fileSize?: number, publicId?: string }) {
@@ -13,8 +14,39 @@ class DocumentService {
       fileType: data.fileType,
       fileSize: data.fileSize,
       publicId: data.publicId,
+      status: 'UPLOADING',
     });
+
+    // Đưa vào hàng đợi xử lý nền (parse → chunk → embedding → READY)
+    // Không block HTTP request — frontend polling GET /api/documents/:id/status
+    processingService.enqueue({
+      documentId: document.id,
+      userId: data.userId,
+      docUrl: data.docUrl,
+      fileType: data.fileType || null,
+    });
+
     return document;
+  }
+
+  async getDocumentStatus(docId: number, userId: number) {
+    const status = await documentRepository.findDocumentStatus(docId, userId);
+    if (!status) {
+      throw new AppError('Không tìm thấy tài liệu', 404);
+    }
+    return status;
+  }
+
+  async reprocessDocument(docId: number, userId: number) {
+    const doc = await documentRepository.findDocumentById(docId, userId);
+    if (!doc) {
+      throw new AppError('Không tìm thấy tài liệu', 404);
+    }
+    if (!doc.doc_url) {
+      throw new AppError('Tài liệu không có file để xử lý lại', 400);
+    }
+    processingService.reprocess(doc.id, userId, doc.doc_url, doc.file_type);
+    return { id: doc.id, status: 'PROCESSING' };
   }
 
   async getDocuments(userId: number, search?: string, category?: string) {
