@@ -8,7 +8,7 @@ import Groq from 'groq-sdk';
 
 export const chatWithDocument = async (req: AuthRequest, res: Response, next: any) => {
   try {
-    const { document_id, message, history } = req.body;
+    const { document_id, message, history, image, images } = req.body;
     const userId = req.user!.id;
     
     // Check old style requests from previous version
@@ -16,10 +16,13 @@ export const chatWithDocument = async (req: AuthRequest, res: Response, next: an
        return res.status(400).json({ error: 'Endpoint deprecated for direct context. Use document_id instead.' });
     }
 
-    const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
-    const document = docResult.rows[0];
+    let document = null;
+    if (document_id) {
+      const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
+      document = docResult.rows[0];
+    }
 
-    const reply = await aiService.chatWithDocument(document, message, history);
+    const reply = await aiService.chatWithDocument(document, message || '', history, images || image);
     res.status(200).json({ reply });
   } catch (error) {
     next(error);

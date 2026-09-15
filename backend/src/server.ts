@@ -1,17 +1,16 @@
+// Bắt các lỗi unhandled ngay từ đầu để nodemon không bị crash loop
+process.on('uncaughtException', (err: any) => {
+  console.warn('⚠️  Uncaught Exception (non-fatal):', err?.message || err);
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  console.warn('⚠️  Unhandled Rejection (non-fatal):', reason?.message || reason);
+});
+
 import app from './app';
 import http from 'http';
 
 const PORT = process.env.PORT || 5000;
-
-// Bắt các lỗi unhandled để nodemon không bị crash loop
-process.on('uncaughtException', (err) => {
-  console.error('⚠️  Uncaught Exception (non-fatal):', err.message);
-});
-
-process.on('unhandledRejection', (reason) => {
-  console.warn('⚠️  Unhandled Rejection (non-fatal):', reason);
-});
-
 const server = http.createServer(app);
 
 // Keep-alive connections to reduce TCP handshake overhead per request

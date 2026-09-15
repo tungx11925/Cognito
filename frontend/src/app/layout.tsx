@@ -19,13 +19,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi">
+    <html lang="vi" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="shortcut icon" href="/favicon.ico" />
         <Script src="https://accounts.google.com/gsi/client" strategy="beforeInteractive" />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <StudyContextProvider>
           <Toaster position="top-center" reverseOrder={false} />
           <TaskNotifications />

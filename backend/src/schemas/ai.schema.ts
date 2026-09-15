@@ -3,13 +3,16 @@ import { z } from 'zod';
 export const aiChatSchema = z.object({
   body: z.object({
     document_id: z.number().optional(),
-    message: z.string().min(1, 'Vui lòng nhập tin nhắn'),
+    message: z.string().optional(),
+    history: z.array(z.any()).optional(),
     chat_history: z.array(
       z.object({
         role: z.enum(['user', 'model']),
         parts: z.array(z.object({ text: z.string() })),
       })
     ).optional(),
+    image: z.string().optional(),
+    images: z.array(z.string()).optional(),
     document_content: z.string().optional(),
     force_regenerate: z.boolean().optional(),
   }),
