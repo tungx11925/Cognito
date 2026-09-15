@@ -28,15 +28,16 @@ export const uploadAndCreateLecture = async (req: AuthRequest, res: Response, ne
       return res.status(400).json({ error: 'Vui lòng chọn file tài liệu bài giảng (PDF, DOCX, TXT)' });
     }
 
-    const userId = req.user!.id;
-    const { title, subject } = req.body;
+    const userId = req.user?.id || 1;
+    const { title, subject, mode } = req.body;
 
     const lecture = await lectureService.createLectureFromFile(
       userId,
       req.file.buffer,
       req.file.originalname,
       title,
-      subject
+      subject,
+      mode || 'ORIGINAL'
     );
 
     res.status(201).json(lecture);
@@ -59,10 +60,27 @@ export const updateSlide = async (req: AuthRequest, res: Response, next: NextFun
 export const deleteLecture = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const userId = req.user!.id;
+    const userId = req.user?.id || 1;
     const result = await lectureService.deleteLecture(id, userId);
     res.status(200).json(result);
   } catch (error) {
     next(error);
   }
 };
+
+export const aiAssistSlide = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const lectureId = parseInt(req.params.id, 10);
+    const { slideNumber, action, userQuestion } = req.body;
+    const response = await lectureService.aiAssistSlide(
+      lectureId,
+      Number(slideNumber) || 1,
+      action || 'notes',
+      userQuestion
+    );
+    res.status(200).json({ result: response });
+  } catch (error) {
+    next(error);
+  }
+};
+

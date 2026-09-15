@@ -3,6 +3,10 @@ import { AppError } from '../utils/AppError';
 import { parserService } from './parser.service';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
+import { cleanVietnameseText } from '../utils/vietnamese';
+
+import fs from 'fs';
+import path from 'path';
 
 export class LectureService {
   /**
@@ -14,7 +18,12 @@ export class LectureService {
       : 'SELECT * FROM lectures ORDER BY created_at DESC';
     const params = userId ? [userId] : [];
     const res = await db.query(query, params);
-    return res.rows;
+    return res.rows.map(row => ({
+      ...row,
+      title: cleanVietnameseText(row.title),
+      description: cleanVietnameseText(row.description),
+      subject: cleanVietnameseText(row.subject)
+    }));
   }
 
   /**
@@ -34,32 +43,124 @@ export class LectureService {
 
     return {
       ...lecture,
-      slides: slidesRes.rows
+      title: cleanVietnameseText(lecture.title),
+      description: cleanVietnameseText(lecture.description),
+      subject: cleanVietnameseText(lecture.subject),
+      slides: slidesRes.rows.map(s => ({
+        ...s,
+        title: cleanVietnameseText(s.title),
+        subtitle: cleanVietnameseText(s.subtitle),
+        chapter_title: cleanVietnameseText(s.chapter_title),
+        content: cleanVietnameseText(s.content),
+        callout_title: cleanVietnameseText(s.callout_title),
+        callout_content: cleanVietnameseText(s.callout_content),
+        speaker_notes: cleanVietnameseText(s.speaker_notes),
+      }))
     };
   }
 
   /**
-   * Upload file and auto-generate slide deck with chapters
+   * Upload file and create lecture (ORIGINAL or AI_GENERATED)
    */
-  async createLectureFromFile(userId: number, fileBuffer: Buffer, originalname: string, title?: string, subject?: string) {
-    let extractedText = '';
+  async createLectureFromFile(
+    userId: number,
+    fileBuffer: Buffer,
+    originalname: string,
+    title?: string,
+    subject?: string,
+    mode: 'ORIGINAL' | 'AI_GENERATED' = 'ORIGINAL'
+  ) {
+    // 1. Save file locally to uploads folder
+    const safeBaseName = originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const savedFileName = `${Date.now()}-${safeBaseName}`;
+    const uploadsDir = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(uploadsDir, savedFileName), fileBuffer);
+    const fileUrl = `/uploads/${savedFileName}`;
+
     const ext = originalname.split('.').pop()?.toLowerCase();
+    const lectureTitle = cleanVietnameseText(title || originalname.replace(/\.[^/.]+$/, ''));
+    const lectureSubject = cleanVietnameseText(subject || 'Khoa học tổng hợp');
+
+    // ─── CHẾ ĐỘ 1: TRÌNH CHIẾU NGUYÊN BẢN (ORIGINAL SLIDE VIEWER) ───────────
+    if (mode === 'ORIGINAL') {
+      let pageCount = 1;
+      if (ext === 'pdf') {
+        try {
+          const pdfParse = require('pdf-parse/lib/pdf-parse.js');
+          const data = await pdfParse(fileBuffer);
+          pageCount = data.numpages || 1;
+        } catch (e) {
+          console.warn('PDF parse page count error:', e);
+        }
+      }
+
+      // Save Lecture record in DB
+      const lectureRes = await db.query(`
+        INSERT INTO lectures (
+          user_id, title, description, subject, chapter_count, total_slides, cover_color, file_url, presentation_mode, original_filename
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+      `, [
+        userId,
+        lectureTitle,
+        cleanVietnameseText(`Slide trình chiếu gốc từ file ${originalname}`),
+        lectureSubject,
+        1,
+        pageCount,
+        '#0B132B',
+        fileUrl,
+        'ORIGINAL',
+        originalname
+      ]);
+
+      const createdLecture = lectureRes.rows[0];
+
+      // Create slide records 1-to-1 for each page
+      for (let i = 1; i <= pageCount; i++) {
+        await db.query(`
+          INSERT INTO lecture_slides (
+            lecture_id, slide_number, chapter_index, chapter_title, title, subtitle, content, callout_type, callout_title, callout_content, speaker_notes, page_number
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `, [
+          createdLecture.id,
+          i,
+          1,
+          'Slide gốc',
+          `${lectureTitle} - Trang ${i}`,
+          `TRANG ${i} / ${pageCount}`,
+          `Nội dung trang ${i}`,
+          'takeaway',
+          'Trang slide',
+          `Trang ${i} của file ${originalname}`,
+          `Ghi chú cho trang ${i}`,
+          i
+        ]);
+      }
+
+      return this.getLectureById(createdLecture.id);
+    }
+
+    // ─── CHẾ ĐỘ 2: AI TỰ ĐỘNG TÓM TẮT & SOẠN SLIDE (AI_GENERATED) ───────────
     let mimetype = 'application/octet-stream';
     if (ext === 'pdf') mimetype = 'application/pdf';
     else if (ext === 'docx' || ext === 'doc') mimetype = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     else if (ext === 'txt' || ext === 'md') mimetype = 'text/plain';
 
-    extractedText = await parserService.parseFromBuffer(fileBuffer, mimetype);
+    let extractedText = await parserService.parseFromBuffer(fileBuffer, mimetype);
+    extractedText = cleanVietnameseText(extractedText);
 
-    const lectureTitle = title || originalname.replace(/\.[^/.]+$/, '');
-    const lectureSubject = subject || 'Khoa học tổng hợp';
-
-    // Generate Chapters & Slides via Gemini or Groq
     let generatedSlides: any[] = [];
     const geminiApiKey = process.env.GEMINI_API_KEY;
     const groqApiKey = process.env.GROQ_API_KEY;
 
     const prompt = `Bạn là chuyên gia thiết kế bài giảng sư phạm cao cấp. Hãy đọc kỹ tài liệu sau và chuyển đổi thành một bộ Slide bài giảng trình chiếu chuyên nghiệp cho Giảng viên.
+
+QUY TẮC BẮT BUỘC VỀ CHÍNH TẢ & FONT TIẾNG VIỆT (QUAN TRỌNG):
+- Toàn bộ tiêu đề, nội dung, ghi chú PHẢI viết bằng Tiếng Việt chuẩn Unicode (NFC), chuẩn chính tả 100%.
+- TUYỆT ĐỐI KHÔNG để lỗi tách dấu thanh như 'vê\`', 'giơ'i', 'tuê\`'. Phải viết liền đúng dấu như 'về', 'giới', 'tuệ'.
 
 QUY TẮC BẮT BUỘC VỀ TRÌNH BÀY SLIDE (CANVA & POWERPOINT STANDARD):
 1. VỪA VẶN 1 MÀN HÌNH: Mỗi slide chỉ chứa tối đa 2 đến 3 ý gạch đầu dòng (bullet points) ngắn gọn, súc tích để vừa vặn 100% trong 1 khung máy chiếu, không bị tràn hay cắt xén.
@@ -97,10 +198,10 @@ TÀI LIỆU CẦN CHUYỂN ĐỔI:
 ${extractedText.substring(0, 15000)}
 """`;
 
-    if (geminiApiKey && !geminiApiKey.includes('your_')) {
+    if (geminiApiKey && !geminiApiKey.includes('your_') && !geminiApiKey.startsWith('AQ.')) {
       try {
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+        const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
         const model = genAI.getGenerativeModel({ model: modelName });
         const result = await model.generateContent(prompt);
         let cleaned = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -120,7 +221,7 @@ ${extractedText.substring(0, 15000)}
         const comp = await groq.chat.completions.create({
           messages: [{ role: 'user', content: prompt }],
           model: process.env.GROQ_CHAT_MODEL || 'groq/compound-mini',
-          temperature: 0.5,
+          temperature: 0.3,
           max_tokens: 3000
         });
         let cleaned = (comp.choices[0]?.message?.content || '').replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -155,17 +256,21 @@ ${extractedText.substring(0, 15000)}
     // Save Lecture in Database
     const distinctChapters = new Set(generatedSlides.map(s => s.chapter_index)).size;
     const lectureRes = await db.query(`
-      INSERT INTO lectures (user_id, title, description, subject, chapter_count, total_slides, cover_color)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO lectures (
+        user_id, title, description, subject, chapter_count, total_slides, cover_color, file_url, presentation_mode, original_filename
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `, [
       userId,
-      lectureTitle,
-      `Bài giảng tạo từ file ${originalname}`,
-      lectureSubject,
+      cleanVietnameseText(lectureTitle),
+      cleanVietnameseText(`Bài giảng tạo từ file ${originalname}`),
+      cleanVietnameseText(lectureSubject),
       distinctChapters || 1,
       generatedSlides.length,
-      '#0A1128'
+      '#0A1128',
+      fileUrl,
+      'AI_GENERATED',
+      originalname
     ]);
 
     const createdLecture = lectureRes.rows[0];
@@ -180,14 +285,14 @@ ${extractedText.substring(0, 15000)}
         createdLecture.id,
         i + 1,
         s.chapter_index || 1,
-        s.chapter_title || `Chapter ${s.chapter_index || 1}`,
-        s.title || `Slide ${i + 1}`,
-        s.subtitle || '',
-        s.content || '',
+        cleanVietnameseText(s.chapter_title || `Chapter ${s.chapter_index || 1}`),
+        cleanVietnameseText(s.title || `Slide ${i + 1}`),
+        cleanVietnameseText(s.subtitle || ''),
+        cleanVietnameseText(s.content || ''),
         s.callout_type || 'takeaway',
-        s.callout_title || 'Lưu ý',
-        s.callout_content || '',
-        s.speaker_notes || ''
+        cleanVietnameseText(s.callout_title || 'Lưu ý'),
+        cleanVietnameseText(s.callout_content || ''),
+        cleanVietnameseText(s.speaker_notes || '')
       ]);
     }
 
@@ -235,6 +340,124 @@ ${extractedText.substring(0, 15000)}
       throw new AppError('Không thể xóa bài giảng hoặc bạn không có quyền', 403);
     }
     return { success: true };
+  }
+
+  /**
+   * On-demand AI assistant for a specific slide / page
+   */
+  async aiAssistSlide(
+    lectureId: number, 
+    slideNumber: number, 
+    action: 'notes' | 'summary' | 'explain' | 'quiz' | 'chat',
+    userQuestion?: string
+  ) {
+    const lecture = await this.getLectureById(lectureId);
+    const targetSlide = lecture.slides.find(s => s.slide_number === slideNumber) || lecture.slides[0];
+
+    // Try to get text context from file or slide
+    let pageContext = '';
+    if (lecture.file_url) {
+      const filePath = path.join(__dirname, '../../', lecture.file_url.replace(/^\//, ''));
+      if (fs.existsSync(filePath)) {
+        try {
+          const pdfParse = require('pdf-parse/lib/pdf-parse.js');
+          const buffer = fs.readFileSync(filePath);
+          let pageText = '';
+          await pdfParse(buffer, {
+            pagerender: function(pageData: any) {
+              if (pageData.pageIndex + 1 === slideNumber) {
+                return pageData.getTextContent().then((textContent: any) => {
+                  let lastY, text = '';
+                  for (let item of textContent.items) {
+                    if (lastY == item.transform[5] || !lastY){
+                      text += item.str;
+                    } else {
+                      text += '\n' + item.str;
+                    }
+                    lastY = item.transform[5];
+                  }
+                  pageText = text;
+                  return text;
+                });
+              }
+              return Promise.resolve('');
+            }
+          });
+          if (pageText && pageText.trim()) {
+            pageContext = cleanVietnameseText(pageText.trim());
+          }
+        } catch (e) {
+          console.warn('Page text extract warning:', e);
+        }
+      }
+    }
+
+    if (!pageContext) {
+      pageContext = `${targetSlide.title}\n${targetSlide.subtitle || ''}\n${targetSlide.content || ''}\n${targetSlide.callout_content || ''}`;
+    }
+
+    // Build prompt based on action
+    let systemPrompt = `Bạn là trợ lý sư phạm AI cao cấp hỗ trợ Giảng viên trong buổi thuyết trình bài giảng.
+Bài giảng: "${lecture.title}"
+Môn học: "${lecture.subject}"
+Slide hiện tại: Trang ${slideNumber}/${lecture.total_slides}
+Nội dung trang slide:
+"""
+${pageContext}
+"""
+
+`;
+
+    if (action === 'notes') {
+      systemPrompt += `Nhiệm vụ: Hãy soạn "Gợi ý giảng dạy & Speaker Notes" cho giảng viên khi chiếu trang slide này:
+1. 🎯 Điểm nhấn cốt lõi cần truyền đạt (2-3 gạch đầu dòng)
+2. 💡 Câu hỏi tương tác / Tình huống gợi mở thảo luận cho lớp học
+3. ⚠️ Lưu ý những điểm sinh viên hay hiểu sai hoặc cần giải thích kỹ.
+Hãy trả về định dạng Markdown đẹp, chuyên nghiệp, tiếng Việt chuẩn 100%.`;
+    } else if (action === 'summary') {
+      systemPrompt += `Nhiệm vụ: Hãy tóm tắt 3 ý trọng tâm súc tích nhất của trang slide này cho sinh viên ghi nhớ nhanh. Trả về định dạng Markdown.`;
+    } else if (action === 'explain') {
+      systemPrompt += `Nhiệm vụ: Hãy giảng giải chi tiết, rõ ràng và trực quan về nội dung của trang slide này như một giáo sư tâm huyết. Có ví dụ thực tế minh họa. Trả về Markdown.`;
+    } else if (action === 'quiz') {
+      systemPrompt += `Nhiệm vụ: Hãy tạo 2 câu hỏi trắc nghiệm nhanh (4 lựa chọn A, B, C, D) dựa trên nội dung trang slide này để giảng viên đố nhanh cả lớp. Kèm theo đáp án đúng và lời giải thích ngắn gọn. Trả về Markdown.`;
+    } else if (action === 'chat') {
+      systemPrompt += `Nhiệm vụ: Trả lời câu hỏi sau của giảng viên/học sinh liên quan đến trang slide này:
+"${userQuestion || 'Giải thích thêm về nội dung này'}"
+Trả lời súc tích, dễ hiểu và chuyên sâu bằng Tiếng Việt chuẩn.`;
+    }
+
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const groqApiKey = process.env.GROQ_API_KEY;
+
+    if (geminiApiKey && !geminiApiKey.includes('your_') && !geminiApiKey.startsWith('AQ.')) {
+      try {
+        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(systemPrompt);
+        return cleanVietnameseText(result.response.text());
+      } catch (e) {
+        console.error('Gemini Assist Error:', e);
+      }
+    }
+
+    if (groqApiKey && !groqApiKey.includes('your_')) {
+      try {
+        const groq = new Groq({ apiKey: groqApiKey });
+        const comp = await groq.chat.completions.create({
+          messages: [{ role: 'user', content: systemPrompt }],
+          model: process.env.GROQ_CHAT_MODEL || 'groq/compound-mini',
+          temperature: 0.5,
+          max_tokens: 1500
+        });
+        const reply = comp.choices[0]?.message?.content || '';
+        return cleanVietnameseText(reply);
+      } catch (e) {
+        console.error('Groq Assist Error:', e);
+      }
+    }
+
+    return `### 💡 Gợi ý giảng dạy cho Trang ${slideNumber}:\n- Trình bày trực quan nội dung cốt lõi của bài học.\n- Đặt câu hỏi thảo luận cho người học để tăng tính tương tác.`;
   }
 }
 

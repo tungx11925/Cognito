@@ -3,31 +3,43 @@ import xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-const pdfParse = require('pdf-parse');
+import { cleanVietnameseText } from '../utils/vietnamese';
+const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 
 export class ParserService {
   /**
    * Parse document content from buffer and mimetype
    */
   async parseFromBuffer(buffer: Buffer, mimetype: string): Promise<string> {
+    if (!buffer || buffer.length === 0) return '';
     let extractedText = '';
 
-    if (mimetype === 'application/pdf') {
-      const data = await pdfParse(buffer);
-      extractedText = data.text;
-    } else if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || mimetype === 'application/msword') {
-      const data = await mammoth.extractRawText({ buffer: buffer });
-      extractedText = data.value;
-    } else if (mimetype === 'text/plain') {
-      extractedText = buffer.toString('utf-8');
-    } else if (mimetype.includes('spreadsheetml') || mimetype.includes('excel') || mimetype === 'text/csv') {
-      const workbook = xlsx.read(buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      extractedText = xlsx.utils.sheet_to_csv(sheet);
+    try {
+      if (mimetype === 'application/pdf') {
+        try {
+          const data = await pdfParse(buffer);
+          extractedText = data?.text || '';
+        } catch (pdfErr: any) {
+          console.warn('[ParserService] PDF parsing warning (non-fatal):', pdfErr?.message || pdfErr);
+          extractedText = '';
+        }
+      } else if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || mimetype === 'application/msword') {
+        const data = await mammoth.extractRawText({ buffer: buffer });
+        extractedText = data.value || '';
+      } else if (mimetype === 'text/plain') {
+        extractedText = buffer.toString('utf-8');
+      } else if (mimetype.includes('spreadsheetml') || mimetype.includes('excel') || mimetype === 'text/csv') {
+        const workbook = xlsx.read(buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        extractedText = xlsx.utils.sheet_to_csv(sheet);
+      }
+    } catch (err: any) {
+      console.warn('[ParserService] Error extracting text from buffer:', err?.message || err);
+      extractedText = '';
     }
 
-    return extractedText;
+    return cleanVietnameseText(extractedText);
   }
 
   /**

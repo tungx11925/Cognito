@@ -30,9 +30,15 @@ export async function bootstrapLectureSchema() {
         callout_title VARCHAR(255),
         callout_content TEXT,
         speaker_notes TEXT,
+        page_number INTEGER,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+
+      ALTER TABLE lectures ADD COLUMN IF NOT EXISTS file_url TEXT;
+      ALTER TABLE lectures ADD COLUMN IF NOT EXISTS presentation_mode VARCHAR(50) DEFAULT 'ORIGINAL';
+      ALTER TABLE lectures ADD COLUMN IF NOT EXISTS original_filename VARCHAR(255);
+      ALTER TABLE lecture_slides ADD COLUMN IF NOT EXISTS page_number INTEGER;
     `);
 
     // 2. Check if sample lecture exists, if not seed it for instant testing
