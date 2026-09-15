@@ -110,7 +110,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
           NODE_TLS_REJECT_UNAUTHORIZED: '0'
-        run: npm run migrate:up
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning ::SUPABASE_DATABASE_URL is not configured in GitHub Secrets. Skipping DB migrations."
+            exit 0
+          fi
+          echo "Executing database migrations against Supabase..."
+          npm run migrate:up || {
+            echo "::error ::Migration failed! If you see '(ENOTFOUND) tenant/user not found', your Supabase project is PAUSED or DELETED. Please restore or unpause it at https://supabase.com/dashboard and ensure SUPABASE_DATABASE_URL secret is up-to-date."
+            exit 1
+          }
 
   # ════════════════════════════════════════════
   # JOB 5 – Deploy Backend lên Render
