@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, UploadCloud, File, AlertCircle, CheckCircle2, Loader2, FileText, Image } from 'lucide-react';
+import { X, UploadCloud, File, AlertCircle, CheckCircle2, Loader2, FileText, Image, RefreshCw } from 'lucide-react';
+import { getDocumentStatus, reprocessDocument, DocumentProcessingStatus } from '@/services/document.service';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -42,9 +43,12 @@ export default function UploadDocumentModal({
   const [category, setCategory] = useState(defaultCategory);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'processing' | 'success' | 'error'>('idle');
   const [error, setError] = useState('');
+  const [pipelineStatus, setPipelineStatus] = useState<DocumentProcessingStatus | null>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollStopRef = useRef(false);
 
   useEffect(() => {
     setCategory(defaultCategory);
@@ -92,6 +96,7 @@ export default function UploadDocumentModal({
     setUploadState('uploading');
     setUploadProgress(0);
     setError('');
+    pollStopRef.current = false;
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
@@ -115,12 +120,19 @@ export default function UploadDocumentModal({
       try {
         const data = JSON.parse(xhr.responseText);
         if (xhr.status >= 200 && xhr.status < 300 && !data.error) {
-          setUploadState('success');
           setUploadProgress(100);
-          setTimeout(() => {
-            onSuccess();
-            handleClose();
-          }, 1200);
+          const docId = data?.document?.id;
+          if (docId) {
+            // Upload OK — polling trạng thái pipeline xử lý nền
+            setUploadState('processing');
+            pollPipeline(docId);
+          } else {
+            setUploadState('success');
+            setTimeout(() => {
+              onSuccess();
+              handleClose();
+            }, 1200);
+          }
         } else {
           setUploadState('error');
           setError(data.error || 'Tải lên thất bại, vui lòng thử lại.');
@@ -141,16 +153,65 @@ export default function UploadDocumentModal({
     xhr.send(formData);
   };
 
+  /** Poll trạng thái pipeline: UPLOADING → PROCESSING → INDEXING → READY/FAILED */
+  const pollPipeline = (docId: number, attempt = 0) => {
+    if (pollStopRef.current) return;
+    if (attempt > 90) { // ~3 phút
+      setUploadState('error');
+      setError('Xử lý tài liệu mất quá lâu. Bạn có thể thử lại từ Thư viện.');
+      return;
+    }
+    getDocumentStatus(docId).then((data: any) => {
+      if (pollStopRef.current) return;
+      if (data?.error) {
+        setUploadState('error');
+        setError(data.error || 'Không kiểm tra được trạng thái xử lý.');
+        return;
+      }
+      setPipelineStatus(data);
+      if (data?.status === 'READY') {
+        setUploadState('success');
+        setTimeout(() => {
+          onSuccess();
+          handleClose();
+        }, 1000);
+      } else if (data?.status === 'FAILED') {
+        setUploadState('error');
+        setError(data.processing_error || 'Xử lý tài liệu thất bại.');
+      } else {
+        pollTimerRef.current = setTimeout(() => pollPipeline(docId, attempt + 1), 2000);
+      }
+    }).catch(() => {
+      pollTimerRef.current = setTimeout(() => pollPipeline(docId, attempt + 1), 2000);
+    });
+  };
+
+  const handleRetryPipeline = async () => {
+    if (!pipelineStatus?.id) return;
+    setError('');
+    setUploadState('processing');
+    try {
+      await reprocessDocument(pipelineStatus.id);
+      pollPipeline(pipelineStatus.id, 0);
+    } catch {
+      setUploadState('error');
+      setError('Không thể thử lại. Vui lòng tải lại trang.');
+    }
+  };
+
   const handleClose = () => {
     if (uploadState === 'uploading' && xhrRef.current) {
       xhrRef.current.abort();
     }
+    pollStopRef.current = true;
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     setFile(null);
     setTitle('');
     setDescription('');
     setCategory(defaultCategory);
     setUploadProgress(0);
     setUploadState('idle');
+    setPipelineStatus(null);
     setError('');
     onClose();
   };
@@ -194,7 +255,15 @@ export default function UploadDocumentModal({
                 className="flex items-center gap-2 p-3 text-sm text-red-600 bg-red-50 rounded-lg border border-red-100"
               >
                 <AlertCircle size={16} className="shrink-0" />
-                <p>{error}</p>
+                <p className="flex-1">{error}</p>
+                {pipelineStatus?.status === 'FAILED' && (
+                  <button
+                    onClick={handleRetryPipeline}
+                    className="flex items-center gap-1 text-xs font-semibold text-[#1a3a2a] hover:underline shrink-0"
+                  >
+                    <RefreshCw size={12} /> Thử lại
+                  </button>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -330,6 +399,38 @@ export default function UploadDocumentModal({
             )}
           </AnimatePresence>
 
+          {/* Processing Pipeline State */}
+          <AnimatePresence>
+            {uploadState === 'processing' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="space-y-2"
+              >
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 size={12} className="animate-spin" />
+                    Đang xử lý tài liệu (trích xuất &amp; lập chỉ mục AI)...
+                  </span>
+                  <span className="font-mono font-medium text-[#1a3a2a]">
+                    {pipelineStatus?.status === 'INDEXING' ? 'Đánh chỉ mục'
+                      : pipelineStatus?.status === 'PROCESSING' ? 'Phân tích'
+                      : 'Chuẩn bị'}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-[#1a3a2a] to-emerald-500 rounded-full"
+                    initial={{ width: '5%' }}
+                    animate={{ width: pipelineStatus?.status === 'INDEXING' ? '75%' : '40%' }}
+                    transition={{ ease: 'easeInOut', duration: 1.2 }}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Success State */}
           <AnimatePresence>
             {uploadState === 'success' && (
@@ -352,11 +453,11 @@ export default function UploadDocumentModal({
             disabled={isUploading}
             className="px-5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-40"
           >
-            Hủy
+            {uploadState === 'processing' ? 'Đóng' : 'Hủy'}
           </button>
           <button
             onClick={handleUpload}
-            disabled={isUploading || uploadState === 'success' || !file || !title.trim()}
+            disabled={isUploading || uploadState === 'processing' || uploadState === 'success' || !file || !title.trim()}
             className="px-5 py-2 text-sm font-medium text-white bg-[#1a3a2a] rounded-xl hover:bg-[#234b37] transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isUploading ? (

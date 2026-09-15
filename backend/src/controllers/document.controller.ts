@@ -127,6 +127,34 @@ export const getDocumentById = async (req: AuthRequest, res: Response, next: any
   }
 };
 
+// ─── GET /api/documents/:id/status — trạng thái pipeline (polling từ frontend) ─
+export const getDocumentStatus = async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+
+    const docId = parseInt(req.params.id, 10);
+    const status = await documentService.getDocumentStatus(docId, userId);
+    res.status(200).json(status);
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// ─── POST /api/documents/:id/reprocess — chạy lại pipeline (khi FAILED) ────────
+export const reprocessDocument = async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+
+    const docId = parseInt(req.params.id, 10);
+    const result = await documentService.reprocessDocument(docId, userId);
+    res.status(202).json({ message: 'Đã đưa tài liệu vào hàng đợi xử lý lại', ...result });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
 export const createDocument = async (req: AuthRequest, res: Response, next: any) => {
   try {
     const userId = req.user?.id;
