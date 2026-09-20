@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown, CheckCheck, MessageSquare } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown, CheckCheck, MessageSquare, Presentation } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
@@ -203,7 +203,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           </div>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-7">
+          <nav className="hidden md:flex items-center gap-3 lg:gap-6">
             {isLoggedIn ? (
               <>
                 <Link
@@ -239,6 +239,18 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                 >
                   <FileQuestion size={13} />
                   Bài tập AI
+                </Link>
+                <Link
+                  href="/teacher/studio"
+                  prefetch={true}
+                  className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${
+                    pathname?.startsWith('/teacher')
+                      ? 'bg-[#1a3d28] text-white shadow-sm font-bold'
+                      : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
+                  }`}
+                >
+                  <Presentation size={14} />
+                  Giảng dạy & Slide
                 </Link>
                 <Link
                   href="/community"
@@ -672,6 +684,9 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link href="/flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
                   <Link href="/ai-test" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
                     <FileQuestion size={16} /> Bài tập AI
+                  </Link>
+                  <Link href="/teacher/studio" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
+                    <Layout size={16} /> Slide Studio
                   </Link>
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
                   <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">

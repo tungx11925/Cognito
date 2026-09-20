@@ -7,9 +7,9 @@ import { AppError } from '../utils/AppError';
 
 export class AiService {
   /**
-   * Chat with document
+   * Chat with document (supports multi-image multimodal vision)
    */
-  async chatWithDocument(document: any, message: string, history: any[]) {
+  async chatWithDocument(document: any, message: string, history: any[], images?: string[] | string) {
     const docTitle = document ? document.title : 'Tài liệu học tập';
     const docDesc = document ? document.description : '';
     const docSolution = document ? document.solution_text : '';
@@ -23,20 +23,63 @@ export class AiService {
        documentText = await parserService.parseFromUrl(document.doc_url);
     }
 
-    const systemPrompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy và hỗ trợ học tập toàn diện như ChatGPT.
+    const systemPrompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy, giải toán và phân tích hình ảnh toàn diện như ChatGPT-4o.
 Tên tài liệu người dùng đang xem: ${docTitle}
 Mô tả: ${docDesc}
-Nội dung tài liệu (Trích xuất trực tiếp từ file):\n\n${documentText ? documentText.substring(0, 3000) : '(Người dùng chưa tải lên file có nội dung văn bản, hãy hỗ trợ dựa trên câu hỏi của họ)'}\n\n
+Nội dung tài liệu (Trích xuất trực tiếp từ file):\n\n${documentText ? documentText.substring(0, 5000) : '(Người dùng chưa tải lên file có nội dung văn bản, hãy hỗ trợ dựa trên câu hỏi của họ)'}\n\n
 ${docSolution ? 'Lời giải đính kèm: ' + docSolution : ''}
 
 YÊU CẦU ĐỐI VỚI BẠN (AI):
-1. Bạn không bị giới hạn chỉ trong nội dung tài liệu. Hãy dùng kiến thức sâu rộng của mình để giải đáp!
-2. Nếu người dùng hỏi Toán/Logic: Hãy phân tích đề bài, giải quyết từng bước một cách logic và đưa ra đáp án chính xác.
-3. Nếu người dùng hỏi Tiếng Anh: Hãy giải thích ngữ pháp, từ vựng, cấu trúc câu hoặc dịch thuật một cách tự nhiên, kèm ví dụ.
-4. Nếu người dùng hỏi các môn khác: Hãy đóng vai một gia sư tận tâm, giải thích dễ hiểu, súc tích.
-5. Trình bày nội dung đẹp mắt bằng Markdown (in đậm, danh sách, blockquote, hoặc MathJax/LaTeX nếu là công thức toán).`;
+1. Nếu người dùng gửi KÈM MỘT HOẶC NHIỀU HÌNH ẢNH: Hãy quan sát kỹ toàn bộ các hình ảnh (bài tập, công thức, biểu đồ, sơ đồ, các trang sách hoặc hình vẽ), kết hợp và phân tích / giải chi tiết từng bước cho từng ảnh.
+2. Nếu là bài Toán/Lý/Hóa trong ảnh hoặc văn bản: Phân tích đề bài, chỉ ra công thức áp dụng, giải từng bước và đưa ra đáp số rõ ràng.
+3. Nếu là Tiếng Anh / Ngoại ngữ: Nhận diện chữ trong ảnh, giải thích ngữ pháp, từ vựng và dịch nghĩa đầy đủ.
+4. Trình bày nội dung đẹp mắt bằng Markdown (in đậm, danh sách gạch đầu dòng, công thức LaTeX chuẩn xác $\\rightarrow$, $x^2$).`;
 
-    // 1. TRY GROQ AI
+    // Normalize images into an array (supports both single 'image' and multiple 'images')
+    let imageList: string[] = [];
+    if (Array.isArray(images) && images.length > 0) {
+      imageList = images.filter((img): img is string => typeof img === 'string' && img.length > 0);
+    } else if (images && typeof images === 'string') {
+      imageList = [images];
+    }
+
+    // Parse images for Gemini inlineData
+    const imageParts: any[] = [];
+    for (const img of imageList) {
+      let base64Data = img;
+      let mimeType = 'image/jpeg';
+      if (img.startsWith('data:')) {
+        const matches = img.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+        if (matches) {
+          mimeType = matches[1];
+          base64Data = matches[2];
+        }
+      }
+      imageParts.push({
+        inlineData: {
+          data: base64Data,
+          mimeType
+        }
+      });
+    }
+
+    // 1. If IMAGES are provided, PRIORITIZE GEMINI MULTIMODAL VISION
+    if (imageParts.length > 0 && geminiApiKey && !geminiApiKey.includes('your_')) {
+      try {
+        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+        const model = genAI.getGenerativeModel({ model: modelName });
+        
+        const promptText = `${systemPrompt}\n\nCâu hỏi/Yêu cầu của người dùng đối với các hình ảnh đính kèm: "${message || 'Hãy quan sát kỹ, phân tích, đối chiếu và giải đáp chi tiết tất cả các hình ảnh này.'}"`;
+        const result = await model.generateContent([promptText, ...imageParts]);
+        reply = result.response.text();
+        if (reply) return reply;
+      } catch (geminiVisionError) {
+        console.error("Gemini Vision Error in /ai/chat:", geminiVisionError);
+      }
+    }
+
+    // 2. TRY GROQ AI (Supports text with groq models)
     if (groqApiKey && !groqApiKey.includes('your_')) {
       try {
         const groq = new Groq({ apiKey: groqApiKey });
@@ -45,13 +88,13 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
           const recentHistory = history.slice(-4);
           apiMessages = apiMessages.concat(recentHistory);
         }
-        apiMessages.push({ role: "user", content: message });
+        apiMessages.push({ role: "user", content: message || 'Hãy phân tích hình ảnh và tài liệu này giúp tôi.' });
 
         const completion = await groq.chat.completions.create({
           messages: apiMessages,
           model: process.env.GROQ_CHAT_MODEL || "groq/compound-mini",
           temperature: 0.7,
-          max_tokens: 1024,
+          max_tokens: 1500,
         });
 
         reply = completion.choices[0]?.message?.content || "";
@@ -61,7 +104,7 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
       }
     }
 
-    // 2. TRY GEMINI AI
+    // 3. TRY GEMINI AI for text / fallback
     if (geminiApiKey && !geminiApiKey.includes('your_')) {
       try {
         const genAI = new GoogleGenerativeAI(geminiApiKey);
@@ -69,7 +112,9 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
         const model = genAI.getGenerativeModel({ model: modelName });
         
         const prompt = `${systemPrompt}\n\nCâu hỏi của người dùng: "${message}"`;
-        const result = await model.generateContent(prompt);
+        const contents: any[] = [prompt, ...imageParts];
+        
+        const result = await model.generateContent(contents);
         reply = result.response.text();
         if (reply) return reply;
       } catch (aiError) {
