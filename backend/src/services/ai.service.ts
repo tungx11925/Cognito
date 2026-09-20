@@ -3,12 +3,13 @@ import { generateQuestionsWithAI, generateMindmapWithAI } from '../utils/ai-engi
 import { aiProviderService } from './ai-provider.service';
 import { db } from '../db';
 import { AppError } from '../utils/AppError';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export class AiService {
   /**
-   * Chat with document
+   * Chat with document (supports multi-image multimodal vision)
    */
-  async chatWithDocument(document: any, message: string, history: any[]) {
+  async chatWithDocument(document: any, message: string, history: any[], images?: string[] | string) {
     const docTitle = document ? document.title : 'Tài liệu học tập';
     const docDesc = document ? document.description : '';
     const docSolution = document ? document.solution_text : '';
@@ -20,20 +21,64 @@ export class AiService {
        documentText = await parserService.parseFromUrl(document.doc_url);
     }
 
-    const systemPrompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy và hỗ trợ học tập toàn diện như ChatGPT.
+    const systemPrompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy, giải toán và phân tích hình ảnh toàn diện như ChatGPT-4o.
 Tên tài liệu người dùng đang xem: ${docTitle}
 Mô tả: ${docDesc}
-Nội dung tài liệu (Trích xuất trực tiếp từ file):\n\n${documentText ? documentText.substring(0, 3000) : '(Người dùng chưa tải lên file có nội dung văn bản, hãy hỗ trợ dựa trên câu hỏi của họ)'}\n\n
+Nội dung tài liệu (Trích xuất trực tiếp từ file):\n\n${documentText ? documentText.substring(0, 5000) : '(Người dùng chưa tải lên file có nội dung văn bản, hãy hỗ trợ dựa trên câu hỏi của họ)'}\n\n
 ${docSolution ? 'Lời giải đính kèm: ' + docSolution : ''}
 
 YÊU CẦU ĐỐI VỚI BẠN (AI):
-1. Bạn không bị giới hạn chỉ trong nội dung tài liệu. Hãy dùng kiến thức sâu rộng của mình để giải đáp!
-2. Nếu người dùng hỏi Toán/Logic: Hãy phân tích đề bài, giải quyết từng bước một cách logic và đưa ra đáp án chính xác.
-3. Nếu người dùng hỏi Tiếng Anh: Hãy giải thích ngữ pháp, từ vựng, cấu trúc câu hoặc dịch thuật một cách tự nhiên, kèm ví dụ.
-4. Nếu người dùng hỏi các môn khác: Hãy đóng vai một gia sư tận tâm, giải thích dễ hiểu, súc tích.
-5. Trình bày nội dung đẹp mắt bằng Markdown (in đậm, danh sách, blockquote, hoặc MathJax/LaTeX nếu là công thức toán).`;
+1. Nếu người dùng gửi KÈM MỘT HOẶC NHIỀU HÌNH ẢNH: Hãy quan sát kỹ toàn bộ các hình ảnh (bài tập, công thức, biểu đồ, sơ đồ, các trang sách hoặc hình vẽ), kết hợp và phân tích / giải chi tiết từng bước cho từng ảnh.
+2. Nếu là bài Toán/Lý/Hóa trong ảnh hoặc văn bản: Phân tích đề bài, chỉ ra công thức áp dụng, giải từng bước và đưa ra đáp số rõ ràng.
+3. Nếu là Tiếng Anh / Ngoại ngữ: Nhận diện chữ trong ảnh, giải thích ngữ pháp, từ vựng và dịch nghĩa đầy đủ.
+4. Trình bày nội dung đẹp mắt bằng Markdown (in đậm, danh sách gạch đầu dòng, công thức LaTeX chuẩn xác $\\rightarrow$, $x^2$).`;
 
-    // Gọi AI qua AIProviderAdapter (GroqAdapter → GeminiAdapter, có timeout + log)
+    // Normalize images into an array (supports both single 'image' and multiple 'images')
+    let imageList: string[] = [];
+    if (Array.isArray(images) && images.length > 0) {
+      imageList = images.filter((img): img is string => typeof img === 'string' && img.length > 0);
+    } else if (images && typeof images === 'string') {
+      imageList = [images];
+    }
+
+    // Parse images for Gemini inlineData
+    const imageParts: any[] = [];
+    for (const img of imageList) {
+      let base64Data = img;
+      let mimeType = 'image/jpeg';
+      if (img.startsWith('data:')) {
+        const matches = img.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+        if (matches) {
+          mimeType = matches[1];
+          base64Data = matches[2];
+        }
+      }
+      imageParts.push({
+        inlineData: {
+          data: base64Data,
+          mimeType
+        }
+      });
+    }
+
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    // 1. If IMAGES are provided, PRIORITIZE GEMINI MULTIMODAL VISION
+    if (imageParts.length > 0 && geminiApiKey && !geminiApiKey.includes('your_')) {
+      try {
+        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+        const model = genAI.getGenerativeModel({ model: modelName });
+        
+        const promptText = `${systemPrompt}\n\nCâu hỏi/Yêu cầu của người dùng đối với các hình ảnh đính kèm: "${message || 'Hãy quan sát kỹ, phân tích, đối chiếu và giải đáp chi tiết tất cả các hình ảnh này.'}"`;
+        const result = await model.generateContent([promptText, ...imageParts]);
+        reply = result.response.text();
+        if (reply) return reply;
+      } catch (geminiVisionError) {
+        console.error("Gemini Vision Error in /ai/chat:", geminiVisionError);
+      }
+    }
+
+    // 2. Chat qua AIProviderAdapter (Groq -> Gemini, có timeout + log)
     try {
       const apiMessages: any[] = [{ role: "system", content: systemPrompt }];
       if (history && Array.isArray(history)) {
@@ -184,112 +229,6 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
       ];
     }
     return quizzes;
-  }
-
-  /**
-   * Automatically generate flashcards from document context
-   */
-  async generateFlashcardsForDocument(document: any) {
-    if (process.env.NODE_ENV === 'production' && (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY)) {
-      throw new AppError('AI Service is temporarily unavailable or not configured. Please contact the administrator.', 503);
-    }
-    
-    let cards = [];
-    if (document && document.category === 'Trí tuệ nhân tạo') {
-      cards = [
-        { front: "Deep Learning (Học sâu) là gì?", back: "Là một nhánh con của Học máy (Machine Learning) dựa trên các mạng thần kinh nhân tạo đa tầng (Deep Neural Networks)." },
-        { front: "Reinforcement Learning (Học tăng cường) là gì?", back: "Phương pháp học thông qua tương tác với môi trường để tối đa hóa điểm thưởng (reward) tích lũy." },
-        { front: "Mạng nơ-ron nhân tạo (ANN) là gì?", back: "Mô hình toán học lấy cảm hứng từ cấu trúc mạng lưới thần kinh sinh học của não người." }
-      ];
-    } else if (document && document.category === 'Toán học') {
-      cards = [
-        { front: "Đạo hàm của tan(x) bằng bao nhiêu?", back: "1 / cos^2(x) hoặc 1 + tan^2(x)" },
-        { front: "Định lý Weierstrass phát biểu điều gì?", back: "Một hàm số liên tục trên một đoạn đóng [a, b] thì sẽ đạt giá trị lớn nhất và giá trị nhỏ nhất trên đoạn đó." },
-        { front: "Đạo hàm của e^x bằng bao nhiêu?", back: "Bằng chính nó: e^x" }
-      ];
-    } else {
-      cards = [
-        { front: `Định nghĩa chính của "${document ? document.title : 'Tài liệu'}"`, back: `Là chủ đề cốt lõi thảo luận về kiến thức chuyên sâu trong tài liệu học tập của môn học.` },
-        { front: "Phương pháp học Active Recall", back: "Chủ động kiểm tra lại kiến thức thay vì chỉ đọc thụ động, giúp tăng hiệu quả ghi nhớ lên gấp nhiều lần." }
-      ];
-    }
-    return cards;
-  }
-
-  /**
-   * Parse AI response for flashcards
-   */
-  private parseFlashcardResponse(responseText: string) {
-    try {
-      let cleaned = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const startIdx = cleaned.indexOf('[');
-      const endIdx = cleaned.lastIndexOf(']');
-      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-        cleaned = cleaned.substring(startIdx, endIdx + 1);
-      } else if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
-        cleaned = `[${cleaned}]`; // Wrap single object
-      }
-      return JSON.parse(cleaned);
-    } catch (e) {
-      console.error("JSON Parse Error:", e, responseText);
-      return null;
-    }
-  }
-
-  /**
-   * Generate flashcards from note content
-   */
-  async generateFlashcardsFromText(text: string) {
-    let cards: {front: string, back: string}[] = [];
-
-    const prompt = `Bạn là một chuyên gia giáo dục thiết kế thẻ ghi nhớ (Flashcards). Nhiệm vụ của bạn là đọc đoạn văn bản dưới đây và trích xuất ra các cặp thông tin quan trọng nhất để làm Flashcard.
-
-QUY TẮC CHUẨN HOÁ (Áp dụng cho TẤT CẢ các môn học và ngành nghề):
-Cho dù đoạn văn bản có lộn xộn hay không rõ ràng, hãy cố gắng bóc tách các ý chính thành dạng Thẻ (Front - Back).
-- "front": [Từ khóa / Khái niệm / Câu hỏi ngắn / Tên riêng / Công thức]
-- "back": [Định nghĩa / Giải thích súc tích / Ý nghĩa] + [Ví dụ thực tế / Ứng dụng nếu có].
-
-MỘT SỐ VÍ DỤ CHUẨN:
-- {"front": "Học máy (Machine Learning)", "back": "Là lĩnh vực AI cho phép hệ thống tự học từ dữ liệu. VD: Phân loại email rác."}
-- {"front": "Đạo hàm của sin(x)", "back": "Là cos(x). VD: Tính vận tốc từ phương trình ly độ."}
-- {"front": "Lạm phát (Inflation)", "back": "Sự tăng mức giá chung của hàng hóa/dịch vụ theo thời gian."}
-
-YÊU CẦU BẮT BUỘC:
-- Nếu văn bản quá ngắn, hãy suy luận để tạo ra ít nhất 1-2 thẻ hợp lý nhất có thể.
-- Chỉ trả về ĐÚNG MỘT MẢNG JSON thuần túy (không chứa markdown, không có \`\`\`json).
-- Object bên trong mảng chỉ được phép có 2 trường "front" và "back".
-
-Văn bản cần xử lý:
-"""
-${text}
-"""`;
-
-    try {
-      // Đi qua AIProviderAdapter (Groq llama-3.1-8b-instant → Gemini-1.5-flash, giữ nguyên model cũ)
-      const result = await aiProviderService.chat({
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.5,
-        maxTokens: 4096,
-        jsonMode: true,
-        taskType: 'flashcard',
-        modelOverride: { groq: 'llama-3.1-8b-instant', gemini: 'gemini-1.5-flash' },
-      });
-      const parsed = this.parseFlashcardResponse(result.text);
-      if (parsed) cards = parsed;
-    } catch (aiError: any) {
-      if (process.env.NODE_ENV === 'production') throw aiError;
-      console.error('[Flashcards] AI Provider error, using mock in dev:', aiError?.message);
-      cards = [
-        { front: "Làm thế nào để tạo flashcard thực sự từ ghi chú?", back: "Bạn cần cung cấp GROQ_API_KEY hoặc GEMINI_API_KEY trong file .env" },
-        { front: "Mẫu câu hỏi (Mock)", back: "Đây là câu trả lời mẫu do hệ thống không có AI Key." }
-      ];
-    }
-    
-    // Normalize keys
-    return cards.map((c: any) => ({
-      front: c.front || c.Front || c.question || c.Question || c.q || 'Không có câu hỏi',
-      back: c.back || c.Back || c.answer || c.Answer || c.a || 'Không có câu trả lời',
-    }));
   }
 
   /**

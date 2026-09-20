@@ -68,3 +68,23 @@ export const requireRole = (...roles: string[]) => {
     }
   };
 };
+
+export const optionalAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    let token = req.cookies?.token;
+    if (!token && req.query?.token) token = req.query.token as string;
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+      }
+    }
+    if (token && process.env.JWT_SECRET_KEY) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY) as { id: number; email: string };
+      req.user = decoded;
+    }
+    next();
+  } catch (error) {
+    next();
+  }
+};

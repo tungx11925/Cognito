@@ -70,11 +70,6 @@ export const reviewFlashcard = (id: number, difficulty: 'again' | 'hard' | 'good
     body: JSON.stringify({ difficulty })
 });
 
-export const generateFlashcardsFromNote = (note_content: string, deck_id?: number, document_id?: number) => apiFetch('/ai/generate-flashcards-from-note', {
-    method: 'POST',
-    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ note_content, deck_id, document_id })
-});
 
 export const toggleStarFlashcard = (id: number, is_starred: boolean) => apiFetch(`/flashcards/${id}/star`, {
     method: 'PUT',

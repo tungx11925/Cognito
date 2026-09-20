@@ -8,7 +8,7 @@ import { parserService } from '../services/parser.service';
 
 export const chatWithDocument = async (req: AuthRequest, res: Response, next: any) => {
   try {
-    const { document_id, message, history } = req.body;
+    const { document_id, message, history, image, images } = req.body;
     const userId = req.user!.id;
     
     // Check old style requests from previous version
@@ -16,10 +16,13 @@ export const chatWithDocument = async (req: AuthRequest, res: Response, next: an
        return res.status(400).json({ error: 'Endpoint deprecated for direct context. Use document_id instead.' });
     }
 
-    const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
-    const document = docResult.rows[0];
+    let document = null;
+    if (document_id) {
+      const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
+      document = docResult.rows[0];
+    }
 
-    const reply = await aiService.chatWithDocument(document, message, history);
+    const reply = await aiService.chatWithDocument(document, message || '', history, images || image);
     res.status(200).json({ reply });
   } catch (error) {
     next(error);
@@ -36,80 +39,6 @@ export const generateQuiz = async (req: AuthRequest, res: Response, next: any) =
     
     const quizzes = await aiService.generateQuizForDocument(document);
     res.status(200).json({ quizzes });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const generateFlashcards = async (req: AuthRequest, res: Response, next: any) => {
-  try {
-    const { document_id, deck_id, textContext } = req.body;
-    const userId = req.user!.id;
-
-    if (textContext && !document_id) {
-       // Support old api behaviour
-       const cards = await aiService.generateFlashcardsFromText(textContext);
-       return res.status(200).json({ flashcards: cards });
-    }
-    
-    const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
-    const document = docResult.rows[0];
-    
-    if (deck_id) {
-      const deckCheck = await db.query('SELECT id FROM flashcard_decks WHERE id = $1 AND user_id = $2', [deck_id, userId]);
-      if (deckCheck.rows.length === 0) {
-        return res.status(403).json({ error: 'Bạn không có quyền truy cập bộ thẻ này hoặc bộ thẻ không tồn tại' });
-      }
-    }
-    
-    const cards = await aiService.generateFlashcardsForDocument(document);
-    
-    const insertedCards = [];
-    if (deck_id) {
-      for (const card of cards) {
-        const insertRes = await db.query(
-          'INSERT INTO flashcards (deck_id, document_id, front, back) VALUES ($1, $2, $3, $4) RETURNING *',
-          [deck_id, document_id, card.front, card.back]
-        );
-        insertedCards.push(insertRes.rows[0]);
-      }
-    }
-    
-    res.status(201).json({
-      message: deck_id ? 'Flashcards generated and added to deck!' : 'Flashcards generated successfully!',
-      cards: deck_id ? insertedCards : cards,
-      flashcards: cards // for compatibility
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const generateFlashcardsFromNote = async (req: AuthRequest, res: Response, next: any) => {
-  try {
-    const { note_content, deck_id, document_id } = req.body;
-    
-    if (!note_content || note_content.trim() === '') {
-      return res.status(400).json({ error: 'Nội dung ghi chú không được để trống.' });
-    }
-
-    const cards = await aiService.generateFlashcardsFromText(note_content);
-
-    const insertedCards = [];
-    if (deck_id && cards.length > 0) {
-      for (const card of cards) {
-        const insertRes = await db.query(
-          'INSERT INTO flashcards (deck_id, document_id, front, back) VALUES ($1, $2, $3, $4) RETURNING *',
-          [deck_id, document_id || null, card.front, card.back]
-        );
-        insertedCards.push(insertRes.rows[0]);
-      }
-    }
-    
-    res.status(201).json({
-      message: deck_id ? `Đã tạo và thêm ${cards.length} thẻ vào bộ bài!` : 'Tạo thẻ thành công!',
-      cards: deck_id ? insertedCards : cards
-    });
   } catch (error) {
     next(error);
   }

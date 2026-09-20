@@ -9,8 +9,7 @@ import PomodoroWidget from '@/components/documents/PomodoroWidget';
 import SmartNotesWorkspace from '@/components/documents/SmartNotesWorkspace';
 import AIChatWorkspace from '@/components/documents/AIChatWorkspace';
 import MindmapWorkspace from '@/components/documents/MindmapWorkspace';
-import { generateFlashcards } from '@/services/ai.service';
-import { createDeck } from '@/services/flashcard.service';
+
 import dynamic from 'next/dynamic';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -39,7 +38,6 @@ export default function DocumentViewerPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{x: number, y: number} | null>(null);
-  const [isGeneratingCards, setIsGeneratingCards] = useState(false);
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -93,24 +91,6 @@ export default function DocumentViewerPage() {
     window.getSelection()?.removeAllRanges();
   };
 
-  const handleGenerateFlashcards = async () => {
-    if (isGeneratingCards) return;
-    setIsGeneratingCards(true);
-    try {
-      // 1. Create a new deck for this document
-      const deckResult = await createDeck(`Tài liệu: ${document.title}`, `Bộ thẻ tự động tạo từ tài liệu ${document.title}`);
-      
-      // 2. Generate flashcards and insert into deck
-      await generateFlashcards(Number(docId), deckResult.id);
-      
-      // 3. Redirect to study screen
-      router.push(`/flashcards/${deckResult.id}`);
-    } catch (error) {
-      console.error('Lỗi khi tạo flashcard:', error);
-      toast.error('Không thể tạo flashcard lúc này. Hãy chắc chắn bạn đã cấu hình GROQ API KEY!');
-      setIsGeneratingCards(false);
-    }
-  };
 
   useEffect(() => {
     const checkMobile = () => {
@@ -333,19 +313,6 @@ export default function DocumentViewerPage() {
                           <SmartNotesWorkspace documentId={Number(docId)} />
                         </div>
                         
-                        <div className="bg-gradient-to-br from-[#0D2B24] to-[#154238] p-5 rounded-2xl shadow-md border border-[#1a3a2a]">
-                          <h3 className="text-[12px] font-bold text-green-200 uppercase tracking-wider mb-2">Flashcard AI</h3>
-                          <p className="text-xs text-green-50/90 mb-4 leading-relaxed">
-                            Trích xuất tự động các khái niệm quan trọng trong tài liệu thành thẻ ghi nhớ.
-                          </p>
-                          <button 
-                            onClick={handleGenerateFlashcards}
-                            disabled={isGeneratingCards}
-                            className="w-full py-2.5 text-sm font-bold text-[#0D2B24] bg-white rounded-xl hover:bg-gray-50 shadow-sm transition-colors flex justify-center items-center gap-2 disabled:opacity-70"
-                          >
-                            {isGeneratingCards ? <Loader2 size={16} className="animate-spin" /> : 'Tạo Flashcard ngay'}
-                          </button>
-                        </div>
                       </div>
                     )}
                   </div>
