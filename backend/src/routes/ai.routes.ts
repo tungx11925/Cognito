@@ -5,8 +5,6 @@ import { validate } from '../middlewares/validate';
 import { 
   aiChatSchema, 
   aiGenerateQuizSchema, 
-  aiGenerateFlashcardsSchema, 
-  aiGenerateFlashcardsFromNoteSchema, 
   aiGenerateMindmapSchema, 
   aiGetMindmapSchema 
 } from '../schemas/ai.schema';
@@ -36,10 +34,12 @@ router.use(authenticate);
 
 router.post('/chat', validate(aiChatSchema), AiController.chatWithDocument);
 router.post('/generate-quiz', validate(aiGenerateQuizSchema), AiController.generateQuiz);
-router.post('/generate-flashcards', validate(aiGenerateFlashcardsSchema), AiController.generateFlashcards);
-router.post('/generate-flashcards-from-note', validate(aiGenerateFlashcardsFromNoteSchema), AiController.generateFlashcardsFromNote);
 router.post('/generate-flashcards-from-file', uploadMem.single('document'), AiController.generateFlashcardsFromFile);
 router.get('/mindmap/:docId', validate(aiGetMindmapSchema), AiController.getMindmap);
 router.post('/generate-mindmap', validate(aiGenerateMindmapSchema), AiController.generateMindmap);
+
+// ── Question Generator: danh sách AI model (dropdown) + prompt template ──
+router.get('/models', AiController.listAIModels);
+router.get('/templates', AiController.listAITemplates);
 
 export default router;

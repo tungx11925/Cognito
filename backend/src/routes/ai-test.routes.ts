@@ -113,7 +113,7 @@ router.put('/ai-configs/:configKey', authenticate, async (req: AuthRequest, res:
 router.get('/ai-test/my-documents', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const result = await db.query(
-      `SELECT id, title, category, file_type, created_at
+      `SELECT id, title, category, file_type, status, processing_status, processing_error, page_count, created_at
        FROM documents WHERE user_id = $1 ORDER BY created_at DESC`,
       [req.user!.id]
     );
@@ -320,7 +320,7 @@ router.get('/questions/test-sets/:testSetId', authenticate, async (req: AuthRequ
 
 router.put('/questions/:id', authenticate, async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const { content, score, status, options, correct_answer } = req.body;
+  const { content, score, status, options, correct_answer, explanation, difficulty } = req.body;
   try {
     const result = await db.query(
       `UPDATE questions SET
@@ -329,12 +329,16 @@ router.put('/questions/:id', authenticate, async (req: AuthRequest, res: Respons
         status = COALESCE($3::question_status, status),
         options = COALESCE($4, options),
         correct_answer = COALESCE($5, correct_answer),
+        explanation = COALESCE($6, explanation),
+        difficulty = COALESCE($7, difficulty),
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6 RETURNING *`,
+       WHERE id = $8 RETURNING *`,
       [
         content, score, status || null,
         options ? JSON.stringify(options) : null,
         correct_answer ? JSON.stringify(correct_answer) : null,
+        explanation ?? null,
+        difficulty ?? null,
         id,
       ]
     );
@@ -360,12 +364,16 @@ router.put('/questions/bulk-update', authenticate, async (req: AuthRequest, res:
           status = COALESCE($3::question_status, status),
           options = COALESCE($4, options),
           correct_answer = COALESCE($5, correct_answer),
+          explanation = COALESCE($6, explanation),
+          difficulty = COALESCE($7, difficulty),
           updated_at = CURRENT_TIMESTAMP
-         WHERE id = $6 RETURNING id`,
+         WHERE id = $8 RETURNING id`,
         [
           q.content, q.score, q.status || null,
           q.options ? JSON.stringify(q.options) : null,
           q.correct_answer ? JSON.stringify(q.correct_answer) : null,
+          q.explanation ?? null,
+          q.difficulty ?? null,
           q.id,
         ]
       );

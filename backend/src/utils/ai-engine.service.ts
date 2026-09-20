@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import Groq from 'groq-sdk';
+import { aiProviderService } from '../services/ai-provider.service';
 
 export interface GeneratedQuestion {
   type: 'MULTIPLE_CHOICE' | 'FILL_BLANK' | 'ESSAY' | 'TRUE_FALSE';
@@ -8,6 +7,7 @@ export interface GeneratedQuestion {
   options?: { A: string; B: string; C: string; D: string };
   correctAnswer: string | string[];
 }
+
 
 interface GenerateConfig {
   customPrompt: string;
@@ -68,43 +68,30 @@ function parseAIResponse(raw: string): GeneratedQuestion[] {
   }));
 }
 
-export async function generateQuestionsWithAI(cfg: GenerateConfig): Promise<GeneratedQuestion[]> {
-  const prompt = buildSystemPrompt(cfg);
-  const groqKey = process.env.GROQ_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
-
-  // Attempt 1: Groq (faster)
-  if (groqKey && !groqKey.includes('your_')) {
-    try {
-      const groq = new Groq({ apiKey: groqKey });
-      const completion = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: prompt }],
-        model: 'groq/compound',
-        temperature: 0.6,
-        max_tokens: 8000,
-      });
-      const raw = completion.choices[0]?.message?.content || '[]';
-      return parseAIResponse(raw);
-    } catch (err) {
-      console.error('[AI Engine] Groq failed, falling back to Gemini:', err);
-    }
-  }
-
-  // Attempt 2: Gemini
-  if (geminiKey && !geminiKey.includes('your_')) {
-    try {
-      const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-3.6-flash' });
-      const result = await model.generateContent(prompt);
-      const raw = result.response.text();
-      return parseAIResponse(raw);
-    } catch (err) {
-      console.error('[AI Engine] Gemini failed:', err);
-    }
-  }
-
-  throw new Error('Không có AI API key hợp lệ. Vui lòng cấu hình GROQ_API_KEY hoặc GEMINI_API_KEY trong file .env');
+export interface GenerateWithAIOptions {
+  /** Chọn model cụ thể từ bảng ai_models (tính năng Question Generator) */
+  modelId?: number | null;
+  userId?: number | null;
 }
+
+export async function generateQuestionsWithAI(
+  cfg: GenerateConfig,
+  opts?: GenerateWithAIOptions
+): Promise<GeneratedQuestion[]> {
+  const prompt = buildSystemPrompt(cfg);
+
+  // Đi qua AIProviderAdapter (GroqAdapter → GeminiAdapter, fallback giữ nguyên hành vi cũ)
+  const result = await aiProviderService.chat({
+    messages: [{ role: 'user', content: prompt }],
+    modelId: opts?.modelId ?? null,
+    temperature: 0.6,
+    maxTokens: 8000,
+    taskType: 'question_generation',
+    userId: opts?.userId ?? null,
+  });
+  return parseAIResponse(result.text);
+}
+
 
 export async function generateMindmapWithAI(documentTitle: string, documentContent: string): Promise<string> {
   const cleanContent = (documentContent || '').replace(/<[^>]*>?/gm, '').substring(0, 5000);
@@ -131,42 +118,16 @@ NGUYÊN TẮC THIẾT KẾ SƠ ĐỒ TƯ DUY (MINDMAP RULES):
    - TUYỆT ĐỐI KHÔNG dùng ký tự đặc biệt như ngoặc (), ngoặc vuông [], dấu kép "" trong tên các nút.
    - CHỈ TRẢ VỀ DUY NHẤT MÃ MERMAID PURE (Không văn bản giải thích, KHÔNG bọc trong khối \`\`\`mermaid \`\`\`).`;
 
-  const groqKey = process.env.GROQ_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
-
-  if (groqKey && !groqKey.includes('your_')) {
-    try {
-      const groq = new Groq({ apiKey: groqKey });
-      const completion = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: prompt }],
-        model: 'groq/compound',
-        temperature: 0.5,
-        max_tokens: 2000,
-      });
-      let raw = completion.choices[0]?.message?.content || '';
-      const idx = raw.indexOf('mindmap');
-      if (idx !== -1) raw = raw.substring(idx);
-      return raw.replace(/```mermaid/gi, '').replace(/```/g, '').trim();
-    } catch (err) {
-      console.error('[Mindmap AI] Groq failed, falling back to Gemini:', err);
-    }
-  }
-
-  if (geminiKey && !geminiKey.includes('your_')) {
-    try {
-      const genAI = new GoogleGenerativeAI(geminiKey);
-      const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      let raw = result.response.text();
-      const idx = raw.indexOf('mindmap');
-      if (idx !== -1) raw = raw.substring(idx);
-      return raw.replace(/```mermaid/gi, '').replace(/```/g, '').trim();
-    } catch (err) {
-      console.error('[Mindmap AI] Gemini failed:', err);
-    }
-  }
-
-  throw new Error('Không thể gọi AI service. Vui lòng kiểm tra GROQ_API_KEY hoặc GEMINI_API_KEY!');
+  // Đi qua AIProviderAdapter (GroqAdapter → GeminiAdapter)
+  const result = await aiProviderService.chat({
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.5,
+    maxTokens: 2000,
+    taskType: 'mindmap',
+  });
+  let raw = result.text;
+  const idx = raw.indexOf('mindmap');
+  if (idx !== -1) raw = raw.substring(idx);
+  return raw.replace(/```mermaid/gi, '').replace(/```/g, '').trim();
 }
 

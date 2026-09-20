@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { aiService } from '../services/ai.service';
+import { aiProviderService } from '../services/ai-provider.service';
 import { db } from '../db';
 import { generateMindmapWithAI } from '../utils/ai-engine.service';
 import { parserService } from '../services/parser.service';
-import Groq from 'groq-sdk';
 
 export const chatWithDocument = async (req: AuthRequest, res: Response, next: any) => {
   try {
@@ -44,80 +44,6 @@ export const generateQuiz = async (req: AuthRequest, res: Response, next: any) =
   }
 };
 
-export const generateFlashcards = async (req: AuthRequest, res: Response, next: any) => {
-  try {
-    const { document_id, deck_id, textContext } = req.body;
-    const userId = req.user!.id;
-
-    if (textContext && !document_id) {
-       // Support old api behaviour
-       const cards = await aiService.generateFlashcardsFromText(textContext);
-       return res.status(200).json({ flashcards: cards });
-    }
-    
-    const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
-    const document = docResult.rows[0];
-    
-    if (deck_id) {
-      const deckCheck = await db.query('SELECT id FROM flashcard_decks WHERE id = $1 AND user_id = $2', [deck_id, userId]);
-      if (deckCheck.rows.length === 0) {
-        return res.status(403).json({ error: 'Bạn không có quyền truy cập bộ thẻ này hoặc bộ thẻ không tồn tại' });
-      }
-    }
-    
-    const cards = await aiService.generateFlashcardsForDocument(document);
-    
-    const insertedCards = [];
-    if (deck_id) {
-      for (const card of cards) {
-        const insertRes = await db.query(
-          'INSERT INTO flashcards (deck_id, document_id, front, back) VALUES ($1, $2, $3, $4) RETURNING *',
-          [deck_id, document_id, card.front, card.back]
-        );
-        insertedCards.push(insertRes.rows[0]);
-      }
-    }
-    
-    res.status(201).json({
-      message: deck_id ? 'Flashcards generated and added to deck!' : 'Flashcards generated successfully!',
-      cards: deck_id ? insertedCards : cards,
-      flashcards: cards // for compatibility
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const generateFlashcardsFromNote = async (req: AuthRequest, res: Response, next: any) => {
-  try {
-    const { note_content, deck_id, document_id } = req.body;
-    
-    if (!note_content || note_content.trim() === '') {
-      return res.status(400).json({ error: 'Nội dung ghi chú không được để trống.' });
-    }
-
-    const cards = await aiService.generateFlashcardsFromText(note_content);
-
-    const insertedCards = [];
-    if (deck_id && cards.length > 0) {
-      for (const card of cards) {
-        const insertRes = await db.query(
-          'INSERT INTO flashcards (deck_id, document_id, front, back) VALUES ($1, $2, $3, $4) RETURNING *',
-          [deck_id, document_id || null, card.front, card.back]
-        );
-        insertedCards.push(insertRes.rows[0]);
-      }
-    }
-    
-    res.status(201).json({
-      message: deck_id ? `Đã tạo và thêm ${cards.length} thẻ vào bộ bài!` : 'Tạo thẻ thành công!',
-      cards: deck_id ? insertedCards : cards
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const generateFlashcardsFromFile = async (req: Request, res: Response, next: any) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Vui lòng chọn file' });
@@ -136,17 +62,18 @@ Yêu cầu đầu ra BẮT BUỘC phải là một mảng JSON có cấu trúc c
   { "front": "Thuật ngữ hoặc câu hỏi ngắn bằng ngôn ngữ gốc của tài liệu", "back": "Định nghĩa hoặc câu trả lời chi tiết bằng Tiếng Việt hoặc cùng ngôn ngữ" }
 ]`;
 
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    const completion = await groq.chat.completions.create({
+    // Đi qua AIProviderAdapter (Groq → Gemini, có timeout + log ai_request_logs)
+    const aiResult = await aiProviderService.chat({
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `NỘI DUNG TÀI LIỆU:\n${truncatedText}` }
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `NỘI DUNG TÀI LIỆU:\n${truncatedText}` },
       ],
-      model: "groq/compound",
       temperature: 0.2,
+      maxTokens: 4096,
+      jsonMode: true,
+      taskType: 'flashcard',
     });
-
-    const responseText = completion.choices[0]?.message?.content || "";
+    const responseText = aiResult.text;
     const cleanedJsonStr = responseText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
     
     let cards = [];
@@ -219,3 +146,5 @@ export const generateMindmap = async (req: AuthRequest, res: Response, next: any
     next(error);
   }
 };
+
+export { listAIModels, listAITemplates } from './question-generation.controller';

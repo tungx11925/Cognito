@@ -1,9 +1,9 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import Groq from 'groq-sdk';
 import { parserService } from './parser.service';
 import { generateQuestionsWithAI, generateMindmapWithAI } from '../utils/ai-engine.service';
+import { aiProviderService } from './ai-provider.service';
 import { db } from '../db';
 import { AppError } from '../utils/AppError';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export class AiService {
   /**
@@ -13,10 +13,8 @@ export class AiService {
     const docTitle = document ? document.title : 'Tài liệu học tập';
     const docDesc = document ? document.description : '';
     const docSolution = document ? document.solution_text : '';
-    
+
     let reply = '';
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    const groqApiKey = process.env.GROQ_API_KEY;
 
     let documentText = '';
     if (document && document.doc_url && (document.doc_url.endsWith('.docx') || document.doc_url.endsWith('.doc'))) {
@@ -63,11 +61,12 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
       });
     }
 
+    const geminiApiKey = process.env.GEMINI_API_KEY;
     // 1. If IMAGES are provided, PRIORITIZE GEMINI MULTIMODAL VISION
     if (imageParts.length > 0 && geminiApiKey && !geminiApiKey.includes('your_')) {
       try {
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+        const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
         const model = genAI.getGenerativeModel({ model: modelName });
         
         const promptText = `${systemPrompt}\n\nCâu hỏi/Yêu cầu của người dùng đối với các hình ảnh đính kèm: "${message || 'Hãy quan sát kỹ, phân tích, đối chiếu và giải đáp chi tiết tất cả các hình ảnh này.'}"`;
@@ -79,47 +78,25 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
       }
     }
 
-    // 2. TRY GROQ AI (Supports text with groq models)
-    if (groqApiKey && !groqApiKey.includes('your_')) {
-      try {
-        const groq = new Groq({ apiKey: groqApiKey });
-        let apiMessages: any[] = [{ role: "system", content: systemPrompt }];
-        if (history && Array.isArray(history)) {
-          const recentHistory = history.slice(-4);
-          apiMessages = apiMessages.concat(recentHistory);
-        }
-        apiMessages.push({ role: "user", content: message || 'Hãy phân tích hình ảnh và tài liệu này giúp tôi.' });
-
-        const completion = await groq.chat.completions.create({
-          messages: apiMessages,
-          model: process.env.GROQ_CHAT_MODEL || "groq/compound-mini",
-          temperature: 0.7,
-          max_tokens: 1500,
-        });
-
-        reply = completion.choices[0]?.message?.content || "";
-        if (reply) return reply;
-      } catch (aiError) {
-        console.error("Groq AI Error in /ai/chat, falling back to Gemini:", aiError);
+    // 2. Chat qua AIProviderAdapter (Groq -> Gemini, có timeout + log)
+    try {
+      const apiMessages: any[] = [{ role: "system", content: systemPrompt }];
+      if (history && Array.isArray(history)) {
+        apiMessages.push(...history.slice(-4));
       }
-    }
+      apiMessages.push({ role: "user", content: message });
 
-    // 3. TRY GEMINI AI for text / fallback
-    if (geminiApiKey && !geminiApiKey.includes('your_')) {
-      try {
-        const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
-        const model = genAI.getGenerativeModel({ model: modelName });
-        
-        const prompt = `${systemPrompt}\n\nCâu hỏi của người dùng: "${message}"`;
-        const contents: any[] = [prompt, ...imageParts];
-        
-        const result = await model.generateContent(contents);
-        reply = result.response.text();
-        if (reply) return reply;
-      } catch (aiError) {
-        console.error("Gemini AI Error in /ai/chat:", aiError);
-      }
+      const result = await aiProviderService.chat({
+        messages: apiMessages,
+        temperature: 0.7,
+        maxTokens: 1024,
+        taskType: 'chat',
+        modelOverride: { groq: process.env.GROQ_CHAT_MODEL || 'groq/compound-mini' },
+      });
+      reply = result.text;
+      if (reply) return reply;
+    } catch (aiError) {
+      console.error('AI Provider Error in /ai/chat:', aiError);
     }
 
     // FALLBACK: PREMIUM SIMULATION (Development ONLY)
@@ -252,120 +229,6 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
       ];
     }
     return quizzes;
-  }
-
-  /**
-   * Automatically generate flashcards from document context
-   */
-  async generateFlashcardsForDocument(document: any) {
-    if (process.env.NODE_ENV === 'production' && (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY)) {
-      throw new AppError('AI Service is temporarily unavailable or not configured. Please contact the administrator.', 503);
-    }
-    
-    let cards = [];
-    if (document && document.category === 'Trí tuệ nhân tạo') {
-      cards = [
-        { front: "Deep Learning (Học sâu) là gì?", back: "Là một nhánh con của Học máy (Machine Learning) dựa trên các mạng thần kinh nhân tạo đa tầng (Deep Neural Networks)." },
-        { front: "Reinforcement Learning (Học tăng cường) là gì?", back: "Phương pháp học thông qua tương tác với môi trường để tối đa hóa điểm thưởng (reward) tích lũy." },
-        { front: "Mạng nơ-ron nhân tạo (ANN) là gì?", back: "Mô hình toán học lấy cảm hứng từ cấu trúc mạng lưới thần kinh sinh học của não người." }
-      ];
-    } else if (document && document.category === 'Toán học') {
-      cards = [
-        { front: "Đạo hàm của tan(x) bằng bao nhiêu?", back: "1 / cos^2(x) hoặc 1 + tan^2(x)" },
-        { front: "Định lý Weierstrass phát biểu điều gì?", back: "Một hàm số liên tục trên một đoạn đóng [a, b] thì sẽ đạt giá trị lớn nhất và giá trị nhỏ nhất trên đoạn đó." },
-        { front: "Đạo hàm của e^x bằng bao nhiêu?", back: "Bằng chính nó: e^x" }
-      ];
-    } else {
-      cards = [
-        { front: `Định nghĩa chính của "${document ? document.title : 'Tài liệu'}"`, back: `Là chủ đề cốt lõi thảo luận về kiến thức chuyên sâu trong tài liệu học tập của môn học.` },
-        { front: "Phương pháp học Active Recall", back: "Chủ động kiểm tra lại kiến thức thay vì chỉ đọc thụ động, giúp tăng hiệu quả ghi nhớ lên gấp nhiều lần." }
-      ];
-    }
-    return cards;
-  }
-
-  /**
-   * Parse AI response for flashcards
-   */
-  private parseFlashcardResponse(responseText: string) {
-    try {
-      let cleaned = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const startIdx = cleaned.indexOf('[');
-      const endIdx = cleaned.lastIndexOf(']');
-      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-        cleaned = cleaned.substring(startIdx, endIdx + 1);
-      } else if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
-        cleaned = `[${cleaned}]`; // Wrap single object
-      }
-      return JSON.parse(cleaned);
-    } catch (e) {
-      console.error("JSON Parse Error:", e, responseText);
-      return null;
-    }
-  }
-
-  /**
-   * Generate flashcards from note content
-   */
-  async generateFlashcardsFromText(text: string) {
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    const groqApiKey = process.env.GROQ_API_KEY;
-    let cards: {front: string, back: string}[] = [];
-
-    const prompt = `Bạn là một chuyên gia giáo dục thiết kế thẻ ghi nhớ (Flashcards). Nhiệm vụ của bạn là đọc đoạn văn bản dưới đây và trích xuất ra các cặp thông tin quan trọng nhất để làm Flashcard.
-
-QUY TẮC CHUẨN HOÁ (Áp dụng cho TẤT CẢ các môn học và ngành nghề):
-Cho dù đoạn văn bản có lộn xộn hay không rõ ràng, hãy cố gắng bóc tách các ý chính thành dạng Thẻ (Front - Back).
-- "front": [Từ khóa / Khái niệm / Câu hỏi ngắn / Tên riêng / Công thức]
-- "back": [Định nghĩa / Giải thích súc tích / Ý nghĩa] + [Ví dụ thực tế / Ứng dụng nếu có].
-
-MỘT SỐ VÍ DỤ CHUẨN:
-- {"front": "Học máy (Machine Learning)", "back": "Là lĩnh vực AI cho phép hệ thống tự học từ dữ liệu. VD: Phân loại email rác."}
-- {"front": "Đạo hàm của sin(x)", "back": "Là cos(x). VD: Tính vận tốc từ phương trình ly độ."}
-- {"front": "Lạm phát (Inflation)", "back": "Sự tăng mức giá chung của hàng hóa/dịch vụ theo thời gian."}
-
-YÊU CẦU BẮT BUỘC:
-- Nếu văn bản quá ngắn, hãy suy luận để tạo ra ít nhất 1-2 thẻ hợp lý nhất có thể.
-- Chỉ trả về ĐÚNG MỘT MẢNG JSON thuần túy (không chứa markdown, không có \`\`\`json).
-- Object bên trong mảng chỉ được phép có 2 trường "front" và "back".
-
-Văn bản cần xử lý:
-"""
-${text}
-"""`;
-
-    if (groqApiKey && !groqApiKey.includes('your_')) {
-      const groq = new Groq({ apiKey: groqApiKey });
-      const completion = await groq.chat.completions.create({
-        messages: [{ role: "user", content: prompt }],
-        model: "llama-3.1-8b-instant",
-        temperature: 0.5,
-      });
-      const responseText = completion.choices[0]?.message?.content || "[]";
-      const parsed = this.parseFlashcardResponse(responseText);
-      if (parsed) cards = parsed;
-    } else if (geminiApiKey && !geminiApiKey.includes('your_')) {
-      const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
-      const parsed = this.parseFlashcardResponse(responseText);
-      if (parsed) cards = parsed;
-    } else {
-      if (process.env.NODE_ENV === 'production') {
-        throw new AppError('AI Service is temporarily unavailable or not configured. Please contact the administrator.', 503);
-      }
-      cards = [
-        { front: "Làm thế nào để tạo flashcard thực sự từ ghi chú?", back: "Bạn cần cung cấp GROQ_API_KEY hoặc GEMINI_API_KEY trong file .env" },
-        { front: "Mẫu câu hỏi (Mock)", back: "Đây là câu trả lời mẫu do hệ thống không có AI Key." }
-      ];
-    }
-    
-    // Normalize keys
-    return cards.map((c: any) => ({
-      front: c.front || c.Front || c.question || c.Question || c.q || 'Không có câu hỏi',
-      back: c.back || c.Back || c.answer || c.Answer || c.a || 'Không có câu trả lời',
-    }));
   }
 
   /**

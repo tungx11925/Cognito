@@ -115,7 +115,6 @@ interface StudyContextType {
   isCardFlipped: boolean;
   setIsCardFlipped: (flipped: boolean) => void;
   generatingFC: boolean;
-  handleGenerateFlashcardsFromDoc: () => Promise<void>;
   handleReviewCard: (difficulty: 'easy' | 'good' | 'hard') => Promise<void>;
   showAddDeckModal: boolean;
   setShowAddDeckModal: (show: boolean) => void;
@@ -1190,34 +1189,6 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
-  // API Call: Auto-Generate Flashcards from document using AI
-  const handleGenerateFlashcardsFromDoc = async () => {
-    if (!activeDoc || !activeDeck) return;
-    setGeneratingFC(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/ai/generate-flashcards`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
-        body: JSON.stringify({
-          document_id: activeDoc.id,
-          deck_id: activeDeck.id
-        })
-      });
-
-      if (res.ok) {
-        triggerMessage("AI đã tự động phân tích và tạo flashcards thành công!");
-        fetchCardsForDeck(activeDeck.id);
-        fetchAnalytics();
-      }
-    } catch (e) {
-      triggerMessage("Lỗi khi tạo flashcard bằng AI", "error");
-    } finally {
-      setGeneratingFC(false);
-    }
-  };
 
   // API Call: Spaced Repetition card review feedback
   const handleReviewCard = async (difficulty: 'easy' | 'good' | 'hard') => {
@@ -1623,7 +1594,6 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       isCardFlipped,
       setIsCardFlipped,
       generatingFC,
-      handleGenerateFlashcardsFromDoc,
       handleReviewCard,
       showAddDeckModal,
       setShowAddDeckModal,

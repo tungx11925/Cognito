@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { documentService } from '../services/document.service';
+import { documentProcessingService } from '../services/document-processing.service';
 import { activityService } from '../services/activity.service';
 import cloudinary from '../config/cloudinary';
 import { UploadApiResponse } from 'cloudinary';
@@ -140,6 +141,24 @@ export const getDocumentStatus = async (req: AuthRequest, res: Response, next: a
     next(error);
   }
 };
+
+// ─── GET /api/documents/:id/chunks — danh sách chunks & keywords để preview ───
+export const getDocumentChunks = async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+
+    const docId = parseInt(req.params.id, 10);
+    const data = await documentProcessingService.getDocumentChunks(docId, userId);
+    if (!data) {
+      return res.status(404).json({ error: 'Không tìm thấy tài liệu' });
+    }
+    res.status(200).json(data);
+  } catch (error: any) {
+    next(error);
+  }
+};
+
 
 // ─── POST /api/documents/:id/reprocess — chạy lại pipeline (khi FAILED) ────────
 export const reprocessDocument = async (req: AuthRequest, res: Response, next: any) => {

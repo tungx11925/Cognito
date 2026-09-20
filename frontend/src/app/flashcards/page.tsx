@@ -20,7 +20,8 @@ import {
   Activity,
   Zap,
   Share2,
-  Palette
+  Palette,
+  UploadCloud
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -542,8 +543,8 @@ export default function FlashcardsPage() {
                   onClick={() => setShowAILab(true)}
                   className="px-4 py-2 bg-emerald-50 text-emerald-600 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm border border-emerald-200 hover:bg-emerald-100"
                 >
-                  <Sparkles size={14} />
-                  Tạo bằng AI
+                  <UploadCloud size={14} />
+                  Tạo từ File
                 </button>
                 <button
                   onClick={() => setShowCreateModal(true)}
@@ -796,7 +797,7 @@ export default function FlashcardsPage() {
             onSaveDeck={async (cards, deckName) => {
               try {
                 // 1. Tạo bộ thẻ rỗng trước
-                const resDeck = await createDeck(deckName || "AI Flashcards", "Bộ thẻ được tạo tự động bởi AI");
+                const resDeck = await createDeck(deckName || "Bộ thẻ từ File", "Bộ thẻ được tạo từ file tài liệu");
                 
                 if (resDeck.error) {
                   triggerMessage(resDeck.error, "error");

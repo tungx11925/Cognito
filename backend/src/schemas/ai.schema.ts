@@ -25,23 +25,6 @@ export const aiGenerateQuizSchema = z.object({
     difficulty: z.enum(['Dễ', 'Trung bình', 'Khó']).optional(),
   }),
 });
-
-export const aiGenerateFlashcardsSchema = z.object({
-  body: z.object({
-    document_id: z.number().optional(),
-    document_content: z.string().optional(),
-    deck_id: z.number().optional(),
-  }),
-});
-
-export const aiGenerateFlashcardsFromNoteSchema = z.object({
-  body: z.object({
-    document_id: z.number().optional(),
-    note_content: z.string().min(1, 'Nội dung ghi chú không được để trống'),
-    deck_id: z.number().optional(),
-  }),
-});
-
 export const aiGenerateMindmapSchema = z.object({
   body: z.object({
     document_id: z.number().optional(),

@@ -97,7 +97,7 @@ export default function AIFlashcardLab({ onClose, onSaveDeck }: AIFlashcardLabPr
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Có lỗi xảy ra khi gọi AI.');
+        throw new Error(errorData.error || 'Có lỗi xảy ra khi tạo thẻ từ file.');
       }
 
       const data = await response.json();
@@ -105,11 +105,11 @@ export default function AIFlashcardLab({ onClose, onSaveDeck }: AIFlashcardLabPr
         setGeneratedCards(data.cards);
         toast.success(`Đã tạo thành công ${data.cards.length} thẻ!`);
       } else {
-        throw new Error('AI không tìm thấy nội dung phù hợp để tạo thẻ.');
+        throw new Error('Không tìm thấy nội dung phù hợp trong file để tạo thẻ.');
       }
     } catch (err: any) {
       setError(err.message || 'Lỗi hệ thống. Vui lòng thử lại.');
-      toast.error('Quá trình sinh thẻ thất bại.');
+      toast.error('Quá trình tạo thẻ thất bại.');
     } finally {
       setIsProcessing(false);
     }
@@ -133,11 +133,11 @@ export default function AIFlashcardLab({ onClose, onSaveDeck }: AIFlashcardLabPr
         <div className="bg-white px-8 py-6 flex justify-between items-center border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="bg-emerald-100 p-2.5 rounded-xl text-[#10b981]">
-              <Sparkles size={24} strokeWidth={2.5} />
+              <UploadCloud size={24} strokeWidth={2.5} />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-gray-800 tracking-tight">AI Flashcard Lab</h2>
-              <p className="text-sm text-gray-500 font-medium mt-0.5">Tự động trích xuất kiến thức từ tài liệu của bạn</p>
+              <h2 className="text-2xl font-black text-gray-800 tracking-tight">Tạo Flashcards từ File</h2>
+              <p className="text-sm text-gray-500 font-medium mt-0.5">Trích xuất kiến thức từ tài liệu của bạn thành Flashcards</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600">
@@ -223,8 +223,8 @@ export default function AIFlashcardLab({ onClose, onSaveDeck }: AIFlashcardLabPr
                     onClick={handleGenerate}
                     className="mt-8 px-10 py-4 bg-[#10b981] hover:bg-[#059669] text-white font-black text-lg rounded-2xl shadow-[0_8px_30px_rgba(16,185,129,0.3)] transition-all hover:-translate-y-1 active:scale-95 flex items-center gap-2"
                   >
-                    <Sparkles size={20} />
-                    Bắt đầu sinh thẻ bằng AI
+                    <UploadCloud size={20} />
+                    Bắt đầu tạo thẻ từ file
                   </motion.button>
                 )}
               </motion.div>
@@ -242,7 +242,7 @@ export default function AIFlashcardLab({ onClose, onSaveDeck }: AIFlashcardLabPr
                   <Loader2 size={64} className="text-[#10b981] animate-spin relative z-10" />
                 </div>
                 <div className="text-center space-y-3">
-                  <h3 className="text-2xl font-black text-gray-800">AI đang đọc tài liệu...</h3>
+                  <h3 className="text-2xl font-black text-gray-800">Đang đọc tài liệu...</h3>
                   <p className="text-gray-500 font-medium">Đang trích xuất kiến thức và đóng gói thành Flashcard. Vui lòng đợi trong giây lát.</p>
                 </div>
                 {/* Giả lập thanh tiến trình chạy liên tục */}
@@ -262,7 +262,7 @@ export default function AIFlashcardLab({ onClose, onSaveDeck }: AIFlashcardLabPr
                 <div className="flex justify-between items-end mb-6">
                   <div>
                     <h3 className="text-xl font-bold text-gray-800">Review Bộ thẻ</h3>
-                    <p className="text-gray-500 text-sm font-medium">AI đã tìm thấy {generatedCards.length} khái niệm quan trọng.</p>
+                    <p className="text-gray-500 text-sm font-medium">Đã trích xuất {generatedCards.length} khái niệm quan trọng từ file.</p>
                   </div>
                   <input 
                     type="text" 

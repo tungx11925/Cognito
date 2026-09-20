@@ -26,12 +26,6 @@ export const generateQuiz = (document_id: number) => apiFetch('/ai/generate-quiz
     body: JSON.stringify({ document_id })
 });
 
-export const generateFlashcards = (document_id: number, deck_id?: number) => apiFetch('/ai/generate-flashcards', {
-    method: 'POST',
-    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ document_id, deck_id })
-});
-
 export const generateMindmap = (document_id: number, force_regenerate?: boolean) => apiFetch('/ai/generate-mindmap', {
     method: 'POST',
     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },

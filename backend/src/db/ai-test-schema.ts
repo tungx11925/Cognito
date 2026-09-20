@@ -76,10 +76,14 @@ export async function bootstrapAITestSchema() {
       END $$;
     `);
 
-    // Step 3 — Add enum columns to questions (safe upgrade)
+    // Step 3 — Add enum columns to questions + trường phục vụ Question Generator (safe upgrade)
     await db.query(`
       ALTER TABLE questions ADD COLUMN IF NOT EXISTS type question_type NOT NULL DEFAULT 'MULTIPLE_CHOICE';
       ALTER TABLE questions ADD COLUMN IF NOT EXISTS status question_status NOT NULL DEFAULT 'DRAFT';
+      ALTER TABLE questions ADD COLUMN IF NOT EXISTS explanation TEXT;
+      ALTER TABLE questions ADD COLUMN IF NOT EXISTS difficulty VARCHAR(20) DEFAULT 'medium';
+      ALTER TABLE questions ADD COLUMN IF NOT EXISTS source_keyword TEXT;
+      ALTER TABLE questions ADD COLUMN IF NOT EXISTS source_chunk_id INTEGER REFERENCES document_chunks(id) ON DELETE SET NULL;
     `);
 
     // Step 4 — Add user_id to ai_task_configs (safe upgrade)
@@ -96,6 +100,24 @@ export async function bootstrapAITestSchema() {
     await db.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS ai_task_configs_user_course ON ai_task_configs(course_id, user_id);
     `);
+
+    // Step 7 — test_sets: cấu hình sinh đề + trạng thái Preview(DRAFT) → Save(APPROVED) (Question Generator)
+    await db.query(`
+      ALTER TABLE test_sets ADD COLUMN IF NOT EXISTS generation_config JSONB;
+      ALTER TABLE test_sets ADD COLUMN IF NOT EXISTS status question_status DEFAULT 'DRAFT';
+      UPDATE test_sets SET status = 'APPROVED' WHERE status IS NULL;
+    `);
+    try {
+      // ai_models phải tồn tại (tạo bởi migration 1788000000000_question-generator.js)
+      const hasAIModels = await db.query(`SELECT to_regclass('public.ai_models') IS NOT NULL AS ok`);
+      if (hasAIModels.rows[0]?.ok) {
+        await db.query(`
+          ALTER TABLE test_sets ADD COLUMN IF NOT EXISTS ai_model_id INTEGER REFERENCES ai_models(id) ON DELETE SET NULL;
+        `);
+      }
+    } catch (err) {
+      console.warn('ai_model_id column skip:', (err as any)?.message);
+    }
 
     console.log('AI Test schema bootstrapped successfully.');
   } catch (err) {

@@ -352,7 +352,7 @@ ${extractedText.substring(0, 15000)}
     userQuestion?: string
   ) {
     const lecture = await this.getLectureById(lectureId);
-    const targetSlide = lecture.slides.find(s => s.slide_number === slideNumber) || lecture.slides[0];
+    const targetSlide = lecture.slides.find((s: any) => s.slide_number === slideNumber) || lecture.slides[0];
 
     // Try to get text context from file or slide
     let pageContext = '';

@@ -2,6 +2,7 @@ import { documentRepository } from '../repositories/document.repository';
 import { AppError } from '../utils/AppError';
 import cloudinary from '../config/cloudinary';
 import { processingService } from './processing.service';
+import { documentProcessingService } from './document-processing.service';
 
 class DocumentService {
   async uploadDocument(data: { userId: number, title: string, description?: string, category?: string, docUrl: string, fileType?: string, fileSize?: number, publicId?: string }) {
@@ -14,20 +15,19 @@ class DocumentService {
       fileType: data.fileType,
       fileSize: data.fileSize,
       publicId: data.publicId,
-      status: 'UPLOADING',
+      status: 'PROCESSING',
+      processingStatus: 'PENDING',
     });
 
-    // Đưa vào hàng đợi xử lý nền (parse → chunk → embedding → READY)
-    // Không block HTTP request — frontend polling GET /api/documents/:id/status
-    processingService.enqueue({
-      documentId: document.id,
-      userId: data.userId,
-      docUrl: data.docUrl,
-      fileType: data.fileType || null,
+    // Kích hoạt pipeline xử lý chuyên sâu (PDF/PPTX/OCR/Chunking/Keyword Extraction)
+    // Chạy bất đồng bộ (fire-and-forget), không block HTTP request
+    documentProcessingService.processDocument(document.id).catch(err => {
+      console.error(`[Upload] documentProcessingService failed for doc ${document.id}:`, err);
     });
 
     return document;
   }
+
 
   async getDocumentStatus(docId: number, userId: number) {
     const status = await documentRepository.findDocumentStatus(docId, userId);
