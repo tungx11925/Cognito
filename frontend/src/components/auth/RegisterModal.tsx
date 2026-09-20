@@ -445,12 +445,12 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
       setTwoFAError('Mã xác nhận phải đủ 6 ký tự');
       return;
     }
-    const result = await verify2FA(twoFAEmail, twoFACode);
-    if (result.success) {
+    const success = await verify2FA(twoFAEmail, twoFACode);
+    if (success) {
       onClose();
       router.push('/home');
     } else {
-      setTwoFAError(result.error || 'Mã xác nhận không hợp lệ');
+      setTwoFAError('Mã xác nhận không hợp lệ');
     }
   };
 
