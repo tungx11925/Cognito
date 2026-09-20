@@ -16,6 +16,7 @@ export interface DocumentChunkRow {
   token_count: number | null;
   keywords: string[] | null;
   is_ocr: boolean;
+  embedding?: number[];
 }
 
 export class DocumentChunksRepository {
@@ -84,13 +85,16 @@ export class DocumentChunksRepository {
   async listByDocument(documentId: number, client?: PoolClient): Promise<DocumentChunkRow[]> {
     const q = client || db;
     const result = await q.query(
-      `SELECT id, document_id, chunk_index, content, page_number, token_count, keywords, is_ocr
+      `SELECT id, document_id, chunk_index, content, page_number, token_count, keywords, is_ocr, embedding::text as embedding
        FROM document_chunks
        WHERE document_id = $1
        ORDER BY chunk_index ASC`,
       [documentId]
     );
-    return result.rows as DocumentChunkRow[];
+    return result.rows.map(r => ({
+      ...r,
+      embedding: r.embedding ? JSON.parse(r.embedding) : undefined
+    })) as DocumentChunkRow[];
   }
 
   /** Lấy chunk theo danh sách document_id (theo thứ tự chunk_index), giới hạn tổng số */
@@ -99,7 +103,7 @@ export class DocumentChunksRepository {
     const perDocLimit = opts?.perDocLimit ?? 12;
     const totalCap = opts?.totalCap ?? 30;
     const result = await q.query(
-      `SELECT id, document_id, chunk_index, content, page_number, token_count, keywords, is_ocr
+      `SELECT id, document_id, chunk_index, content, page_number, token_count, keywords, is_ocr, embedding::text as embedding
        FROM (
          SELECT dc.*, ROW_NUMBER() OVER (PARTITION BY dc.document_id ORDER BY dc.chunk_index) AS rn
          FROM document_chunks dc
@@ -110,21 +114,27 @@ export class DocumentChunksRepository {
        LIMIT $3`,
       [documentIds, perDocLimit, totalCap]
     );
-    return result.rows as DocumentChunkRow[];
+    return result.rows.map(r => ({
+      ...r,
+      embedding: r.embedding ? JSON.parse(r.embedding) : undefined
+    })) as DocumentChunkRow[];
   }
 
   /** Lọc chunk trùng/trái từ khoá trên cột keywords[] (AI đã trích xuất) */
   async searchByKeywords(documentIds: number[], keywords: string[], limit = 25, client?: PoolClient) {
     const q = client || db;
     const result = await q.query(
-      `SELECT id, document_id, chunk_index, content, page_number, token_count, keywords, is_ocr
+      `SELECT id, document_id, chunk_index, content, page_number, token_count, keywords, is_ocr, embedding::text as embedding
        FROM document_chunks
        WHERE document_id = ANY($1::int[]) AND keywords && $2::text[]
        ORDER BY chunk_index
        LIMIT $3`,
       [documentIds, keywords, limit]
     );
-    return result.rows as DocumentChunkRow[];
+    return result.rows.map(r => ({
+      ...r,
+      embedding: r.embedding ? JSON.parse(r.embedding) : undefined
+    })) as DocumentChunkRow[];
   }
 
   /** Lấy chunk theo id (validate sourceChunkId do AI trả về) */
@@ -132,11 +142,14 @@ export class DocumentChunksRepository {
     const q = client || db;
     if (!chunkIds.length) return [];
     const result = await q.query(
-      `SELECT id, document_id, chunk_index, content, page_number, token_count, keywords, is_ocr
+      `SELECT id, document_id, chunk_index, content, page_number, token_count, keywords, is_ocr, embedding::text as embedding
        FROM document_chunks WHERE id = ANY($1::int[])`,
       [chunkIds]
     );
-    return result.rows as DocumentChunkRow[];
+    return result.rows.map(r => ({
+      ...r,
+      embedding: r.embedding ? JSON.parse(r.embedding) : undefined
+    })) as DocumentChunkRow[];
   }
 
   /** Lưu keywords AI trích xuất cho từng chunk */

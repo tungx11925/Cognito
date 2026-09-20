@@ -10,6 +10,8 @@ import {
   sanitizeUserInstruction,
 } from '../schemas/question-generation.schema';
 import { AppError } from '../utils/AppError';
+import { MCQ_GENERATION_CONSTRAINTS } from '../utils/mcq-constraints';
+import { TfIdfCalculator, cosineSimilarity, asyncMapConcurrent } from '../utils/math.utils';
 
 export const QUESTION_GEN_SYSTEM_PROMPT = `Bạn là AI Question Generator. Chỉ được dùng nội dung trong DOCUMENT_CONTEXT để tạo câu hỏi.
 Không bịa thêm kiến thức ngoài tài liệu. Mỗi câu hỏi phải khớp với đúng 1 giá trị trong FOCUS_KEYWORDS (nếu rỗng thì dùng toàn bộ context).
@@ -125,7 +127,7 @@ class QuestionGenerationService {
    * 6. Validate Zod (retry 1 lần nếu fail, fail lần 2 ném AppError 422)
    * 7. Lưu test_sets (DRAFT) + questions (DRAFT) để phục vụ Preview
    */
-  async generate(input: GenerateQuestionsInput): Promise<GenerateQuestionsResult> {
+async generate(input: GenerateQuestionsInput): Promise<GenerateQuestionsResult> {
     const userId = input.userId;
     const audienceLevel = input.audienceLevel || 'medium';
     const difficulty = input.difficulty || 'medium';
@@ -134,12 +136,11 @@ class QuestionGenerationService {
     const mode = input.mode || 'practice';
     const sanitizedInstruction = sanitizeUserInstruction(input.customInstruction);
 
-    // ── 1. Chuẩn bị Context từ Source ──
-    let contextText = '';
+    // ── STAGE 1: Chuẩn bị Context từ Source & Structural Parsing ──
     const chunkMap = new Map<number, DocumentChunkRow>();
-
+    let processedChunks: any[] = [];
+    
     if (input.sourceIds && input.sourceIds.length > 0) {
-      // Xác minh quyền sở hữu tài liệu
       const docsRes = await db.query(
         `SELECT id, title, status, doc_url, file_type, user_id
          FROM documents
@@ -147,273 +148,355 @@ class QuestionGenerationService {
         [input.sourceIds, userId]
       );
 
-      if (docsRes.rows.length === 0) {
-        throw new AppError('Không tìm thấy tài liệu nào hợp lệ trong danh sách đã chọn', 404);
-      }
+      if (docsRes.rows.length === 0) throw new AppError('Không tìm thấy tài liệu nào hợp lệ trong danh sách đã chọn', 404);
 
-      // Kiểm tra trạng thái chunking
       const chunkStatuses = await documentProcessingService.ensureChunked(docsRes.rows);
       const notReady = chunkStatuses.filter(s => s.status !== 'READY' || s.chunkCount === 0);
+      if (notReady.length > 0) return { status: 'PROCESSING', message: 'Tài liệu đang được xử lý...', processingDocs: notReady };
 
-      if (notReady.length > 0) {
-        return {
-          status: 'PROCESSING',
-          message: 'Tài liệu đang được xử lý và phân tách dữ liệu nền. Vui lòng thử lại sau giây lát.',
-          processingDocs: notReady,
-        };
-      }
-
-      // Lấy chunks của các tài liệu đã sẵn sàng
       const readyDocIds = chunkStatuses.filter(s => s.status === 'READY').map(s => s.documentId);
-      let chunks: DocumentChunkRow[] = [];
+      const chunks = await documentChunksRepository.listByDocuments(readyDocIds, { perDocLimit: 50, totalCap: 200 });
+      if (chunks.length === 0) throw new AppError('Tài liệu chưa có nội dung văn bản.', 400);
 
-      if (input.focusKeywords && input.focusKeywords.length > 0) {
-        const kwFiltered = await documentChunksRepository.searchByKeywords(readyDocIds, input.focusKeywords, 25);
-        if (kwFiltered.length === 0) {
-          throw new AppError('Không tìm thấy nội dung nào trong tài liệu khớp với các từ khoá trọng tâm đã chọn. Vui lòng bỏ bớt từ khoá hoặc chọn "Toàn bộ tài liệu".', 422);
-        }
-        chunks = kwFiltered;
-      } else {
-        chunks = await documentChunksRepository.listByDocuments(readyDocIds, { perDocLimit: 12, totalCap: 30 });
-      }
+      chunks.forEach(c => chunkMap.set(c.id, c));
 
-      if (chunks.length === 0) {
-        throw new AppError('Tài liệu chưa có nội dung văn bản để sinh câu hỏi.', 400);
-      }
+      processedChunks = chunks.map(c => {
+        const lines = c.content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const slideTitle = lines.length > 0 ? lines[0] : `Trang ${c.page_number || c.chunk_index}`;
+        const wordCount = c.content.split(/\s+/).length;
+        const hasBullet = c.content.includes('- ') || c.content.includes('•') || /\d+\./.test(c.content);
+        const isContentSlide = wordCount >= MCQ_GENERATION_CONSTRAINTS.MIN_WORD_COUNT_FOR_CONTENT_SLIDE && hasBullet;
+        const positionRatio = c.chunk_index / chunks.length;
+        return { ...c, slideTitle, wordCount, isContentSlide, positionRatio };
+      });
 
-      for (const c of chunks) {
-        chunkMap.set(c.id, c);
-      }
-
-      contextText = chunks
-        .map(c => `[CHUNK_ID: ${c.id}] (Trang ${c.page_number || 1}):\n${c.content}`)
-        .join('\n\n---\n\n');
     } else if (input.textContent && input.textContent.trim()) {
-      contextText = input.textContent.trim().substring(0, 35000);
+      const content = input.textContent.trim().substring(0, 35000);
+      processedChunks = [{
+        id: -1, content, slideTitle: 'Văn bản cung cấp', wordCount: content.split(/\s+/).length, isContentSlide: true, positionRatio: 1, keywords: []
+      }];
     } else {
       throw new AppError('Cần chọn ít nhất 1 tài liệu hoặc nhập nội dung văn bản', 400);
     }
 
-    // ── 2. Xây dựng Cấu trúc Prompt ──
+    let contentSlides = processedChunks.filter(c => c.isContentSlide);
+    if (contentSlides.length === 0) {
+      processedChunks.forEach(c => c.isContentSlide = true);
+      contentSlides = processedChunks;
+    }
+
+    // ── STAGE 2: Importance Scoring (Rule + AI) ──
+    let finalFocusKeywords: string[] = [];
+    if (input.focusKeywords && input.focusKeywords.length > 0) {
+      finalFocusKeywords = input.focusKeywords;
+    } else {
+      const tfidfCalc = new TfIdfCalculator(contentSlides.map(c => c.content));
+      const keywordSet = new Set<string>();
+      contentSlides.forEach(c => { if (c.keywords) c.keywords.forEach((k: string) => keywordSet.add(k)); });
+      
+      let aiScores: Record<number, number> = {};
+      if (input.sourceIds && input.sourceIds.length > 0) {
+        aiScores = await aiProviderService.getAiSalienceScores(contentSlides.map(c => ({
+          id: c.id, title: c.slideTitle, keywords: c.keywords || []
+        })));
+      }
+
+      const keywordScores: Record<string, number> = {};
+      const W = MCQ_GENERATION_CONSTRAINTS.IMPORTANCE_WEIGHTS;
+      
+      keywordSet.forEach(kw => {
+        let maxTfidf = 0; let crossFreq = 0; let maxAiScore = 0; let inHeading = 0;
+        contentSlides.forEach((c, idx) => {
+          const score = tfidfCalc.getScore(kw, idx);
+          if (score > maxTfidf) maxTfidf = score;
+          if (score > 0) crossFreq++;
+          if (c.slideTitle.toLowerCase().includes(kw.toLowerCase())) inHeading = 1;
+          if (c.keywords?.includes(kw)) {
+             maxAiScore = Math.max(maxAiScore, (aiScores[c.id] || 5) / 10);
+          }
+        });
+        const crossSlideFreqScore = crossFreq / contentSlides.length;
+        const normalizedTfidf = Math.min(maxTfidf, 1.0);
+        keywordScores[kw] = W.tfidf * normalizedTfidf + W.heading * inHeading + W.crossSlideFreq * crossSlideFreqScore + W.aiSalience * maxAiScore;
+      });
+
+      const sortedKeywords = Array.from(keywordSet).sort((a, b) => keywordScores[b] - keywordScores[a]);
+      finalFocusKeywords = sortedKeywords.filter(kw => keywordScores[kw] >= MCQ_GENERATION_CONSTRAINTS.FOCUS_KEYWORD_THRESHOLD).slice(0, MCQ_GENERATION_CONSTRAINTS.FOCUS_KEYWORD_MAX_COUNT);
+      if (finalFocusKeywords.length === 0) finalFocusKeywords = sortedKeywords.slice(0, 5);
+    }
+
+    // ── STAGE 3: Coverage Allocation ──
+    const slideAllocations = contentSlides.map(c => {
+      const matchCount = finalFocusKeywords.filter(kw => 
+        (c.keywords || []).includes(kw) || c.content.toLowerCase().includes(kw.toLowerCase())
+      ).length;
+      return { chunk: c, weight: Math.max(matchCount, 0.1), allocated: 0 };
+    });
+
+    const totalWeight = slideAllocations.reduce((s, a) => s + a.weight, 0);
+    const maxPerSlide = Math.ceil(quantity / slideAllocations.length) * MCQ_GENERATION_CONSTRAINTS.MAX_QUESTIONS_PER_SLIDE_MULTIPLIER;
+    
+    let remaining = quantity;
+    for (const alloc of slideAllocations) {
+      if (remaining <= 0) break;
+      const proposed = Math.round((alloc.weight / totalWeight) * quantity);
+      alloc.allocated = Math.min(proposed, maxPerSlide, remaining);
+      remaining -= alloc.allocated;
+    }
+    for (let i = 0; remaining > 0; i++) {
+      const idx = i % slideAllocations.length;
+      if (slideAllocations[idx].allocated < maxPerSlide) {
+        slideAllocations[idx].allocated++;
+        remaining--;
+      }
+    }
+
     const templatePrompt = resolveTemplatePrompt(input.templateId, audienceLevel);
     const audiencePrompt = resolveAudiencePrompt(audienceLevel);
-    const focusKwStr = (input.focusKeywords && input.focusKeywords.length > 0)
-      ? input.focusKeywords.join(', ')
-      : '(Toàn bộ nội dung tài liệu)';
-
     const typeRequirement = questionType === 'mixed'
       ? `Phân bổ các dạng câu hỏi hỗn hợp: MULTIPLE_CHOICE (Trắc nghiệm), FILL_BLANK (Điền từ), TRUE_FALSE (Đúng/Sai), ESSAY (Tự luận).`
       : `TẤT CẢ các câu hỏi phải thuộc loại: ${questionType}.`;
 
-    const userPromptContent = `
+    // ── STAGE 4: MCQ Generation (Batching with Context) ──
+    // Max 15 calls in total => Stage 2 takes 1. Stage 4 can take up to 14.
+    const BATCH_SIZE = Math.ceil(slideAllocations.length / 14) || 1;
+    const batches = [];
+    for (let i = 0; i < slideAllocations.length; i += BATCH_SIZE) {
+      batches.push(slideAllocations.slice(i, i + BATCH_SIZE).filter(a => a.allocated > 0));
+    }
+
+    const validBatches = batches.filter(b => b.length > 0);
+    let parsedQuestions: GeneratedQuestionOutput[] = [];
+    let generationErrors = 0;
+
+    // Use asyncMapConcurrent with max 4 parallel requests to avoid Rate Limits
+    const batchResults = await asyncMapConcurrent(validBatches, 4, async (batch) => {
+      let contextText = '';
+      let instructionsText = '';
+      
+      batch.forEach((alloc) => {
+        const originIdx = processedChunks.findIndex(p => p.id === alloc.chunk.id);
+        const prev = originIdx > 0 ? processedChunks[originIdx - 1].content : '';
+        const next = originIdx < processedChunks.length - 1 ? processedChunks[originIdx + 1].content : '';
+        
+        contextText += `--- BỐI CẢNH CHO SLIDE ID ${alloc.chunk.id} ---\n[Trang Trước]: ${prev}\n[SLIDE CHÍNH]: ${alloc.chunk.content}\n[Trang Sau]: ${next}\n\n`;
+        instructionsText += `- BẮT BUỘC sinh đúng ${alloc.allocated} câu hỏi bám sát SLIDE ID ${alloc.chunk.id} ở trên.\n`;
+      });
+
+      const userPromptContent = `
 DOCUMENT_CONTEXT:
 ${contextText}
 
-FOCUS_KEYWORDS: ${focusKwStr}
+FOCUS_KEYWORDS: ${finalFocusKeywords.join(', ')}
 AUDIENCE_LEVEL: ${audienceLevel} (${audiencePrompt})
 MỨC ĐỘ KHÓ YÊU CẦU: ${difficulty}
-CHẾ ĐỘ: ${mode === 'exam' ? 'Đề thi chính thức (ngôn ngữ chuẩn mực học thuật)' : 'Luyện tập (ngôn ngữ thân thiện)'}
-SỐ LƯỢNG CÂU HỎI: ${quantity} câu.
+SỐ LƯỢNG VÀ PHÂN BỔ:
+${instructionsText}
 YÊU CẦU DẠNG CÂU HỎI: ${typeRequirement}
 ĐỊNH HƯỚNG BỘ ĐỀ (TEMPLATE): ${templatePrompt}
 ${sanitizedInstruction ? `HƯỚNG DẪN THÊM CỦA GIÁO VIÊN: ${sanitizedInstruction}` : ''}
 
-QUY ĐỊNH ĐỊNH DẠNG ĐẦU RA (OUTPUT_SCHEMA):
-Bạn phải trả về đúng 1 JSON object có cấu trúc:
+QUY ĐỊNH ĐỊNH DẠNG ĐẦU RA (OUTPUT_SCHEMA) (BẮT BUỘC TRẢ VỀ JSON KHÔNG MARKDOWN):
 {
   "questions": [
     {
       "content": "<nội dung câu hỏi>",
       "type": "MULTIPLE_CHOICE" | "FILL_BLANK" | "ESSAY" | "TRUE_FALSE",
       "score": <điểm số từ 0.5 đến 10>,
-      "options": { "A": "...", "B": "...", "C": "...", "D": "..." }, // bắt buộc cho MULTIPLE_CHOICE và TRUE_FALSE
+      "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
       "correctAnswer": "<đáp án đúng, dạng string hoặc array string cho FILL_BLANK>",
       "explanation": "<giải thích chi tiết tại sao đáp án này đúng, dựa trên tài liệu>",
       "difficulty": "easy" | "medium" | "hard",
       "sourceKeyword": "<từ khoá trong tài liệu liên quan đến câu này>",
-      "sourceChunkId": <số nguyên CHUNK_ID đã chú thích ở trên, hoặc null nếu không có>
+      "sourceChunkId": <số nguyên ID của slide chính được yêu cầu>
     }
   ]
 }
 
-Lưu ý:
-- Với MULTIPLE_CHOICE: options gồm 4 đáp án A, B, C, D; correctAnswer là "A", "B", "C" hoặc "D".
-- Với TRUE_FALSE: options là {"A": "Đúng", "B": "Sai"}; correctAnswer là "A" hoặc "B".
-- Với FILL_BLANK: câu hỏi phải có chỗ trống "_____"; correctAnswer là chuỗi hoặc mảng các từ điền hợp lệ.
-- Với ESSAY: không cần options; correctAnswer là gợi ý đáp án/hướng dẫn chấm.
-- CHỈ trả về JSON thuần túy, KHÔNG dùng markdown fence (\`\`\`json).
+RÀNG BUỘC KHẮT KHE:
+1. MULTIPLE_CHOICE phải có đúng 4 phương án A, B, C, D. Phân bổ correctAnswer đều nhau.
+2. Tuyệt đối không dùng "Tất cả đều đúng" hay "Tất cả đều sai".
+3. Độ dài các distractors không được chênh lệch quá 40%.
+4. Không dùng câu hỏi phủ định kép.
 `;
 
-    // ── 3. Gọi AI Provider ──
-    const messages = [
-      { role: 'system' as const, content: QUESTION_GEN_SYSTEM_PROMPT },
-      { role: 'user' as const, content: userPromptContent },
-    ];
+      const messages = [
+        { role: 'system' as const, content: QUESTION_GEN_SYSTEM_PROMPT },
+        { role: 'user' as const, content: userPromptContent },
+      ];
 
-    let aiResult: ProviderChatResult;
-    try {
-      aiResult = await aiProviderService.chat({
-        messages,
-        modelId: input.modelId || null,
-        temperature: 0.5,
-        maxTokens: 8000,
-        jsonMode: true,
-        taskType: 'question_generation',
-        userId,
-      });
-    } catch (err: any) {
-      throw new AppError(err.message || 'Không thể kết nối dịch vụ AI để tạo câu hỏi', err.statusCode || 500);
-    }
-
-    // ── 4. Validate Output với Zod & Retry 1 lần nếu cần ──
-    let parsedQuestions: GeneratedQuestionOutput[] = [];
-    let parseSuccess = false;
-    let lastZodError = '';
-
-    const tryParseQuestions = (text: string): boolean => {
       try {
-        const rawObj = parseJSONStrict(text);
-        if (Array.isArray(rawObj?.questions)) {
-          // Normalize trước khi validate
-          rawObj.questions = rawObj.questions.map((q: any) => ({
-            content: q.content || q.questionText || q.question || '',
-            type: (q.type || 'MULTIPLE_CHOICE').toUpperCase(),
-            score: Number(q.score) || DEFAULT_SCORES[(q.type || '').toUpperCase()] || 1.0,
-            options: q.options || undefined,
-            correctAnswer: q.correctAnswer || q.correct_answer || q.answer || undefined,
-            explanation: q.explanation || 'Giải thích chi tiết theo nội dung bài học.',
-            difficulty: (q.difficulty || difficulty || 'medium').toLowerCase(),
-            sourceKeyword: q.sourceKeyword || q.source_keyword || 'Nội dung bài học',
-            sourceChunkId: q.sourceChunkId || q.source_chunk_id || null,
-          }));
-        }
-
-        const validated = GenerateQuestionsOutputSchema.safeParse(rawObj);
-        if (validated.success) {
-          parsedQuestions = validated.data.questions;
-          return true;
-        } else {
-          lastZodError = validated.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
-          return false;
-        }
-      } catch (err: any) {
-        lastZodError = err?.message || 'Lỗi cú pháp JSON';
-        return false;
-      }
-    };
-
-    parseSuccess = tryParseQuestions(aiResult.text);
-
-    if (!parseSuccess) {
-      // Retry 1 lần duy nhất với hướng dẫn sửa lỗi cụ thể
-      try {
-        console.warn(`[QuestionGen] Zod validation failed on attempt 1 (${lastZodError}), retrying once...`);
-        const retryMessages = [
-          ...messages,
-          { role: 'assistant' as const, content: aiResult.text },
-          {
-            role: 'user' as const,
-            content: `Phản hồi trước không khớp cấu trúc JSON yêu cầu. Các lỗi cụ thể: ${lastZodError}. Vui lòng sửa lại ĐÚNG định dạng JSON {"questions": [...]}, không có text thừa.`,
-          },
-        ];
-
-        const retryResult = await aiProviderService.chat({
-          messages: retryMessages,
+        let aiResult = await aiProviderService.chat({
+          messages,
           modelId: input.modelId || null,
-          temperature: 0.2,
+          temperature: 0.5,
           maxTokens: 8000,
           jsonMode: true,
           taskType: 'question_generation',
           userId,
         });
 
-        parseSuccess = tryParseQuestions(retryResult.text);
-      } catch (retryErr: any) {
-        console.warn('[QuestionGen] Retry failed:', retryErr?.message);
+        const tryParse = (text: string) => {
+          const rawObj = parseJSONStrict(text);
+          if (Array.isArray(rawObj?.questions)) {
+            rawObj.questions = rawObj.questions.map((q: any) => ({
+              ...q,
+              type: (q.type || 'MULTIPLE_CHOICE').toUpperCase(),
+              score: Number(q.score) || DEFAULT_SCORES[(q.type || '').toUpperCase()] || 1.0,
+              difficulty: (q.difficulty || difficulty || 'medium').toLowerCase(),
+            }));
+            const validated = GenerateQuestionsOutputSchema.safeParse(rawObj);
+            if (validated.success) return validated.data.questions;
+          }
+          return null;
+        };
+
+        let batchQuestions = tryParse(aiResult.text);
+        
+        if (!batchQuestions) {
+          const retryResult = await aiProviderService.chat({
+            messages: [...messages, { role: 'assistant' as const, content: aiResult.text }, { role: 'user' as const, content: 'Sửa lỗi JSON và đảm bảo định dạng OUTPUT_SCHEMA chính xác.' }],
+            modelId: input.modelId || null, temperature: 0.2, maxTokens: 8000, jsonMode: true, taskType: 'question_generation', userId,
+          });
+          batchQuestions = tryParse(retryResult.text);
+        }
+
+        return { success: true, questions: batchQuestions || [] };
+      } catch (err) {
+        return { success: false, questions: [] };
       }
+    });
+
+    for (const res of batchResults) {
+      if (!res.success) generationErrors++;
+      else if (res.questions.length > 0) parsedQuestions.push(...res.questions);
     }
 
-    if (!parseSuccess || parsedQuestions.length === 0) {
-      throw new AppError(`AI_INVALID_OUTPUT: AI không trả về dữ liệu câu hỏi đúng định dạng (${lastZodError}). Vui lòng thử lại hoặc chọn model khác.`, 502);
+    if (parsedQuestions.length === 0) {
+      throw new AppError('Không thể sinh được câu hỏi nào, vui lòng thử lại.', 502);
     }
 
+    // ── STAGE 5: Post-Generation QA (Grounding & Duplicate) ──
+    const generatedTextsForEmbed = parsedQuestions.map(q => 
+       q.content + ' ' + (q.options ? JSON.stringify(q.options) : '') + ' ' + JSON.stringify(q.correctAnswer)
+    );
+    const qEmbeddings = await aiProviderService.generateEmbeddings(generatedTextsForEmbed);
 
-    // ── 5. Lưu vào Database (test_sets: DRAFT + questions: DRAFT) ──
+    const validQuestions: {q: GeneratedQuestionOutput, index: number}[] = [];
+    const mcqCounts = { A: 0, B: 0, C: 0, D: 0 };
+    let removedDuplicateCount = 0;
+    
+    for (let i = 0; i < parsedQuestions.length; i++) {
+      const q = parsedQuestions[i];
+      const qVec = qEmbeddings[i];
+      let duplicate = false;
+
+      for (let j = 0; j < validQuestions.length; j++) {
+         const vVec = qEmbeddings[validQuestions[j].index]; 
+         if (qVec && vVec && qVec.length > 0 && vVec.length > 0) {
+           if (cosineSimilarity(qVec, vVec) > MCQ_GENERATION_CONSTRAINTS.DUPLICATE_THRESHOLD) {
+             duplicate = true; break;
+           }
+         }
+      }
+      if (duplicate) {
+        removedDuplicateCount++;
+        continue; 
+      }
+
+      let groundingScore = 1.0;
+      if (q.sourceChunkId && chunkMap.has(q.sourceChunkId) && qVec && qVec.length > 0) {
+         const cVec = chunkMap.get(q.sourceChunkId)!.embedding;
+         if (cVec && cVec.length > 0) {
+            groundingScore = cosineSimilarity(qVec, cVec);
+         }
+      }
+      if (groundingScore < MCQ_GENERATION_CONSTRAINTS.GROUNDING_THRESHOLD) {
+         (q as any)._qaFlag = 'LOW_GROUNDING';
+      }
+
+      if (q.type === 'MULTIPLE_CHOICE' && q.options && q.correctAnswer) {
+         const ans = q.correctAnswer as 'A' | 'B' | 'C' | 'D';
+         if (mcqCounts[ans] !== undefined) {
+            const totalMCQ = mcqCounts.A + mcqCounts.B + mcqCounts.C + mcqCounts.D;
+            if (totalMCQ >= 4 && (mcqCounts[ans] / totalMCQ) > MCQ_GENERATION_CONSTRAINTS.ANSWER_KEY_MAX_DEVIATION_RATIO) {
+               const keys = ['A', 'B', 'C', 'D'] as ('A' | 'B' | 'C' | 'D')[];
+               const minKey = keys.reduce((min, k) => mcqCounts[k] < mcqCounts[min] ? k : min, keys[0]);
+               if (minKey !== ans) {
+                 const temp = (q.options as any)[ans];
+                 (q.options as any)[ans] = (q.options as any)[minKey];
+                 (q.options as any)[minKey] = temp;
+                 q.correctAnswer = minKey;
+                 mcqCounts[minKey]++;
+               } else {
+                 mcqCounts[ans]++;
+               }
+            } else {
+               mcqCounts[ans]++;
+            }
+         }
+      }
+
+      validQuestions.push({ q, index: i });
+    }
+
+    const finalQuestions = validQuestions.map(vq => vq.q);
+    const finalNotice = removedDuplicateCount > 0 ? `Đã tạo ${finalQuestions.length}/${quantity} câu (loại bỏ ${removedDuplicateCount} câu trùng lặp).` : null;
+
+    // ── STAGE 6: Database Insert ──
     const client = await db.connect();
     try {
       await client.query('BEGIN');
 
-      const testName = input.name?.trim() || `Bộ đề AI ${new Date().toLocaleDateString('vi-VN')} (${parsedQuestions.length} câu)`;
-      const totalScore = parsedQuestions.reduce((sum, q) => sum + (Number(q.score) || DEFAULT_SCORES[q.type] || 1), 0);
+      const testName = input.name?.trim() || `Bộ đề AI ${new Date().toLocaleDateString('vi-VN')} (${finalQuestions.length} câu)`;
+      const totalScore = finalQuestions.reduce((sum, q) => sum + (Number(q.score) || DEFAULT_SCORES[q.type] || 1), 0);
 
-      // Tìm config_id nếu có
       let configId: number | null = null;
       if (input.configKey) {
-        const cfgRes = await client.query(
-          'SELECT id FROM ai_task_configs WHERE course_id = $1 AND user_id = $2 LIMIT 1',
-          [input.configKey, userId]
-        );
+        const cfgRes = await client.query('SELECT id FROM ai_task_configs WHERE course_id = $1 AND user_id = $2 LIMIT 1', [input.configKey, userId]);
         configId = cfgRes.rows[0]?.id || null;
       }
 
+      const generationConfig = {
+        sourceIds: input.sourceIds || [],
+        focusKeywords: finalFocusKeywords,
+        audienceLevel,
+        difficulty,
+        templateId: input.templateId || 'basic_quiz',
+        modelId: input.modelId || null,
+        mode,
+        requestedCount: quantity,
+        generatedCount: finalQuestions.length,
+        duplicateRemoved: removedDuplicateCount,
+        notice: finalNotice
+      };
+
       const testSetRes = await client.query(
-        `INSERT INTO test_sets
-           (name, config_id, total_questions, total_score, is_active, created_by, generation_config, ai_model_id, status)
-         VALUES ($1, $2, $3, $4, true, $5, $6, $7, 'DRAFT')
-         RETURNING *`,
-        [
-          testName,
-          configId,
-          parsedQuestions.length,
-          totalScore,
-          userId,
-          JSON.stringify({
-            sourceIds: input.sourceIds || [],
-            focusKeywords: input.focusKeywords || [],
-            audienceLevel,
-            difficulty,
-            templateId: input.templateId || 'basic_quiz',
-            modelId: input.modelId || null,
-            mode,
-          }),
-          input.modelId || null,
-        ]
+        `INSERT INTO test_sets (name, config_id, total_questions, total_score, is_active, created_by, generation_config, ai_model_id, status)
+         VALUES ($1, $2, $3, $4, true, $5, $6, $7, 'DRAFT') RETURNING *`,
+        [testName, configId, finalQuestions.length, totalScore, userId, JSON.stringify(generationConfig), input.modelId || null]
       );
       const testSet = testSetRes.rows[0];
 
       const insertedQuestions: GeneratedQuestionRecord[] = [];
-      for (const q of parsedQuestions) {
+      for (const q of finalQuestions) {
         const qScore = Number(q.score) || DEFAULT_SCORES[q.type] || 1.0;
-        // Kiểm tra xem sourceChunkId có thực sự thuộc chunkMap không
         const validChunkId = (q.sourceChunkId && chunkMap.has(q.sourceChunkId)) ? q.sourceChunkId : null;
-
+        const note = (q as any)._qaFlag ? (q.explanation ? q.explanation + ` [QA: ${(q as any)._qaFlag}]` : `[QA: ${(q as any)._qaFlag}]`) : q.explanation;
+        
         const qRes = await client.query(
-          `INSERT INTO questions
-             (test_set_id, type, content, score, status, options, correct_answer, explanation, difficulty, source_keyword, source_chunk_id)
-           VALUES ($1, $2, $3, $4, 'DRAFT', $5, $6, $7, $8, $9, $10)
-           RETURNING *`,
-          [
-            testSet.id,
-            q.type,
-            q.content,
-            qScore,
-            q.options ? JSON.stringify(q.options) : null,
-            JSON.stringify(q.correctAnswer),
-            q.explanation || null,
-            q.difficulty || difficulty,
-            q.sourceKeyword || null,
-            validChunkId,
-          ]
+          `INSERT INTO questions (test_set_id, type, content, score, status, options, correct_answer, explanation, difficulty, source_keyword, source_chunk_id)
+           VALUES ($1, $2, $3, $4, 'DRAFT', $5, $6, $7, $8, $9, $10) RETURNING *`,
+          [testSet.id, q.type, q.content, qScore, q.options ? JSON.stringify(q.options) : null, JSON.stringify(q.correctAnswer), note || null, q.difficulty || difficulty, q.sourceKeyword || null, validChunkId]
         );
         insertedQuestions.push(qRes.rows[0]);
       }
-
       await client.query('COMMIT');
-
-      return {
-        status: 'SUCCESS',
-        testSet,
-        questions: insertedQuestions,
+      return { 
+        status: 'SUCCESS', 
+        testSet, 
+        questions: insertedQuestions, 
+        message: finalNotice || undefined 
       };
     } catch (dbErr) {
       await client.query('ROLLBACK');

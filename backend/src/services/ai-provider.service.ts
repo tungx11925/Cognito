@@ -381,6 +381,91 @@ class AIProviderService {
   async generate(options: ProviderChatOptions): Promise<ProviderChatResult> {
     return this.chat(options);
   }
+
+  /**
+   * Gọi AI (model fast) 1 lần duy nhất để chấm điểm độ quan trọng của tất cả các slides.
+   * Dùng cho STAGE 2 của thuật toán MCQ.
+   */
+  async getAiSalienceScores(slides: { id: number; title: string; keywords: string[] }[]): Promise<Record<number, number>> {
+    if (slides.length === 0) return {};
+    const slideText = slides.map(s => `[ID: ${s.id}] Tiêu đề: ${s.title || '(Không có)'} | Từ khoá: ${s.keywords.join(', ')}`).join('\n');
+    
+    const prompt = `Bạn là một chuyên gia phân tích bài giảng. Dưới đây là danh sách các slide (gồm ID, tiêu đề và từ khoá) của một bài giảng.
+Hãy chấm điểm độ quan trọng cốt lõi (từ 1 đến 10) cho nội dung của TỪNG slide dựa trên mức độ quan trọng của nó đối với việc ra đề thi. 
+- Slide chứa định nghĩa, quy trình, khái niệm chính, phân loại -> Điểm cao (7-10).
+- Slide giới thiệu, mục lục, chào hỏi, kết luận, cảm ơn -> Điểm thấp (1-3).
+- Slide ví dụ phụ, hình ảnh minh hoạ -> Điểm trung bình (4-6).
+
+CHỈ TRẢ VỀ JSON theo định dạng { "<ID_Slide>": <điểm_số> }. Không giải thích gì thêm.
+Danh sách slide:
+${slideText}`;
+
+    try {
+      const result = await this.chat({
+        messages: [{ role: 'user', content: prompt }],
+        tier: 'fast', // Dùng model nhanh/rẻ
+        taskType: 'question_generation',
+        jsonMode: true,
+      });
+
+      let parsed = {};
+      try {
+        let cleaned = result.text.trim();
+        const start = cleaned.indexOf('{');
+        const end = cleaned.lastIndexOf('}');
+        if (start !== -1 && end !== -1) cleaned = cleaned.substring(start, end + 1);
+        parsed = JSON.parse(cleaned);
+      } catch (e) {
+        console.error('[AIProvider] Failed to parse AI salience score JSON:', result.text);
+      }
+
+      const scores: Record<number, number> = {};
+      for (const s of slides) {
+        const rawScore = (parsed as any)[s.id?.toString()];
+        const score = typeof rawScore === 'number' ? rawScore : parseInt(rawScore, 10);
+        scores[s.id] = (!isNaN(score) && score >= 1 && score <= 10) ? score : 5; // default 5 nếu lỗi
+      }
+      return scores;
+    } catch (error) {
+      console.warn('[AIProvider] getAiSalienceScores failed, returning default scores:', error);
+      const scores: Record<number, number> = {};
+      slides.forEach(s => scores[s.id] = 5);
+      return scores;
+    }
+  }
+
+  /**
+   * Tạo embeddings cho một danh sách các đoạn text (dùng Gemini text-embedding-004).
+   * Hỗ trợ cho STAGE 5 Grounding & Duplicate Check.
+   */
+  async generateEmbeddings(texts: string[]): Promise<number[][]> {
+    if (!texts || texts.length === 0) return [];
+    
+    const key = process.env.GEMINI_API_KEY;
+    if (!key || key.includes('your_')) {
+      console.warn('[AIProvider] GEMINI_API_KEY is not available for embeddings.');
+      return texts.map(() => []);
+    }
+
+    try {
+      const genAI = new GoogleGenerativeAI(key);
+      const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+      
+      // Batch embedding
+      const requests = texts.map(t => ({
+        content: { role: 'user', parts: [{ text: t }] }
+      }));
+      
+      const result = await model.batchEmbedContents({
+        requests
+      });
+      
+      return result.embeddings.map(e => e.values);
+    } catch (error: any) {
+      console.error('[AIProvider] generateEmbeddings failed:', error?.message);
+      return texts.map(() => []);
+    }
+  }
 }
 
 export const aiProviderService = new AIProviderService();
