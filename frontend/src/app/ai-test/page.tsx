@@ -28,6 +28,7 @@ interface AIConfig {
 interface TestSet {
   id: number; name: string; total_questions: number; total_score: number;
   is_active: boolean; created_at: string; status?: "DRAFT" | "APPROVED";
+  generation_config?: any;
 }
 
 interface AIModelOption {
@@ -867,6 +868,11 @@ export default function AITestPage() {
                       <p className="text-base font-bold text-[#1a3a2a]">{Number(ts.total_score).toFixed(1)}</p>
                     </div>
                   </div>
+                  {ts.generation_config && ts.generation_config.duplicateRemoved > 0 && (
+                    <div className="mb-3 px-2 py-1 bg-amber-50 rounded text-[10px] text-amber-700 font-medium">
+                      Đã loại bỏ {ts.generation_config.duplicateRemoved} câu trùng lặp
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <button onClick={() => setEditTarget(ts)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-[#1a3a2a] bg-[#f0fdf4] border border-[#d1fae5] rounded-xl hover:bg-[#dcfce7] transition-colors">

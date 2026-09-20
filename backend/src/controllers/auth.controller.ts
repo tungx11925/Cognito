@@ -77,6 +77,15 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
+    if (result.requiresPasswordChange) {
+      return res.status(200).json({
+        requiresPasswordChange: true,
+        email: result.email,
+        organizationId: result.organizationId,
+        message: 'Bạn cần đổi mật khẩu để kích hoạt tài khoản nhà trường cấp'
+      });
+    }
+
     res.cookie('token', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -313,6 +322,60 @@ export const changePassword = async (req: any, res: Response) => {
     }
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+  }
+};
+
+export const forceChangePassword = async (req: Request, res: Response) => {
+  try {
+    const { email, currentPassword, newPassword } = req.body;
+    
+    // Validate credentials
+    const loginResult = await authService.login({ email, password: currentPassword });
+    // This login will return requiresPasswordChange: true if it's the correct user.
+    if (!loginResult.requiresPasswordChange) {
+      return res.status(400).json({ error: 'Tài khoản này không yêu cầu đổi mật khẩu' });
+    }
+
+    // Now do the actual change
+    // Find the user ID
+    const { db } = require('../db');
+    const userRes = await db.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+    if (userRes.rows.length === 0) throw new Error('Không tìm thấy user');
+    const userId = userRes.rows[0].id;
+
+    await authService.changePassword(userId, currentPassword, newPassword);
+
+    // Update the organization_members status to ACTIVE
+    await db.query(
+      "UPDATE organization_members SET status = 'ACTIVE' WHERE user_id = $1 AND status = 'PENDING_FIRST_LOGIN'",
+      [userId]
+    );
+
+    // Perform a normal login response
+    // For this, we just generate a fresh token
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(
+      { id: userId, email: email.toLowerCase().trim(), role: 'student' }, 
+      process.env.JWT_SECRET_KEY!, 
+      { expiresIn: '24h' }
+    );
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+
+    const userDetails = await authService.getMe(userId);
+
+    res.status(200).json({ 
+      message: 'Kích hoạt tài khoản thành công',
+      token,
+      user: userDetails
+    });
+  } catch (error: any) {
+    console.error('Force change password error:', error);
+    res.status(500).json({ error: error.message || 'Lỗi server' });
   }
 };
 

@@ -56,7 +56,7 @@ interface StudyContextType {
   isAuthenticated: boolean;
   setIsAuthenticated: (auth: boolean) => void;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; requires2FA?: boolean; email?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; requires2FA?: boolean; requiresPasswordChange?: boolean; email?: string }>;
   register: (name: string, phone: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   showLanding: boolean;
@@ -431,7 +431,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   // Auth API Calls
-  const login = async (email: string, password: string): Promise<{ success: boolean; requires2FA?: boolean; email?: string }> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; requires2FA?: boolean; requiresPasswordChange?: boolean; email?: string }> => {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
@@ -443,6 +443,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (data.requires2FA) {
           triggerMessage(data.message || 'Vui lòng nhập mã xác thực từ email', 'success');
           return { success: true, requires2FA: true, email: data.email };
+        }
+        if (data.requiresPasswordChange) {
+          triggerMessage(data.message || 'Vui lòng đổi mật khẩu để kích hoạt', 'success');
+          return { success: true, requiresPasswordChange: true, email: data.email };
         }
         localStorage.setItem('token', data.token);
         setActiveUser(data.user);
