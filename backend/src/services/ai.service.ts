@@ -1,7 +1,6 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import Groq from 'groq-sdk';
 import { parserService } from './parser.service';
 import { generateQuestionsWithAI, generateMindmapWithAI } from '../utils/ai-engine.service';
+import { aiProviderService } from './ai-provider.service';
 import { db } from '../db';
 import { AppError } from '../utils/AppError';
 
@@ -13,10 +12,8 @@ export class AiService {
     const docTitle = document ? document.title : 'Tài liệu học tập';
     const docDesc = document ? document.description : '';
     const docSolution = document ? document.solution_text : '';
-    
+
     let reply = '';
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    const groqApiKey = process.env.GROQ_API_KEY;
 
     let documentText = '';
     if (document && document.doc_url && (document.doc_url.endsWith('.docx') || document.doc_url.endsWith('.doc'))) {
@@ -36,45 +33,25 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
 4. Nếu người dùng hỏi các môn khác: Hãy đóng vai một gia sư tận tâm, giải thích dễ hiểu, súc tích.
 5. Trình bày nội dung đẹp mắt bằng Markdown (in đậm, danh sách, blockquote, hoặc MathJax/LaTeX nếu là công thức toán).`;
 
-    // 1. TRY GROQ AI
-    if (groqApiKey && !groqApiKey.includes('your_')) {
-      try {
-        const groq = new Groq({ apiKey: groqApiKey });
-        let apiMessages: any[] = [{ role: "system", content: systemPrompt }];
-        if (history && Array.isArray(history)) {
-          const recentHistory = history.slice(-4);
-          apiMessages = apiMessages.concat(recentHistory);
-        }
-        apiMessages.push({ role: "user", content: message });
-
-        const completion = await groq.chat.completions.create({
-          messages: apiMessages,
-          model: process.env.GROQ_CHAT_MODEL || "groq/compound-mini",
-          temperature: 0.7,
-          max_tokens: 1024,
-        });
-
-        reply = completion.choices[0]?.message?.content || "";
-        if (reply) return reply;
-      } catch (aiError) {
-        console.error("Groq AI Error in /ai/chat, falling back to Gemini:", aiError);
+    // Gọi AI qua AIProviderAdapter (GroqAdapter → GeminiAdapter, có timeout + log)
+    try {
+      const apiMessages: any[] = [{ role: "system", content: systemPrompt }];
+      if (history && Array.isArray(history)) {
+        apiMessages.push(...history.slice(-4));
       }
-    }
+      apiMessages.push({ role: "user", content: message });
 
-    // 2. TRY GEMINI AI
-    if (geminiApiKey && !geminiApiKey.includes('your_')) {
-      try {
-        const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
-        const model = genAI.getGenerativeModel({ model: modelName });
-        
-        const prompt = `${systemPrompt}\n\nCâu hỏi của người dùng: "${message}"`;
-        const result = await model.generateContent(prompt);
-        reply = result.response.text();
-        if (reply) return reply;
-      } catch (aiError) {
-        console.error("Gemini AI Error in /ai/chat:", aiError);
-      }
+      const result = await aiProviderService.chat({
+        messages: apiMessages,
+        temperature: 0.7,
+        maxTokens: 1024,
+        taskType: 'chat',
+        modelOverride: { groq: process.env.GROQ_CHAT_MODEL || 'groq/compound-mini' },
+      });
+      reply = result.text;
+      if (reply) return reply;
+    } catch (aiError) {
+      console.error('AI Provider Error in /ai/chat:', aiError);
     }
 
     // FALLBACK: PREMIUM SIMULATION (Development ONLY)
@@ -263,8 +240,6 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
    * Generate flashcards from note content
    */
   async generateFlashcardsFromText(text: string) {
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    const groqApiKey = process.env.GROQ_API_KEY;
     let cards: {front: string, back: string}[] = [];
 
     const prompt = `Bạn là một chuyên gia giáo dục thiết kế thẻ ghi nhớ (Flashcards). Nhiệm vụ của bạn là đọc đoạn văn bản dưới đây và trích xuất ra các cặp thông tin quan trọng nhất để làm Flashcard.
@@ -289,27 +264,21 @@ Văn bản cần xử lý:
 ${text}
 """`;
 
-    if (groqApiKey && !groqApiKey.includes('your_')) {
-      const groq = new Groq({ apiKey: groqApiKey });
-      const completion = await groq.chat.completions.create({
-        messages: [{ role: "user", content: prompt }],
-        model: "llama-3.1-8b-instant",
+    try {
+      // Đi qua AIProviderAdapter (Groq llama-3.1-8b-instant → Gemini-1.5-flash, giữ nguyên model cũ)
+      const result = await aiProviderService.chat({
+        messages: [{ role: 'user', content: prompt }],
         temperature: 0.5,
+        maxTokens: 4096,
+        jsonMode: true,
+        taskType: 'flashcard',
+        modelOverride: { groq: 'llama-3.1-8b-instant', gemini: 'gemini-1.5-flash' },
       });
-      const responseText = completion.choices[0]?.message?.content || "[]";
-      const parsed = this.parseFlashcardResponse(responseText);
+      const parsed = this.parseFlashcardResponse(result.text);
       if (parsed) cards = parsed;
-    } else if (geminiApiKey && !geminiApiKey.includes('your_')) {
-      const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
-      const parsed = this.parseFlashcardResponse(responseText);
-      if (parsed) cards = parsed;
-    } else {
-      if (process.env.NODE_ENV === 'production') {
-        throw new AppError('AI Service is temporarily unavailable or not configured. Please contact the administrator.', 503);
-      }
+    } catch (aiError: any) {
+      if (process.env.NODE_ENV === 'production') throw aiError;
+      console.error('[Flashcards] AI Provider error, using mock in dev:', aiError?.message);
       cards = [
         { front: "Làm thế nào để tạo flashcard thực sự từ ghi chú?", back: "Bạn cần cung cấp GROQ_API_KEY hoặc GEMINI_API_KEY trong file .env" },
         { front: "Mẫu câu hỏi (Mock)", back: "Đây là câu trả lời mẫu do hệ thống không có AI Key." }

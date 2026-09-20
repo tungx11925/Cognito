@@ -3,9 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { Panel, Group, Separator } from "react-resizable-panels";
-import { X, Save, CheckCircle2, Clock, Sparkles, Send, Loader2, Play, BookOpen } from "lucide-react";
+import { X, Save, CheckCircle2, Clock, Sparkles, Send, Loader2, Play, BookOpen, Trash2, BadgeCheck, FileEdit } from "lucide-react";
 import toast from "react-hot-toast";
-import { getQuestions, bulkUpdateQuestions } from "@/services/ai-test.service";
+import { getQuestions, bulkUpdateQuestions, approveTestSet, deleteQuestion, getTestSetDetail, updateQuestion } from "@/services/ai-test.service";
 import { apiFetch } from "@/services/api";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -18,8 +18,12 @@ interface Question {
   status: "DRAFT" | "APPROVED";
   options?: Option;
   correct_answer?: any;
+  explanation?: string | null;
+  difficulty?: string | null;
+  source_keyword?: string | null;
 }
 interface FormValues { questions: Question[] }
+
 
 const TYPE_LABEL: Record<string, string> = {
   MULTIPLE_CHOICE: "Trắc nghiệm",
@@ -39,6 +43,9 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
   const [activeTab, setActiveTab] = useState<typeof TABS[number]>("MULTIPLE_CHOICE");
   const [loading, setLoading] = useState(true);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [testSetStatus, setTestSetStatus] = useState<"DRAFT" | "APPROVED">("DRAFT");
+  const [approving, setApproving] = useState(false);
+  const [savingSingleId, setSavingSingleId] = useState<number | null>(null);
 
   // Chat state
   const [chatInput, setChatInput] = useState("");
@@ -47,7 +54,7 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
   ]);
   const [chatLoading, setChatLoading] = useState(false);
 
-  const { register, control, handleSubmit, reset } = useForm<FormValues>({
+  const { register, control, handleSubmit, reset, getValues } = useForm<FormValues>({
     defaultValues: { questions: [] },
   });
   const { fields, append } = useFieldArray({ control, name: "questions" });
@@ -60,7 +67,64 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
         else toast.error("Không tải được câu hỏi");
       })
       .finally(() => setLoading(false));
+    // Trạng thái bộ đề (DRAFT/APPROVED) từ GET /api/test-sets/:id
+    getTestSetDetail(testSetId)
+      .then((ts: any) => {
+        if (ts && !ts.error && ts.status) setTestSetStatus(ts.status);
+      })
+      .catch(() => {});
   }, [testSetId, reset]);
+
+  const handleApprove = async () => {
+    setApproving(true);
+    const tid = toast.loading("Đang duyệt bộ đề...");
+    const r = await approveTestSet(testSetId);
+    toast.dismiss(tid);
+    setApproving(false);
+    if (r?.error) { toast.error(r.error); return; }
+    setTestSetStatus("APPROVED");
+    const updated = (getValues().questions || []).map(q => ({ ...q, status: "APPROVED" as const }));
+    reset({ questions: updated });
+    toast.success("Đã duyệt & lưu! Bộ đề đã sẵn sàng cho học sinh.");
+  };
+
+  const handleSaveSingleQuestion = async (idx: number) => {
+    const q = getValues(`questions.${idx}`);
+    if (!q || !q.id) return;
+    setSavingSingleId(q.id);
+    const tid = toast.loading(`Đang lưu câu hỏi ${idx + 1}...`);
+    try {
+      const res = await updateQuestion(q.id, {
+        content: q.content,
+        score: q.score,
+        options: q.options,
+        correct_answer: q.correct_answer,
+        explanation: q.explanation,
+        difficulty: q.difficulty,
+        status: q.status,
+      });
+      toast.dismiss(tid);
+      if (res?.error) {
+        toast.error("Lỗi: " + res.error);
+      } else {
+        toast.success(`Đã lưu câu hỏi ${idx + 1}!`);
+      }
+    } catch (err: any) {
+      toast.dismiss(tid);
+      toast.error(err.message || "Lỗi khi lưu câu hỏi");
+    } finally {
+      setSavingSingleId(null);
+    }
+  };
+
+  const handleDeleteQuestion = async (qId: number) => {
+    if (!window.confirm("Bạn có chắc muốn xoá câu hỏi này?")) return;
+    const r = await deleteQuestion(qId);
+    if (r?.error) { toast.error(r.error); return; }
+    const remaining = (getValues().questions || []).filter(q => q.id !== qId);
+    reset({ questions: remaining });
+    toast.success("Đã xoá câu hỏi");
+  };
 
   const filteredFields = fields
     .map((f, i) => ({ ...f, globalIdx: i }))
@@ -112,16 +176,36 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
           <div>
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <BookOpen size={18} className="text-[#1a3a2a]" /> Workspace Bộ đề
+              {testSetStatus === "DRAFT" ? (
+                <span className="text-[10px] font-black text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                  <FileEdit size={10} /> NHÁP — chưa hiện cho học sinh
+                </span>
+              ) : (
+                <span className="text-[10px] font-black text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                  <BadgeCheck size={10} /> ĐÃ DUYỆT
+                </span>
+              )}
             </h2>
             <p className="text-xs font-medium text-gray-500 mt-0.5">{testSetName}</p>
           </div>
         </div>
-        <button
-          onClick={handleSubmit(onSubmit)}
-          className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-[#1a3a2a] rounded-xl hover:bg-[#234b37] transition-colors shadow-md shadow-[#1a3a2a]/20"
-        >
-          <Save size={16} /> Lưu thay đổi
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSubmit(onSubmit)}
+            className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-[#1a3a2a] rounded-xl hover:bg-[#234b37] transition-colors shadow-md shadow-[#1a3a2a]/20"
+          >
+            <Save size={16} /> Lưu thay đổi
+          </button>
+          {testSetStatus === "DRAFT" && (
+            <button
+              onClick={handleApprove}
+              disabled={approving}
+              className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-md shadow-emerald-600/20"
+            >
+              {approving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Duyệt &amp; Lưu
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Workspace Area */}
@@ -194,6 +278,14 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
                             <Clock size={12} /> Bản nháp
                           </span>
                         )}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteQuestion(fields[globalIdx].id); }}
+                          title="Xoá câu hỏi"
+                          className="flex items-center gap-1 text-[10px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-100 px-2 py-0.5 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={11} /> Xoá
+                        </button>
                       </div>
                     </div>
 
@@ -253,6 +345,60 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
                                   <option value="DRAFT">Bản nháp</option>
                                   <option value="APPROVED">Đã duyệt</option>
                                 </select>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 p-4 bg-white rounded-xl border border-gray-100 shadow-sm">
+                              <div>
+                                <label className="text-xs font-bold text-indigo-600 mb-1.5 block">Giải thích (explanation)</label>
+                                <textarea
+                                  {...register(`questions.${globalIdx}.explanation` as any)}
+                                  rows={2}
+                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all resize-none"
+                                  placeholder="Giải thích dễ hiểu cho học sinh — quan trọng với đối tượng Học yếu"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-gray-600 mb-1.5 block">Độ khó</label>
+                                <select
+                                  {...register(`questions.${globalIdx}.difficulty` as any)}
+                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-[#1a3a2a] transition-all bg-gray-50"
+                                >
+                                  <option value="easy">Dễ</option>
+                                  <option value="medium">Trung bình</option>
+                                  <option value="hard">Khó</option>
+                                </select>
+                                <p className="text-[10px] text-gray-400 mt-1.5">
+                                  Từ khoá nguồn: <b>{fields[globalIdx].source_keyword || "—"}</b>
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                              <span className="text-[11px] text-gray-400">
+                                ID: #{fields[globalIdx].id}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteQuestion(fields[globalIdx].id)}
+                                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                                >
+                                  <Trash2 size={13} /> Xoá câu
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveSingleQuestion(globalIdx)}
+                                  disabled={savingSingleId === fields[globalIdx].id}
+                                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-[#1a3a2a] hover:bg-[#234b37] rounded-xl transition-colors shadow-sm disabled:opacity-50"
+                                >
+                                  {savingSingleId === fields[globalIdx].id ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                  ) : (
+                                    <Save size={13} />
+                                  )}
+                                  Lưu câu này
+                                </button>
                               </div>
                             </div>
                           </div>

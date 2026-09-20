@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { aiService } from '../services/ai.service';
+import { aiProviderService } from '../services/ai-provider.service';
 import { db } from '../db';
 import { generateMindmapWithAI } from '../utils/ai-engine.service';
 import { parserService } from '../services/parser.service';
-import Groq from 'groq-sdk';
 
 export const chatWithDocument = async (req: AuthRequest, res: Response, next: any) => {
   try {
@@ -133,17 +133,18 @@ Yêu cầu đầu ra BẮT BUỘC phải là một mảng JSON có cấu trúc c
   { "front": "Thuật ngữ hoặc câu hỏi ngắn bằng ngôn ngữ gốc của tài liệu", "back": "Định nghĩa hoặc câu trả lời chi tiết bằng Tiếng Việt hoặc cùng ngôn ngữ" }
 ]`;
 
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    const completion = await groq.chat.completions.create({
+    // Đi qua AIProviderAdapter (Groq → Gemini, có timeout + log ai_request_logs)
+    const aiResult = await aiProviderService.chat({
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `NỘI DUNG TÀI LIỆU:\n${truncatedText}` }
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `NỘI DUNG TÀI LIỆU:\n${truncatedText}` },
       ],
-      model: "groq/compound",
       temperature: 0.2,
+      maxTokens: 4096,
+      jsonMode: true,
+      taskType: 'flashcard',
     });
-
-    const responseText = completion.choices[0]?.message?.content || "";
+    const responseText = aiResult.text;
     const cleanedJsonStr = responseText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
     
     let cards = [];
@@ -216,3 +217,5 @@ export const generateMindmap = async (req: AuthRequest, res: Response, next: any
     next(error);
   }
 };
+
+export { listAIModels, listAITemplates } from './question-generation.controller';

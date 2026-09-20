@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Loader2, Plus, Trash2, Edit3, ToggleLeft, ToggleRight, FileText, BookOpen, Upload, ChevronDown, Settings2, Save, X } from "lucide-react";
+import { Sparkles, Loader2, Plus, Trash2, Edit3, ToggleLeft, ToggleRight, FileText, BookOpen, Upload, ChevronDown, Settings2, Save, X, Cpu, Target, GraduationCap } from "lucide-react";
 import toast from "react-hot-toast";
 import { MainLayout } from "@/components/layout/MainLayout";
 import TestSetWorkspace from "@/components/ai-test/TestSetWorkspace";
@@ -10,6 +10,7 @@ import {
   getAIConfig, updateAIConfig,
   getMyDocuments, getMyDecks, getDeckContent, getDocumentContent,
   getTestSets, generateTestSet, toggleTestSetStatus, deleteTestSet,
+  getAIModels, getAITemplates, getDocumentKeywords, generateQuestions,
 } from "@/services/ai-test.service";
 import mammoth from "mammoth";
 
@@ -26,8 +27,18 @@ interface AIConfig {
 }
 interface TestSet {
   id: number; name: string; total_questions: number; total_score: number;
-  is_active: boolean; created_at: string;
+  is_active: boolean; created_at: string; status?: "DRAFT" | "APPROVED";
 }
+
+interface AIModelOption {
+  id: number;
+  model_name: string;
+  display_name: string;
+  provider: string;
+  tier?: "fast" | "balanced" | "advanced";
+}
+interface AITemplateOption { id: string; name: string; description: string; }
+
 
 const SCORE_ROWS = [
   { label: "Trắc nghiệm", ck: "multiple_choice_count", sk: "multiple_choice_score" },
@@ -59,6 +70,23 @@ export default function AITestPage() {
   const [fileName, setFileName]         = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // ── Question Generator: chọn model AI, trọng tâm từ khoá, đối tượng học sinh ──
+  const [aiModels, setAiModels]           = useState<AIModelOption[]>([]);
+  const [aiTemplates, setAiTemplates]     = useState<AITemplateOption[]>([]);
+  const [selectedDocs, setSelectedDocs]   = useState<number[]>([]);
+  const [keywordsByDoc, setKeywordsByDoc] = useState<Record<number, { status: string; keywords: string[] }>>({});
+  const [loadingKeywords, setLoadingKeywords] = useState(false);
+  const [focusKeywords, setFocusKeywords]     = useState<string[]>([]);
+  const [audienceLevel, setAudienceLevel]     = useState<"weak" | "medium" | "advanced">("medium");
+  const [questionType, setQuestionType]       = useState<"mixed" | "MULTIPLE_CHOICE" | "FILL_BLANK" | "ESSAY" | "TRUE_FALSE">("mixed");
+  const [difficulty, setDifficulty]           = useState<"easy" | "medium" | "hard">("medium");
+  const [quantity, setQuantity]               = useState(10);
+  const [templateId, setTemplateId]           = useState("basic_quiz");
+  const [modelId, setModelId]                 = useState<number | null>(null);
+  const [customInstruction, setCustomInstruction] = useState("");
+  const [mode, setMode]                       = useState<"practice" | "exam">("practice");
+
+
   const { register, handleSubmit, watch, reset } = useForm<AIConfig>();
   const w = watch();
   const totalScore =
@@ -78,6 +106,38 @@ export default function AITestPage() {
       })
       .finally(() => setLoading(false));
   }, [reset]);
+
+  // Nạp danh sách AI model (dropdown) + prompt template cho Question Generator
+  useEffect(() => {
+    getAIModels().then(r => { if (Array.isArray(r)) setAiModels(r); });
+    getAITemplates().then(r => { if (Array.isArray(r)) setAiTemplates(r); });
+  }, []);
+
+  // Lấy trọng tâm từ khoá của các tài liệu được chọn (chips bật/tắt)
+  useEffect(() => {
+    if (sourceType !== "document" || selectedDocs.length === 0) return;
+    let cancelled = false;
+    setLoadingKeywords(true);
+    Promise.all(selectedDocs.map(id => getDocumentKeywords(id)))
+      .then(results => {
+        if (cancelled) return;
+        setKeywordsByDoc(prev => {
+          const next = { ...prev };
+          for (const r of results) {
+            if (r && !r.error && r.documentId) {
+              next[r.documentId] = {
+                status: r.status || "READY",
+                keywords: (r.keywords || []).map((k: any) => k.keyword).slice(0, 12),
+              };
+            }
+          }
+          return next;
+        });
+      })
+      .finally(() => { if (!cancelled) setLoadingKeywords(false); });
+    return () => { cancelled = true; };
+  }, [selectedDocs, sourceType]);
+
 
   const onSaveConfig = handleSubmit(async (data) => {
     setSaving(true);
@@ -176,11 +236,11 @@ export default function AITestPage() {
     }
   };
 
-  const resolveContent = async (): Promise<string> => {
+  const resolveContent = async (docId?: number | null): Promise<string> => {
     if (sourceType === "paste")  return pasteText;
     if (sourceType === "upload") return uploadedText;
-    if (sourceType === "document" && selectedDoc) {
-      const r = await getDocumentContent(selectedDoc);
+    if (sourceType === "document" && (docId ?? selectedDoc)) {
+      const r = await getDocumentContent((docId ?? selectedDoc) as number);
       return r?.content || "";
     }
     if (sourceType === "deck" && selectedDeck) {
@@ -190,21 +250,95 @@ export default function AITestPage() {
     return "";
   };
 
-  const handleGenerate = async () => {
-    const content = await resolveContent();
-    if (!content || content.trim().length < 20) {
-      toast.error("Vui lòng cung cấp nội dung ít nhất 20 ký tự."); return;
+  const toggleDocSelection = (id: number) => {
+    setSelectedDocs(prev => prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]);
+  };
+
+  const allKeywordChips: string[] = (() => {
+    const seen = new Set<string>();
+    for (const docId of selectedDocs) {
+      for (const kw of keywordsByDoc[docId]?.keywords || []) {
+        seen.add(kw);
+      }
     }
+    return Array.from(seen).slice(0, 24);
+  })();
+
+  const handleGenerate = async () => {
     setGenerating(true);
     const tid = toast.loading("AI đang tạo bộ đề...");
     try {
-      const r = await generateTestSet({ configKey: CONFIG_KEY, documentContent: content, name: testName || undefined });
+      // ── Luồng MỚI: POST /api/questions/generate (chọn model, từ khoá, đối tượng) ──
+      const payload: Record<string, any> = {
+        focusKeywords,
+        audienceLevel,
+        questionType,
+        difficulty,
+        quantity,
+        templateId,
+        mode,
+        configKey: CONFIG_KEY,
+        name: testName || undefined,
+        modelId: modelId ?? undefined,
+        customInstruction: customInstruction.trim() || undefined,
+      };
+      let legacyContent = "";
+      if (sourceType === "document") {
+        if (selectedDocs.length === 0) {
+          toast.dismiss(tid);
+          toast.error("Vui lòng chọn ít nhất 1 tài liệu.");
+          return;
+        }
+        payload.sourceIds = selectedDocs;
+      } else {
+        legacyContent = await resolveContent();
+        if (!legacyContent || legacyContent.trim().length < 20) {
+          toast.dismiss(tid);
+          toast.error("Vui lòng cung cấp nội dung ít nhất 20 ký tự.");
+          return;
+        }
+        payload.textContent = legacyContent;
+      }
+
+      const r = await generateQuestions(payload as any);
+
+      // Tài liệu chưa xử lý xong (202 PROCESSING) → client poll/thử lại sau
+      if (r?.status === "PROCESSING") {
+        toast.dismiss(tid);
+        toast("Tài liệu đang được xử lý (chunk + embedding). Vui lòng đợi ít phút rồi thử lại.", { icon: "⏳", duration: 6000 });
+        return;
+      }
+
+      if (r?.error) {
+        // Role student → fallback luồng generate cũ (luồng cũ vẫn hoạt động song song)
+        if (typeof r.error === "string" && r.error.includes("teacher")) {
+          toast.dismiss(tid);
+          toast("Tính năng nâng cao dành cho giáo viên/admin — đang dùng luồng tạo đề cơ bản.", { icon: "ℹ️", duration: 5000 });
+          const content = sourceType === "document"
+            ? await resolveContent(selectedDocs[0])
+            : legacyContent;
+          const lr = await generateTestSet({ configKey: CONFIG_KEY, documentContent: content, name: testName || undefined });
+          if (lr?.error) { toast.error(lr.error); return; }
+          toast.success(lr.message || "Tạo thành công!");
+          setTestSets(prev => [lr.testSet, ...prev]);
+          setShowGenPanel(false); setPasteText(""); setUploadedText(""); setTestName("");
+          return;
+        }
+        toast.dismiss(tid);
+        toast.error(r.error);
+        return;
+      }
+
       toast.dismiss(tid);
-      if (r?.error) { toast.error(r.error); return; }
-      toast.success(r.message || "Tạo thành công!");
-      setTestSets(prev => [r.testSet, ...prev]);
-      setShowGenPanel(false); setPasteText(""); setUploadedText(""); setTestName("");
-    } catch (e: any) { toast.dismiss(tid); toast.error(e.message); }
+      toast.success(r.message || "Đã tạo bộ đề nháp! Hãy xem lại và bấm \"Duyệt & Lưu\".");
+      if (r.testSet) setTestSets(prev => [r.testSet, ...prev]);
+      if (r.testSet) setEditTarget(r.testSet); // mở Preview ngay
+      setShowGenPanel(false);
+      setPasteText(""); setUploadedText(""); setTestName(""); setFocusKeywords([]);
+    } catch (e: any) {
+      toast.dismiss(tid);
+      toast.error(e.message || "Lỗi khi tạo bộ đề");
+    }
     finally { setGenerating(false); }
   };
 
@@ -420,16 +554,59 @@ export default function AITestPage() {
                   <div className="space-y-2 max-h-56 overflow-y-auto">
                     {myDocs.length === 0
                       ? <p className="text-sm text-gray-400 text-center py-4">Chưa có tài liệu nào trong thư viện</p>
-                      : myDocs.map(d => (
-                        <label key={d.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selectedDoc === d.id ? "border-[#1a3a2a] bg-[#f0fdf4]" : "border-gray-200 hover:bg-gray-50"}`}>
-                          <input type="radio" name="doc" checked={selectedDoc === d.id} onChange={() => setSelectedDoc(d.id)} className="accent-[#1a3a2a]" />
-                          <div>
-                            <p className="text-sm font-semibold text-gray-800">{d.title}</p>
-                            <p className="text-xs text-gray-400">{d.category} · {d.file_type}</p>
-                          </div>
-                        </label>
-                      ))
+                      : myDocs.map(d => {
+                        const effectiveStatus = d.processing_status || d.status || "PENDING";
+                        const isReady = effectiveStatus === "READY";
+                        const isFailed = effectiveStatus === "FAILED";
+                        const isSelected = selectedDocs.includes(d.id);
+
+                        return (
+                          <label
+                            key={d.id}
+                            className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                              !isReady
+                                ? "border-gray-200 bg-gray-50/70 opacity-60 cursor-not-allowed"
+                                : isSelected
+                                ? "border-[#1a3a2a] bg-[#f0fdf4] cursor-pointer"
+                                : "border-gray-200 hover:bg-gray-50 cursor-pointer"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={!isReady}
+                              onChange={() => isReady && toggleDocSelection(d.id)}
+                              className="accent-[#1a3a2a] disabled:cursor-not-allowed"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-gray-800 truncate">{d.title}</p>
+                                {d.page_count ? (
+                                  <span className="text-[10px] text-gray-400">({d.page_count} trang)</span>
+                                ) : null}
+                              </div>
+                              <p className="text-xs text-gray-400">{d.category || 'Chung'} · {d.file_type}</p>
+                            </div>
+                            {isReady ? (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                ✓ Sẵn sàng
+                              </span>
+                            ) : isFailed ? (
+                              <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md">
+                                ⚠️ Lỗi xử lý
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Loader2 size={10} className="animate-spin" /> {effectiveStatus}
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })
                     }
+                    {selectedDocs.length > 0 && (
+                      <p className="text-[11px] text-gray-400 px-1">Đã chọn {selectedDocs.length} tài liệu — chọn nhiều tài liệu để ghép nội dung sinh đề.</p>
+                    )}
                   </div>
                 )}
 
@@ -483,15 +660,167 @@ export default function AITestPage() {
                   </div>
                 )}
 
+                {/* ── Trọng tâm từ khoá (chips bật/tắt) ── */}
+                {sourceType === "document" && selectedDocs.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                        <Target size={13} className="text-[#1a3a2a]" /> Trọng tâm từ khoá (Focus Keywords)
+                        {loadingKeywords && <Loader2 size={12} className="animate-spin text-gray-400" />}
+                      </label>
+                      {focusKeywords.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setFocusKeywords([])}
+                          className="text-[11px] font-bold text-red-500 hover:text-red-700"
+                        >
+                          Xoá chọn ({focusKeywords.length})
+                        </button>
+                      )}
+                    </div>
+                    {allKeywordChips.length === 0 && !loadingKeywords ? (
+                      <p className="text-[11px] text-gray-400 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                        Chưa phát hiện từ khoá riêng biệt trong tài liệu — AI sẽ dùng toàn bộ nội dung đã xử lý.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {allKeywordChips.map(kw => {
+                          const active = focusKeywords.includes(kw);
+                          return (
+                            <button
+                              key={kw}
+                              type="button"
+                              onClick={() => setFocusKeywords(prev => active ? prev.filter(k => k !== kw) : [...prev, kw])}
+                              className={`px-2.5 py-1 text-[11px] font-semibold rounded-full border transition-all ${
+                                active
+                                  ? "bg-[#1a3a2a] text-white border-[#1a3a2a] shadow-sm ring-1 ring-[#1a3a2a]/30"
+                                  : "bg-white text-gray-600 border-gray-200 hover:border-[#1a3a2a] hover:bg-gray-50"
+                              }`}
+                            >
+                              {active ? `✓ ${kw}` : kw}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <p className="text-[10px] text-gray-400">
+                      💡 Chọn các từ khoá để AI chỉ lấy nội dung liên quan trực tiếp. Để trống để bao quát toàn bộ tài liệu.
+                    </p>
+                  </div>
+                )}
+                {/* ── Cấu hình Question Generator (model AI, đối tượng, loại câu hỏi) ── */}
+                <div className="bg-[#f8faf9] border border-gray-100 rounded-xl p-4 space-y-4">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                    <Cpu size={14} className="text-[#1a3a2a]" /> Cấu hình AI
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Model AI</label>
+                      <select value={modelId ?? ""} onChange={e => setModelId(e.target.value ? Number(e.target.value) : null)}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]">
+                        <option value="">⚡ Tự động (Ưu tiên Fast Groq → Balanced Gemini)</option>
+                        {aiModels.map(m => {
+                          const tierBadge = m.tier === 'fast' ? '⚡ [FAST] ' : m.tier === 'balanced' ? '⚖️ [BALANCED] ' : m.tier === 'advanced' ? '🧠 [ADVANCED] ' : '';
+                          return (
+                            <option key={m.id} value={m.id}>{tierBadge}{m.display_name} ({m.provider})</option>
+                          );
+                        })}
+                      </select>
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        Fast: Xử lý nhanh · Balanced: Đề thi chuẩn · Advanced: Tự luận chuyên sâu
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Kiểu prompt</label>
+                      <select value={templateId} onChange={e => {
+                        const id = e.target.value;
+                        setTemplateId(id);
+                        if (id === "beginner_explanation") setAudienceLevel("weak");
+                      }} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]">
+                        {aiTemplates.length === 0 && <option value="basic_quiz">Basic Quiz</option>}
+                        {aiTemplates.map(t => (
+                          <option key={t.id} value={t.id}>{t.name} — {t.description}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1.5">
+                      <GraduationCap size={13} className="text-[#1a3a2a]" /> Đối tượng học sinh
+                    </label>
+                    <div className="flex gap-2 flex-wrap">
+                      {([
+                        { key: "weak", label: "Học yếu" },
+                        { key: "medium", label: "Trung bình" },
+                        { key: "advanced", label: "Khá giỏi" },
+                      ] as const).map(a => (
+                        <button key={a.key} onClick={() => setAudienceLevel(a.key)}
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${audienceLevel === a.key ? "bg-[#1a3a2a] text-white border-[#1a3a2a]" : "bg-white text-gray-600 border-gray-200 hover:border-[#1a3a2a]"}`}>
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Loại câu hỏi</label>
+                      <select value={questionType} onChange={e => setQuestionType(e.target.value as any)}
+                        className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]">
+                        <option value="mixed">Theo cấu hình</option>
+                        <option value="MULTIPLE_CHOICE">Trắc nghiệm</option>
+                        <option value="FILL_BLANK">Điền từ</option>
+                        <option value="ESSAY">Tự luận</option>
+                        <option value="TRUE_FALSE">Đúng / Sai</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Độ khó</label>
+                      <select value={difficulty} onChange={e => setDifficulty(e.target.value as any)}
+                        className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]">
+                        <option value="easy">Dễ</option>
+                        <option value="medium">Trung bình</option>
+                        <option value="hard">Khó</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Số câu</label>
+                      <input type="number" min={1} max={50} value={quantity} onChange={e => setQuantity(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+                        className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Chế độ</label>
+                      <select value={mode} onChange={e => setMode(e.target.value as any)}
+                        className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]">
+                        <option value="practice">Luyện tập</option>
+                        <option value="exam">Kiểm tra / Thi</option>
+                      </select>
+                    </div>
+                  </div>
+                  {questionType !== "mixed" && (
+                    <p className="text-[11px] text-gray-500">Sẽ tạo <b>{quantity}</b> câu hỏi loại đã chọn. Chọn "Theo cấu hình" để dùng số lượng/điểm từng loại đã lưu trong Cấu hình.</p>
+                  )}
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 mb-1 block">Hướng dẫn thêm (tùy chọn, ≤ 500 ký tự)</label>
+                    <textarea value={customInstruction} onChange={e => setCustomInstruction(e.target.value)} rows={2} maxLength={500}
+                      placeholder="VD: Tập trung vào chương 2, tránh câu hỏi định nghĩa, thêm tình huống thực tế..."
+                      className="w-full border border-gray-200 rounded-xl p-3 text-sm text-gray-700 resize-none focus:outline-none focus:border-[#1a3a2a]" />
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                   <p className="text-xs text-gray-400">
-                    AI sẽ dùng cấu hình prompt đã lưu của bạn để tạo đề.
+                    Bộ đề sẽ ở trạng thái NHÁP — xem lại, sửa rồi bấm "Duyệt &amp; Lưu".
                   </p>
                   <button onClick={handleGenerate} disabled={generating}
                     className="flex items-center gap-2 px-5 py-2.5 bg-[#1a3a2a] text-white text-sm font-bold rounded-xl hover:bg-[#234b37] disabled:opacity-50 transition-colors shadow-md shadow-[#1a3a2a]/20">
                     {generating ? <><Loader2 size={14} className="animate-spin" /> Đang tạo...</> : <><Sparkles size={14} /> Tạo bộ đề</>}
                   </button>
                 </div>
+
               </div>
             </motion.div>
           )}
@@ -514,7 +843,15 @@ export default function AITestPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1 min-w-0 pr-2">
                       <h3 className="text-sm font-bold text-gray-900 line-clamp-2">{ts.name}</h3>
-                      <p className="text-xs text-gray-400 mt-0.5">{new Date(ts.created_at).toLocaleDateString("vi-VN")}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs text-gray-400">{new Date(ts.created_at).toLocaleDateString("vi-VN")}</p>
+                        {ts.status === "DRAFT" && (
+                          <span className="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">NHÁP</span>
+                        )}
+                        {ts.status === "APPROVED" && (
+                          <span className="text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-md">ĐÃ DUYỆT</span>
+                        )}
+                      </div>
                     </div>
                     <button onClick={() => handleToggle(ts)} className={`flex-shrink-0 transition-colors ${ts.is_active ? "text-[#1a3a2a]" : "text-gray-300"}`} title={ts.is_active ? "Bật" : "Tắt"}>
                       {ts.is_active ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}

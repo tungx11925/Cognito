@@ -13,11 +13,13 @@ interface UploadModalProps {
   existingCategories?: string[];
 }
 
-const MAX_SIZE_MB = 15;
+const MAX_SIZE_MB = 25;
 const ALLOWED_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
   'text/plain',
   'image/png',
   'image/jpeg',
@@ -26,9 +28,11 @@ const ALLOWED_TYPES = [
 
 function getFileIcon(file: File) {
   if (file.type.startsWith('image/')) return <Image className="mx-auto h-10 w-10 text-blue-500" />;
-  if (file.type === 'application/pdf') return <FileText className="mx-auto h-10 w-10 text-red-500" />;
+  if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) return <FileText className="mx-auto h-10 w-10 text-red-500" />;
+  if (file.name.endsWith('.pptx') || file.name.endsWith('.ppt')) return <FileText className="mx-auto h-10 w-10 text-orange-500" />;
   return <File className="mx-auto h-10 w-10 text-[#1a3a2a]" />;
 }
+
 
 export default function UploadDocumentModal({
   isOpen,
@@ -56,8 +60,9 @@ export default function UploadDocumentModal({
 
   // Auto-fill title from filename
   const handleFileSelect = useCallback((selected: File) => {
-    if (!ALLOWED_TYPES.includes(selected.type)) {
-      setError('Chỉ chấp nhận PDF, Word (DOC/DOCX), TXT hoặc ảnh (PNG/JPG/WebP)');
+    const isPptxExt = selected.name.endsWith('.pptx') || selected.name.endsWith('.ppt');
+    if (!ALLOWED_TYPES.includes(selected.type) && !isPptxExt) {
+      setError('Chỉ chấp nhận PDF, Word (DOC/DOCX), PowerPoint (PPT/PPTX), TXT hoặc ảnh');
       return;
     }
     if (selected.size > MAX_SIZE_MB * 1024 * 1024) {
@@ -104,38 +109,34 @@ export default function UploadDocumentModal({
     const formData = new FormData();
     formData.append('file', file);
     formData.append('title', title.trim());
-    formData.append('description', description.trim());
-    formData.append('category', category.trim() || 'Khác');
+    if (description.trim()) formData.append('description', description.trim());
+    if (category.trim()) formData.append('category', category.trim());
 
     const xhr = new XMLHttpRequest();
     xhrRef.current = xhr;
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        setUploadProgress(Math.round((e.loaded / e.total) * 100));
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setUploadProgress(percent);
       }
     };
 
     xhr.onload = () => {
       try {
-        const data = JSON.parse(xhr.responseText);
-        if (xhr.status >= 200 && xhr.status < 300 && !data.error) {
-          setUploadProgress(100);
-          const docId = data?.document?.id;
+        const res = JSON.parse(xhr.responseText);
+        if (xhr.status === 201 || xhr.status === 200) {
+          const docId = res?.document?.id || res?.id;
           if (docId) {
-            // Upload OK — polling trạng thái pipeline xử lý nền
             setUploadState('processing');
-            pollPipeline(docId);
+            pollPipeline(docId, 0);
           } else {
             setUploadState('success');
-            setTimeout(() => {
-              onSuccess();
-              handleClose();
-            }, 1200);
+            setTimeout(() => { onSuccess(); handleClose(); }, 1200);
           }
         } else {
           setUploadState('error');
-          setError(data.error || 'Tải lên thất bại, vui lòng thử lại.');
+          setError(res.error || 'Có lỗi xảy ra khi tải lên tài liệu.');
         }
       } catch {
         setUploadState('error');
@@ -153,12 +154,12 @@ export default function UploadDocumentModal({
     xhr.send(formData);
   };
 
-  /** Poll trạng thái pipeline: UPLOADING → PROCESSING → INDEXING → READY/FAILED */
+  /** Poll trạng thái pipeline: PENDING → PARSING → CHUNKING → EXTRACTING_KEYWORDS → READY/FAILED */
   const pollPipeline = (docId: number, attempt = 0) => {
     if (pollStopRef.current) return;
-    if (attempt > 90) { // ~3 phút
+    if (attempt > 100) { // ~5 phút
       setUploadState('error');
-      setError('Xử lý tài liệu mất quá lâu. Bạn có thể thử lại từ Thư viện.');
+      setError('Xử lý tài liệu mất quá lâu. Bạn có thể kiểm tra lại từ Thư viện.');
       return;
     }
     getDocumentStatus(docId).then((data: any) => {
@@ -169,20 +170,21 @@ export default function UploadDocumentModal({
         return;
       }
       setPipelineStatus(data);
-      if (data?.status === 'READY') {
+      const effectiveStatus = data?.processing_status || data?.status;
+      if (effectiveStatus === 'READY') {
         setUploadState('success');
         setTimeout(() => {
           onSuccess();
           handleClose();
-        }, 1000);
-      } else if (data?.status === 'FAILED') {
+        }, 1200);
+      } else if (effectiveStatus === 'FAILED') {
         setUploadState('error');
         setError(data.processing_error || 'Xử lý tài liệu thất bại.');
       } else {
-        pollTimerRef.current = setTimeout(() => pollPipeline(docId, attempt + 1), 2000);
+        pollTimerRef.current = setTimeout(() => pollPipeline(docId, attempt + 1), 3000);
       }
     }).catch(() => {
-      pollTimerRef.current = setTimeout(() => pollPipeline(docId, attempt + 1), 2000);
+      pollTimerRef.current = setTimeout(() => pollPipeline(docId, attempt + 1), 3000);
     });
   };
 
@@ -256,10 +258,10 @@ export default function UploadDocumentModal({
               >
                 <AlertCircle size={16} className="shrink-0" />
                 <p className="flex-1">{error}</p>
-                {pipelineStatus?.status === 'FAILED' && (
+                {(pipelineStatus?.status === 'FAILED' || pipelineStatus?.processing_status === 'FAILED') && (
                   <button
                     onClick={handleRetryPipeline}
-                    className="flex items-center gap-1 text-xs font-semibold text-[#1a3a2a] hover:underline shrink-0"
+                    className="flex items-center gap-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-2.5 py-1 rounded-lg transition-colors shrink-0"
                   >
                     <RefreshCw size={12} /> Thử lại
                   </button>
@@ -359,12 +361,12 @@ export default function UploadDocumentModal({
                           type="file"
                           className="sr-only"
                           onChange={handleFileInputChange}
-                          accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp"
+                          accept=".pdf,.doc,.docx,.pptx,.ppt,.txt,.png,.jpg,.jpeg,.webp"
                         />
                       </label>
                       <span>hoặc kéo thả vào đây</span>
                     </div>
-                    <p className="text-xs text-gray-400">PDF, DOC, DOCX, TXT, PNG, JPG · Tối đa {MAX_SIZE_MB}MB</p>
+                    <p className="text-xs text-gray-400">PDF, PPTX, Word, TXT, Ảnh · Tối đa {MAX_SIZE_MB}MB</p>
                   </>
                 )}
               </div>
@@ -382,8 +384,8 @@ export default function UploadDocumentModal({
               >
                 <div className="flex items-center justify-between text-xs text-gray-500">
                   <span className="flex items-center gap-1.5">
-                    <Loader2 size={12} className="animate-spin" />
-                    Đang tải lên Cloudinary...
+                    <Loader2 size={12} className="animate-spin text-[#1a3a2a]" />
+                    Đang tải file lên Cloud...
                   </span>
                   <span className="font-mono font-medium text-[#1a3a2a]">{uploadProgress}%</span>
                 </div>
@@ -399,36 +401,95 @@ export default function UploadDocumentModal({
             )}
           </AnimatePresence>
 
-          {/* Processing Pipeline State */}
+          {/* Processing Pipeline Stepper */}
           <AnimatePresence>
-            {uploadState === 'processing' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="space-y-2"
-              >
-                <div className="flex items-center justify-between text-xs text-gray-500">
-                  <span className="flex items-center gap-1.5">
-                    <Loader2 size={12} className="animate-spin" />
-                    Đang xử lý tài liệu (trích xuất &amp; lập chỉ mục AI)...
-                  </span>
-                  <span className="font-mono font-medium text-[#1a3a2a]">
-                    {pipelineStatus?.status === 'INDEXING' ? 'Đánh chỉ mục'
-                      : pipelineStatus?.status === 'PROCESSING' ? 'Phân tích'
-                      : 'Chuẩn bị'}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-[#1a3a2a] to-emerald-500 rounded-full"
-                    initial={{ width: '5%' }}
-                    animate={{ width: pipelineStatus?.status === 'INDEXING' ? '75%' : '40%' }}
-                    transition={{ ease: 'easeInOut', duration: 1.2 }}
-                  />
-                </div>
-              </motion.div>
-            )}
+            {uploadState === 'processing' && (() => {
+              const currentStatus = pipelineStatus?.processing_status || pipelineStatus?.status || 'PENDING';
+              const STEPS = [
+                { key: 'PENDING', label: 'Tải lên', desc: 'Đã nhận file, đưa vào hàng đợi...' },
+                { key: 'PARSING', label: 'Phân tích', desc: 'Trích xuất văn bản & OCR ảnh...' },
+                { key: 'CHUNKING', label: 'Phân đoạn', desc: 'Tách đoạn ngữ nghĩa thông minh...' },
+                { key: 'EXTRACTING_KEYWORDS', label: 'Từ khoá AI', desc: 'Trích xuất thuật ngữ & trọng tâm...' },
+                { key: 'READY', label: 'Sẵn sàng', desc: 'Hoàn tất! Sẵn sàng tạo đề thi.' },
+              ];
+
+              const statusOrder: Record<string, number> = {
+                PENDING: 0,
+                PARSING: 1,
+                PROCESSING: 1,
+                CHUNKING: 2,
+                INDEXING: 2,
+                EXTRACTING_KEYWORDS: 3,
+                READY: 4,
+              };
+
+              const activeIdx = statusOrder[currentStatus] ?? 0;
+              const currentDesc = STEPS[activeIdx]?.desc || 'Đang xử lý tài liệu...';
+
+              return (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="p-4 bg-[#f8faf9] border border-gray-200 rounded-2xl space-y-3.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                      <Loader2 size={13} className="animate-spin text-[#1a3a2a]" />
+                      Tiến trình xử lý tài liệu
+                    </span>
+                    {pipelineStatus?.page_count ? (
+                      <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                        {pipelineStatus.page_count} trang/slide
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* 5-Step Horizontal Stepper */}
+                  <div className="relative flex items-center justify-between px-1">
+                    {/* Background track line */}
+                    <div className="absolute left-3 right-3 top-3 -translate-y-1/2 h-0.5 bg-gray-200 -z-0" />
+                    {/* Active track line */}
+                    <div
+                      className="absolute left-3 top-3 -translate-y-1/2 h-0.5 bg-[#1a3a2a] transition-all duration-500 -z-0"
+                      style={{ width: `${(Math.min(activeIdx, 4) / 4) * 94}%` }}
+                    />
+
+                    {STEPS.map((step, idx) => {
+                      const isCompleted = idx < activeIdx || currentStatus === 'READY';
+                      const isCurrent = idx === activeIdx && currentStatus !== 'READY';
+
+                      return (
+                        <div key={step.key} className="relative z-10 flex flex-col items-center">
+                          <div
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-300 ${
+                              isCompleted
+                                ? 'bg-[#1a3a2a] text-white shadow-sm ring-2 ring-[#1a3a2a]/20'
+                                : isCurrent
+                                ? 'bg-[#1a3a2a] text-white ring-4 ring-[#1a3a2a]/25 animate-pulse'
+                                : 'bg-white border-2 border-gray-300 text-gray-400'
+                            }`}
+                          >
+                            {isCompleted ? '✓' : idx + 1}
+                          </div>
+                          <span
+                            className={`text-[10px] mt-1.5 text-center leading-tight whitespace-nowrap transition-colors ${
+                              isCompleted || isCurrent ? 'font-bold text-[#1a3a2a]' : 'font-medium text-gray-400'
+                            }`}
+                          >
+                            {step.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p className="text-xs text-gray-500 text-center italic bg-white/70 py-1.5 px-3 rounded-lg border border-gray-100">
+                    {currentDesc}
+                  </p>
+                </motion.div>
+              );
+            })()}
           </AnimatePresence>
 
           {/* Success State */}

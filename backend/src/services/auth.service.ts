@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+﻿import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { userRepository } from '../repositories/user.repository';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/mailer';
@@ -31,13 +31,13 @@ export class AuthService {
     const formattedEmail = email ? email.toLowerCase().trim() : '';
 
     const existingName = await userRepository.findByName(name.trim());
-    if (existingName) throw new Error('Tên người dùng đã được sử dụng');
+    if (existingName) throw new Error('TÃªn ngÆ°á»i dÃ¹ng Ä‘Ã£ Ä‘Æ°á»£c sá»­ dá»¥ng');
 
     const existingEmail = await userRepository.findByEmail(formattedEmail);
-    if (existingEmail) throw new Error('Email đã được sử dụng');
+    if (existingEmail) throw new Error('Email Ä‘Ã£ Ä‘Æ°á»£c sá»­ dá»¥ng');
 
     const existingPhone = await userRepository.findByPhone(phone);
-    if (existingPhone) throw new Error('Số điện thoại đã được sử dụng');
+    if (existingPhone) throw new Error('Sá»‘ Ä‘iá»‡n thoáº¡i Ä‘Ã£ Ä‘Æ°á»£c sá»­ dá»¥ng');
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -49,7 +49,7 @@ export class AuthService {
     });
 
     const token = jwt.sign(
-      { id: user.id, email: user.email }, 
+      { id: user.id, email: user.email, role: user.role || 'student' }, 
       process.env.JWT_SECRET_KEY!, 
       { expiresIn: '24h' }
     );
@@ -71,12 +71,12 @@ export class AuthService {
     }
     
     if (!user) {
-      throw new Error('Tài khoản hoặc mật khẩu không chính xác');
+      throw new Error('TÃ i khoáº£n hoáº·c máº­t kháº©u khÃ´ng chÃ­nh xÃ¡c');
     }
     
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
-      throw new Error('Tài khoản hoặc mật khẩu không chính xác');
+      throw new Error('TÃ i khoáº£n hoáº·c máº­t kháº©u khÃ´ng chÃ­nh xÃ¡c');
     }
 
     if (user.is_verified) {
@@ -90,7 +90,7 @@ export class AuthService {
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email }, 
+      { id: user.id, email: user.email, role: user.role || 'student' }, 
       process.env.JWT_SECRET_KEY!, 
       { expiresIn: '24h' }
     );
@@ -113,12 +113,12 @@ export class AuthService {
     const formattedEmail = email.trim().toLowerCase();
     const user = await userRepository.findByEmail(formattedEmail);
 
-    if (!user) throw new Error('Người dùng không tồn tại');
+    if (!user) throw new Error('NgÆ°á»i dÃ¹ng khÃ´ng tá»“n táº¡i');
     if (!user.verification_code || user.verification_code !== code.trim()) {
-      throw new Error('Mã xác thực không chính xác');
+      throw new Error('MÃ£ xÃ¡c thá»±c khÃ´ng chÃ­nh xÃ¡c');
     }
     if (new Date() > new Date(user.code_expires_at)) {
-      throw new Error('Mã xác thực đã hết hạn');
+      throw new Error('MÃ£ xÃ¡c thá»±c Ä‘Ã£ háº¿t háº¡n');
     }
 
     await userRepository.updateVerificationCode(user.id, null, null);
@@ -128,7 +128,7 @@ export class AuthService {
     const studyDates = await this.getUserStudyDates(user.id);
 
     const token = jwt.sign(
-      { id: user.id, email: user.email }, 
+      { id: user.id, email: user.email, role: user.role || 'student' }, 
       process.env.JWT_SECRET_KEY!, 
       { expiresIn: '24h' }
     );
@@ -140,7 +140,7 @@ export class AuthService {
 
   async toggleVerification(userId: number, enable: boolean) {
     const user = await userRepository.updateVerificationStatus(userId, enable === true);
-    if (!user) throw new Error('Người dùng không tồn tại');
+    if (!user) throw new Error('NgÆ°á»i dÃ¹ng khÃ´ng tá»“n táº¡i');
     
     const studyDates = await this.getUserStudyDates(userId);
     return { ...user, study_dates: studyDates };
@@ -161,7 +161,7 @@ export class AuthService {
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email }, 
+      { id: user.id, email: user.email, role: user.role || 'student' }, 
       process.env.JWT_SECRET_KEY!, 
       { expiresIn: '24h' }
     );
@@ -178,7 +178,7 @@ export class AuthService {
   async getMe(userId: number) {
     await activityService.updateUserStreak(userId);
     const user = await userRepository.findById(userId);
-    if (!user) throw new Error('Người dùng không tồn tại');
+    if (!user) throw new Error('NgÆ°á»i dÃ¹ng khÃ´ng tá»“n táº¡i');
 
     const studyDates = await this.getUserStudyDates(userId);
     const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = user;
@@ -199,10 +199,10 @@ export class AuthService {
 
   async changePassword(userId: number, currentPassword: string, newPassword: string) {
     const user = await userRepository.findById(userId);
-    if (!user) throw new Error('Người dùng không tồn tại');
+    if (!user) throw new Error('NgÆ°á»i dÃ¹ng khÃ´ng tá»“n táº¡i');
 
     const isValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isValid) throw new Error('Mật khẩu hiện tại không chính xác');
+    if (!isValid) throw new Error('Máº­t kháº©u hiá»‡n táº¡i khÃ´ng chÃ­nh xÃ¡c');
 
     const hashed = await bcrypt.hash(newPassword, 10);
     await userRepository.updatePassword(userId, hashed);
@@ -210,7 +210,7 @@ export class AuthService {
 
   async upgradePremium(userId: number) {
     const user = await userRepository.updateRole(userId, 'premium');
-    if (!user) throw new Error('Người dùng không tồn tại');
+    if (!user) throw new Error('NgÆ°á»i dÃ¹ng khÃ´ng tá»“n táº¡i');
 
     const studyDates = await this.getUserStudyDates(userId);
     return { ...user, study_dates: studyDates };
@@ -265,20 +265,20 @@ export class AuthService {
     );
 
     if (result.rows.length === 0) {
-      throw new Error('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
+      throw new Error('LiÃªn káº¿t Ä‘áº·t láº¡i máº­t kháº©u khÃ´ng há»£p lá»‡ hoáº·c Ä‘Ã£ háº¿t háº¡n');
     }
 
     const user = result.rows[0];
 
     // Password validation
     if (newPassword.length < 10) {
-      throw new Error('Mật khẩu tối thiểu 10 ký tự');
+      throw new Error('Máº­t kháº©u tá»‘i thiá»ƒu 10 kÃ½ tá»±');
     }
     if (!/(?=.*[a-zA-Z])/.test(newPassword)) {
-      throw new Error('Mật khẩu phải chứa ít nhất 1 chữ cái');
+      throw new Error('Máº­t kháº©u pháº£i chá»©a Ã­t nháº¥t 1 chá»¯ cÃ¡i');
     }
     if (!/(?=.*[\d#?!&@$%*])/.test(newPassword)) {
-      throw new Error('Mật khẩu phải chứa ít nhất 1 chữ số hoặc ký tự đặc biệt');
+      throw new Error('Máº­t kháº©u pháº£i chá»©a Ã­t nháº¥t 1 chá»¯ sá»‘ hoáº·c kÃ½ tá»± Ä‘áº·c biá»‡t');
     }
 
     const hashed = await bcrypt.hash(newPassword, 10);
@@ -292,3 +292,4 @@ export class AuthService {
 }
 
 export const authService = new AuthService();
+

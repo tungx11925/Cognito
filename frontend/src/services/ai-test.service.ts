@@ -66,3 +66,56 @@ export const bulkUpdateQuestions = (questions: any[]) =>
     headers: authJson(),
     body: JSON.stringify({ questions }),
   });
+
+// ── Question Generator (model AI + trọng tâm từ khoá + Preview → Approve) ──
+export const getAIModels = () =>
+  apiFetch('/ai/models', { headers: getAuthHeaders() });
+
+export const getAITemplates = () =>
+  apiFetch('/ai/templates', { headers: getAuthHeaders() });
+
+export const getDocumentKeywords = (docId: number) =>
+  apiFetch(`/documents/${docId}/keywords`, { headers: getAuthHeaders() });
+
+export interface GenerateQuestionsPayload {
+  sourceIds?: number[];
+  textContent?: string;
+  focusKeywords?: string[];
+  audienceLevel: 'weak' | 'medium' | 'advanced';
+  questionType: 'MULTIPLE_CHOICE' | 'FILL_BLANK' | 'ESSAY' | 'TRUE_FALSE' | 'mixed';
+  difficulty: 'easy' | 'medium' | 'hard';
+  quantity: number;
+  templateId: string;
+  modelId?: number;
+  customInstruction?: string;
+  mode: 'practice' | 'exam';
+  name?: string;
+  configKey?: string;
+}
+
+export const generateQuestions = (payload: GenerateQuestionsPayload) =>
+  apiFetch('/questions/generate', {
+    method: 'POST',
+    headers: authJson(),
+    body: JSON.stringify(payload),
+  });
+
+export const updateQuestion = (id: number, data: Record<string, any>) =>
+  apiFetch(`/questions/${id}`, {
+    method: 'PATCH',
+    headers: authJson(),
+    body: JSON.stringify(data),
+  });
+
+export const deleteQuestion = (id: number) =>
+  apiFetch(`/questions/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+
+export const approveTestSet = (testSetId: number) =>
+  apiFetch(`/test-sets/${testSetId}/approve`, {
+    method: 'POST',
+    headers: authJson(),
+  });
+
+export const getTestSetDetail = (testSetId: number) =>
+  apiFetch(`/test-sets/${testSetId}`, { headers: getAuthHeaders() });
+

@@ -42,4 +42,8 @@ router.post('/generate-flashcards-from-file', uploadMem.single('document'), AiCo
 router.get('/mindmap/:docId', validate(aiGetMindmapSchema), AiController.getMindmap);
 router.post('/generate-mindmap', validate(aiGenerateMindmapSchema), AiController.generateMindmap);
 
+// ── Question Generator: danh sách AI model (dropdown) + prompt template ──
+router.get('/models', AiController.listAIModels);
+router.get('/templates', AiController.listAITemplates);
+
 export default router;
