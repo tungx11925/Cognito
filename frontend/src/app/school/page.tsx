@@ -22,7 +22,7 @@ export default function SchoolDashboard() {
     }
   }, [activeUser, authLoading, router]);
 
-  const orgId = activeUser?.primary_organization_id || '9873d6eb-901d-40ba-83ff-a128af55581b';
+  const orgId = (activeUser as any)?.primary_organization_id || '9873d6eb-901d-40ba-83ff-a128af55581b';
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -59,7 +59,7 @@ export default function SchoolDashboard() {
     }
   };
 
-  const item = {
+  const item: any = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
   };

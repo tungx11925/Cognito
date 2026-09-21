@@ -17,7 +17,7 @@ export default function TeacherClassesPage() {
     const fetchMyClasses = async () => {
       if (!activeUser) return;
       try {
-        const orgId = activeUser.primary_organization_id || '9873d6eb-901d-40ba-83ff-a128af55581b';
+        const orgId = (activeUser as any)?.primary_organization_id || '9873d6eb-901d-40ba-83ff-a128af55581b';
         const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/school/${orgId}/classes?teacher_id=${activeUser.id}`, {
           withCredentials: true
         });
@@ -45,7 +45,7 @@ export default function TeacherClassesPage() {
     }
   };
 
-  const item = {
+  const item: any = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
   };

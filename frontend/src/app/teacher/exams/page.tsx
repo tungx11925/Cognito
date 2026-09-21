@@ -37,7 +37,7 @@ export default function TeacherExamsPage() {
   };
 
   const handleOpenAssignModal = () => {
-    const orgId = activeUser?.memberships?.[0]?.organization_id;
+    const orgId = (activeUser as any)?.memberships?.[0]?.organization_id;
     if (orgId) {
       fetchClasses(orgId);
     }
@@ -46,7 +46,7 @@ export default function TeacherExamsPage() {
   };
 
   const handleAssignSubmit = async () => {
-    const orgId = activeUser?.memberships?.[0]?.organization_id;
+    const orgId = (activeUser as any)?.memberships?.[0]?.organization_id;
     if (!orgId || !assignForm.class_id || !result?.testSet?.id) return;
     
     setAssigning(true);

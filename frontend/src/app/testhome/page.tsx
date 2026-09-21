@@ -42,7 +42,7 @@ export default function CognitoLandingPage() {
         const success = await login(email, password);
         if (!success) setError('Email hoặc mật khẩu không chính xác.');
       } else {
-        const success = await register(name, email, password);
+        const success = await register(name, "", email, password);
         if (!success) setError('Đăng ký thất bại. Email có thể đã tồn tại.');
         else {
           await login(email, password);

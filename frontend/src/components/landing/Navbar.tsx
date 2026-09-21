@@ -557,7 +557,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                             </button>
                           )}
 
-                          {activeUser?.primary_organization_id && (
+                          {(activeUser as any)?.primary_organization_id && (
                             <button
                               onClick={() => {
                                 setDropdownOpen(false);

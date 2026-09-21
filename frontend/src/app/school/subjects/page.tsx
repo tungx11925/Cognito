@@ -14,7 +14,7 @@ export default function SubjectsPage() {
   const [newDesc, setNewDesc] = useState('');
   
   const { activeUser } = useStudy();
-  const orgId = activeUser?.primary_organization_id || '9873d6eb-901d-40ba-83ff-a128af55581b';
+  const orgId = (activeUser as any)?.primary_organization_id || '9873d6eb-901d-40ba-83ff-a128af55581b';
 
   const fetchSubjects = async () => {
     try {

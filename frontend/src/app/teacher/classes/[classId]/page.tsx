@@ -19,7 +19,7 @@ export default function ClassDetailsPage() {
 
   useEffect(() => {
     const fetchClassData = async () => {
-      const orgId = activeUser?.memberships?.[0]?.organization_id || '9873d6eb-901d-40ba-83ff-a128af55581b';
+      const orgId = (activeUser as any)?.memberships?.[0]?.organization_id || '9873d6eb-901d-40ba-83ff-a128af55581b';
       if (!orgId) return;
 
       try {
@@ -53,7 +53,7 @@ export default function ClassDetailsPage() {
     show: { opacity: 1, transition: { staggerChildren: 0.1 } }
   };
 
-  const item = {
+  const item: any = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
   };
