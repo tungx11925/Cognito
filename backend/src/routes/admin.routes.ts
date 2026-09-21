@@ -1,5 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
-import { authenticate, AuthRequest } from '../middlewares/auth.middleware';
+import { authenticate, requireRole, AuthRequest } from '../middlewares/auth.middleware';
 import { rateLimiter } from '../middlewares/rateLimiter.middleware';
 import { 
   getAdminStats, 
@@ -16,16 +16,8 @@ import {
 
 const router = Router();
 
-// Middleware checking for admin email 'admin@edushare.com'
-const authorizeAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
-  if (!req.user || req.user.email !== 'admin@edushare.com') {
-    return res.status(403).json({ error: 'Quyền truy cập bị từ chối. Chỉ dành cho quản trị viên.' });
-  }
-  next();
-};
-
-// All admin routes are protected by authenticate + authorizeAdmin
-router.use(authenticate, authorizeAdmin);
+// All admin routes are protected by authenticate + requireRole('admin')
+router.use(authenticate, requireRole('admin'));
 
 router.get('/stats', getAdminStats);
 router.get('/users', rateLimiter(60000, 120), getUsers);

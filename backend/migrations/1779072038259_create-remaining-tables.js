@@ -118,12 +118,14 @@ exports.up = async (pgm) => {
   // Create some users
   const adminPasswordHash = await bcrypt.hash('admin123', 10);
   const userPasswordHash = await bcrypt.hash('user123', 10);
+  const teacherPasswordHash = await bcrypt.hash('teacher123', 10);
 
   // Insert users
   pgm.sql(`
-    INSERT INTO users (email, password, name) VALUES
-    ('admin@edushare.com', '${adminPasswordHash}', 'Admin Edushare'),
-    ('hocvien@edushare.com', '${userPasswordHash}', 'Nguyễn Văn Học');
+    INSERT INTO users (email, password, name, role) VALUES
+    ('admin', '${adminPasswordHash}', 'Admin Edushare', 'admin'),
+    ('giaovien', '${teacherPasswordHash}', 'Giáo Viên Demo', 'teacher'),
+    ('hocvien@edushare.com', '${userPasswordHash}', 'Nguyễn Văn Học', 'student');
   `);
 
   // Insert documents

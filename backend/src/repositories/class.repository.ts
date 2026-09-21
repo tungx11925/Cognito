@@ -39,10 +39,10 @@ class ClassRepository {
     return res.rows;
   }
 
-  async create(organizationId: string, name: string, majorId?: string, teacherId?: number): Promise<SchoolClassRow> {
+  async create(organizationId: string, name: string, majorId?: string, teacherId?: number, semesterId?: string, subjectId?: string): Promise<SchoolClassRow> {
     const res = await db.query(
-      'INSERT INTO school_classes (organization_id, name, major_id, homeroom_teacher_id) VALUES ($1, $2, $3, $4) RETURNING *',
-      [organizationId, name, majorId || null, teacherId || null]
+      'INSERT INTO school_classes (organization_id, name, major_id, homeroom_teacher_id, semester_id, subject_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [organizationId, name, majorId || null, teacherId || null, semesterId || null, subjectId || null]
     );
     return res.rows[0];
   }
@@ -55,10 +55,10 @@ class ClassRepository {
     return res.rows[0] || null;
   }
 
-  async update(id: string, organizationId: string, name: string, majorId?: string, teacherId?: number): Promise<SchoolClassRow | null> {
+  async update(id: string, organizationId: string, name: string, majorId?: string, teacherId?: number, semesterId?: string, subjectId?: string): Promise<SchoolClassRow | null> {
     const res = await db.query(
-      'UPDATE school_classes SET name = $1, major_id = $2, homeroom_teacher_id = $3 WHERE id = $4 AND organization_id = $5 RETURNING *',
-      [name, majorId || null, teacherId || null, id, organizationId]
+      'UPDATE school_classes SET name = $1, major_id = $2, homeroom_teacher_id = $3, semester_id = $4, subject_id = $5 WHERE id = $6 AND organization_id = $7 RETURNING *',
+      [name, majorId || null, teacherId || null, semesterId || null, subjectId || null, id, organizationId]
     );
     return res.rows[0] || null;
   }

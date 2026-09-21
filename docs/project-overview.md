@@ -81,7 +81,7 @@ The platform integrates multiple AI providers (Google Gemini, OpenAI, Groq) to p
 | Role | Email | Password |
 |---|---|---|
 | Student | `hocvien@edushare.com` | `user123` |
-| Admin | `admin@edushare.com` | `admin123` |
+| Admin | `admin` | `admin123` |
 
 ---
 

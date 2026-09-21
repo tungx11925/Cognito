@@ -62,11 +62,8 @@ export class AuthService {
     const formattedIdentifier = email.trim();
     const formattedEmail = formattedIdentifier.toLowerCase();
     
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formattedIdentifier);
-    let user;
-    if (isEmail) {
-      user = await userRepository.findByEmail(formattedEmail);
-    } else {
+    let user = await userRepository.findByEmail(formattedEmail);
+    if (!user) {
       user = await userRepository.findByName(formattedIdentifier);
     }
     

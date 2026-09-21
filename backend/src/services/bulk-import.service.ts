@@ -140,11 +140,29 @@ class BulkImportService {
           userId = newUserRes.rows[0].id;
         }
 
-        // Add to organization
-        await client.query(
-          'INSERT INTO organization_members (organization_id, user_id, org_role, class_id, student_code, status) VALUES ($1, $2, $3, $4, $5, $6)',
-          [organizationId, userId, 'student', classId, row.ma_so_sinh_vien, 'PENDING_FIRST_LOGIN']
+        // Add to organization members if not exists
+        const orgMem = await client.query(
+          'SELECT id FROM organization_members WHERE user_id = $1 AND organization_id = $2',
+          [userId, organizationId]
         );
+        if (orgMem.rows.length === 0) {
+          await client.query(
+            'INSERT INTO organization_members (organization_id, user_id, org_role, student_code, status) VALUES ($1, $2, $3, $4, $5)',
+            [organizationId, userId, 'student', row.ma_so_sinh_vien, 'PENDING_FIRST_LOGIN']
+          );
+        }
+
+        // Add to class_enrollments
+        const classEnroll = await client.query(
+          'SELECT id FROM class_enrollments WHERE class_id = $1 AND student_id = $2',
+          [classId, userId]
+        );
+        if (classEnroll.rows.length === 0) {
+          await client.query(
+            'INSERT INTO class_enrollments (class_id, student_id, status) VALUES ($1, $2, $3)',
+            [classId, userId, 'ACTIVE']
+          );
+        }
 
         memberEmails.add(email);
         memberCodes.add(row.ma_so_sinh_vien);

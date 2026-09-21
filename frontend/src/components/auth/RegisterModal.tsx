@@ -432,7 +432,13 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
           setIsForceChangePasswordMode(true);
         } else {
           onClose();
-          router.push('/home');
+          if (result.role === 'admin') {
+            router.push('/admin');
+          } else if (result.role === 'teacher') {
+            router.push('/teacher');
+          } else {
+            router.push('/home');
+          }
         }
       }
     }

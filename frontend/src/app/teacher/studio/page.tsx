@@ -140,6 +140,18 @@ export default function TeacherStudioPage() {
     fetchLecturesData();
   }, []);
 
+  // Auth Check
+  useEffect(() => {
+    if (isAuthenticated === false) {
+      router.push('/home');
+      return;
+    }
+    if (activeUser && activeUser.role !== 'teacher') {
+      router.push('/home');
+      return;
+    }
+  }, [isAuthenticated, activeUser, router]);
+
   const fetchLecturesData = async () => {
     try {
       setLoading(true);

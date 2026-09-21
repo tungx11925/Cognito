@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown, CheckCheck, MessageSquare, Presentation } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown, CheckCheck, MessageSquare, Presentation, Building2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
@@ -206,74 +206,91 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           <nav className="hidden md:flex items-center gap-3 lg:gap-6">
             {isLoggedIn ? (
               <>
-                <Link
-                  href="/library"
-                  prefetch={true}
-                  className={`transition-colors duration-150 text-sm ${
-                    pathname === '/library'
-                      ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-0.5'
-                      : 'font-semibold text-gray-600 hover:text-[#1a3d28]'
-                  }`}
-                >
-                  Thư viện của tôi
-                </Link>
-                <Link
-                  href="/flashcards"
-                  prefetch={true}
-                  className={`transition-colors duration-150 text-sm ${
-                    pathname?.startsWith('/flashcards')
-                      ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-0.5'
-                      : 'font-semibold text-gray-600 hover:text-[#1a3d28]'
-                  }`}
-                >
-                  Flashcards
-                </Link>
-                <Link
-                  href="/ai-test"
-                  prefetch={true}
-                  className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${
-                    pathname === '/ai-test'
-                      ? 'bg-[#1a3d28] text-white shadow-sm'
-                      : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
-                  }`}
-                >
-                  <FileQuestion size={13} />
-                  Bài tập AI
-                </Link>
-                <Link
-                  href="/teacher/studio"
-                  prefetch={true}
-                  className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${
-                    pathname?.startsWith('/teacher')
-                      ? 'bg-[#1a3d28] text-white shadow-sm font-bold'
-                      : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
-                  }`}
-                >
-                  <Presentation size={14} />
-                  Giảng dạy & Slide
-                </Link>
-                <Link
-                  href="/community"
-                  prefetch={true}
-                  className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1 ${
-                    pathname === '/community'
-                      ? 'text-emerald-800 font-bold border-b-2 border-emerald-700 pb-0.5'
-                      : 'text-emerald-600 hover:text-emerald-800'
-                  }`}
-                >
-                  Cộng đồng
-                </Link>
-                <Link
-                  href="/leaderboard"
-                  className={`transition-colors duration-200 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${
-                    pathname === '/leaderboard'
-                      ? 'bg-amber-500 text-white font-bold'
-                      : 'text-amber-700 hover:text-amber-900 font-bold'
-                  }`}
-                >
-                  <Trophy size={14} className={pathname === '/leaderboard' ? 'text-white fill-white' : 'text-amber-500 fill-amber-500/20'} />
-                  Bảng xếp hạng
-                </Link>
+                {activeUser?.role === 'admin' ? (
+                  <Link
+                    href="/admin"
+                    prefetch={true}
+                    className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white mx-2`}
+                  >
+                    <Shield size={14} />
+                    Bảng điều khiển Admin
+                  </Link>
+                ) : (
+                  <>
+                    <Link
+                      href="/library"
+                      prefetch={true}
+                      className={`transition-colors duration-150 text-sm mx-2 ${
+                        pathname === '/library'
+                          ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-0.5'
+                          : 'font-semibold text-gray-600 hover:text-[#1a3d28]'
+                      }`}
+                    >
+                      Thư viện của tôi
+                    </Link>
+                    <Link
+                      href="/flashcards"
+                      prefetch={true}
+                      className={`transition-colors duration-150 text-sm mx-2 ${
+                        pathname?.startsWith('/flashcards')
+                          ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-0.5'
+                          : 'font-semibold text-gray-600 hover:text-[#1a3d28]'
+                      }`}
+                    >
+                      Flashcards
+                    </Link>
+                    <Link
+                      href="/ai-test"
+                      prefetch={true}
+                      className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 mx-2 rounded-lg ${
+                        pathname === '/ai-test'
+                          ? 'bg-[#1a3d28] text-white shadow-sm'
+                          : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
+                      }`}
+                    >
+                      <FileQuestion size={13} />
+                      Bài tập AI
+                    </Link>
+                    
+                    {activeUser?.role === 'teacher' && (
+                      <Link
+                        href="/teacher/studio"
+                        prefetch={true}
+                        className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 mx-2 rounded-lg ${
+                          pathname?.startsWith('/teacher')
+                            ? 'bg-[#1a3d28] text-white shadow-sm font-bold'
+                            : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
+                        }`}
+                      >
+                        <Presentation size={14} />
+                        Giảng dạy & Slide
+                      </Link>
+                    )}
+
+                    <Link
+                      href="/community"
+                      prefetch={true}
+                      className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1 mx-2 ${
+                        pathname === '/community'
+                          ? 'text-emerald-800 font-bold border-b-2 border-emerald-700 pb-0.5'
+                          : 'text-emerald-600 hover:text-emerald-800'
+                      }`}
+                    >
+                      Cộng đồng
+                    </Link>
+                    <Link
+                      href="/leaderboard"
+                      className={`transition-colors duration-200 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 mx-2 rounded-lg ${
+                        pathname === '/leaderboard'
+                          ? 'bg-amber-500 text-white font-bold'
+                          : 'text-amber-700 hover:text-amber-900 font-bold'
+                      }`}
+                    >
+                      <Trophy size={14} className={pathname === '/leaderboard' ? 'text-white fill-white' : 'text-amber-500 fill-amber-500/20'} />
+                      Bảng xếp hạng
+                    </Link>
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -527,7 +544,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
 
                         {/* Menu Options */}
                         <div className="p-1">
-                          {activeUser?.email === 'admin@edushare.com' && (
+                          {activeUser?.role === 'admin' && (
                             <button
                               onClick={() => {
                                 setDropdownOpen(false);
@@ -537,6 +554,19 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                             >
                               <Shield size={14} className="text-emerald-600" />
                               Quản trị hệ thống
+                            </button>
+                          )}
+
+                          {activeUser?.primary_organization_id && (
+                            <button
+                              onClick={() => {
+                                setDropdownOpen(false);
+                                router.push('/school');
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-lg transition-colors text-left"
+                            >
+                              <Building2 size={14} className="text-blue-600" />
+                              Bảng điều khiển Trường học
                             </button>
                           )}
 
@@ -679,19 +709,28 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-4">
               {isLoggedIn ? (
                 <>
-                  <Link href="/library" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Thư viện của tôi</Link>
-                  <Link href="/library" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tài liệu</Link>
-                  <Link href="/flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
-                  <Link href="/ai-test" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
-                    <FileQuestion size={16} /> Bài tập AI
-                  </Link>
-                  <Link href="/teacher/studio" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
-                    <Layout size={16} /> Slide Studio
-                  </Link>
-                  <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
-                  <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">
-                    <Trophy size={16} className="text-amber-500 fill-amber-500/20" /> Bảng xếp hạng
-                  </Link>
+                  {activeUser?.role === 'admin' ? (
+                    <Link href="/admin" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
+                      <Shield size={16} /> Bảng điều khiển Admin
+                    </Link>
+                  ) : (
+                    <>
+                      <Link href="/library" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Thư viện của tôi</Link>
+                      <Link href="/flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
+                      <Link href="/ai-test" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
+                        <FileQuestion size={16} /> Bài tập AI
+                      </Link>
+                      {activeUser?.role === 'teacher' && (
+                        <Link href="/teacher/studio" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
+                          <Layout size={16} /> Slide Studio
+                        </Link>
+                      )}
+                      <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
+                      <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">
+                        <Trophy size={16} className="text-amber-500 fill-amber-500/20" /> Bảng xếp hạng
+                      </Link>
+                    </>
+                  )}
                 </>
               ) : (
                 <>

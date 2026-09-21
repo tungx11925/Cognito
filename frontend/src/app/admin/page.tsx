@@ -95,9 +95,10 @@ export default function AdminPage() {
   useEffect(() => {
     if (authLoading) return;
     
-    // Authorization Check: Only admin@edushare.com is allowed
-    if (!activeUser || activeUser.email !== "admin@edushare.com") {
+    // Authorization Check
+    if (!activeUser || activeUser.role !== "admin") {
       setLoading(false);
+      setError("Unauthorized access.");
       return;
     }
 
@@ -463,7 +464,7 @@ export default function AdminPage() {
   }
 
   // 2. Access Denied Screen
-  if (!activeUser || activeUser.email !== "admin@edushare.com") {
+  if (!activeUser || activeUser.role !== "admin") {
     return (
       <div className="admin-dashboard-root h-screen w-full flex flex-col items-center justify-center bg-[#FAF8F5] p-6 text-center">
         <style dangerouslySetInnerHTML={{ __html: `

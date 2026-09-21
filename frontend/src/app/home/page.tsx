@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStudy } from '@/context/StudyContext';
 import { Navbar } from '@/components/landing/Navbar';
@@ -26,6 +26,16 @@ function LandingPageContent() {
   } = useStudy();
 
   const router = useRouter();
+
+  useEffect(() => {
+    if (isAuthenticated && activeUser) {
+      if (activeUser.role === 'admin') {
+        router.push('/admin');
+      } else if (activeUser.role === 'teacher') {
+        router.push('/teacher');
+      }
+    }
+  }, [isAuthenticated, activeUser, router]);
 
   const handleDemoScroll = () => {
     const element = document.getElementById('features');

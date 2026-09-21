@@ -56,7 +56,7 @@ interface StudyContextType {
   isAuthenticated: boolean;
   setIsAuthenticated: (auth: boolean) => void;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; requires2FA?: boolean; requiresPasswordChange?: boolean; email?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; requires2FA?: boolean; requiresPasswordChange?: boolean; email?: string; role?: string }>;
   register: (name: string, phone: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   showLanding: boolean;
@@ -431,7 +431,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   // Auth API Calls
-  const login = async (email: string, password: string): Promise<{ success: boolean; requires2FA?: boolean; requiresPasswordChange?: boolean; email?: string }> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; requires2FA?: boolean; requiresPasswordChange?: boolean; email?: string; role?: string }> => {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
@@ -453,7 +453,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setIsAuthenticated(true);
         setShowDailyRecommendModal(true);
         triggerMessage(data.message || 'Đăng nhập thành công', 'success');
-        return { success: true };
+        return { success: true, role: data.user?.role };
       } else {
         triggerMessage(data.error || 'Đăng nhập thất bại', 'error');
         return { success: false };

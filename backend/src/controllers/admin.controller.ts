@@ -81,7 +81,7 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
     let countQuery = `
       SELECT COUNT(*)::int
       FROM users 
-      WHERE email != 'admin@edushare.com'
+      WHERE email != 'admin'
     `;
     const countParams: any[] = [];
     if (search) {
@@ -95,7 +95,7 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
     let query = `
       SELECT id, name, email, phone, wallet_balance, role, created_at 
       FROM users 
-      WHERE email != 'admin@edushare.com'
+      WHERE email != 'admin'
     `;
     const params: any[] = [];
     let paramIndex = 1;
@@ -136,7 +136,7 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
     if (userCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Người dùng không tồn tại' });
     }
-    if (userCheck.rows[0].email === 'admin@edushare.com') {
+    if (userCheck.rows[0].email === 'admin') {
       return res.status(400).json({ error: 'Không thể xóa tài khoản Admin hệ thống' });
     }
 
@@ -267,7 +267,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
     if (userCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Người dùng không tồn tại' });
     }
-    if (userCheck.rows[0].email === 'admin@edushare.com') {
+    if (userCheck.rows[0].email === 'admin') {
       return res.status(400).json({ error: 'Không thể chỉnh sửa tài khoản Admin hệ thống qua trang này' });
     }
 
