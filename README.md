@@ -53,8 +53,12 @@ Dưới đây là thông tin các tài khoản demo đã được cấu hình s�
   * **Mật khẩu:** `user123`
 
 * **Tài khoản Quản trị viên (Admin):**
-  * **Email:** `admin@edushare.com`
+  * **Email:** `admin`
   * **Mật khẩu:** `admin123`
+
+* **Tài khoản Giáo viên (Teacher):**
+  * **Email:** `giaovien`
+  * **Mật khẩu:** `teacher123`
 
 ---
 

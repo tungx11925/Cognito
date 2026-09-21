@@ -97,7 +97,7 @@ exports.up = pgm => {
     ease_factor REAL DEFAULT 2.5,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
-  UPDATE users SET role = 'admin' WHERE email = 'admin@edushare.com';
+  UPDATE users SET role = 'admin' WHERE email = 'admin';
 
   -- Performance indexes for frequently queried columns
   CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);

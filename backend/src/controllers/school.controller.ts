@@ -85,8 +85,8 @@ export const getClasses = async (req: OrgAuthRequest, res: Response) => {
 
 export const createClass = async (req: OrgAuthRequest, res: Response) => {
   try {
-    const { name, major_id, homeroom_teacher_id } = req.body;
-    const data = await organizationService.createClass(req.params.organizationId, name, major_id, homeroom_teacher_id);
+    const { name, major_id, homeroom_teacher_id, semester_id, subject_id } = req.body;
+    const data = await organizationService.createClass(req.params.organizationId, name, major_id, homeroom_teacher_id, semester_id, subject_id);
     res.status(201).json(data);
   } catch (error: any) {
     res.status(error.statusCode || 500).json({ error: error.message });
@@ -100,6 +100,26 @@ export const getClassRoster = async (req: OrgAuthRequest, res: Response) => {
     }
     const data = await organizationService.getClassRoster(req.params.organizationId, req.params.classId);
     res.json(data);
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+export const enrollStudent = async (req: OrgAuthRequest, res: Response) => {
+  try {
+    const { student_id } = req.body;
+    const data = await organizationService.enrollStudent(req.params.organizationId, req.params.classId, student_id);
+    res.status(201).json(data);
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+export const assignTeacherToClass = async (req: OrgAuthRequest, res: Response) => {
+  try {
+    const { teacher_id, role } = req.body;
+    const data = await organizationService.assignTeacherToClass(req.params.organizationId, req.params.classId, teacher_id, role);
+    res.status(201).json(data);
   } catch (error: any) {
     res.status(error.statusCode || 500).json({ error: error.message });
   }
@@ -134,7 +154,11 @@ export const assignToClass = async (req: OrgAuthRequest, res: Response) => {
     if (!(await checkClassAccess(req.params.organizationId, req.params.classId, req.user!.id, req.orgMembership!.org_role))) {
       return res.status(403).json({ error: 'Bạn không có quyền giao bài tập cho lớp học này' });
     }
-    const { test_set_id, document_id, due_date, is_mandatory } = req.body;
+    const { 
+      test_set_id, document_id, due_date, is_mandatory,
+      title, description, start_date, duration_minutes, attempt_limit, access_code 
+    } = req.body;
+    
     const data = await assignmentService.assignToClass(
       req.params.organizationId,
       req.params.classId,
@@ -142,7 +166,13 @@ export const assignToClass = async (req: OrgAuthRequest, res: Response) => {
       test_set_id,
       document_id,
       due_date,
-      is_mandatory
+      is_mandatory,
+      title,
+      description,
+      start_date,
+      duration_minutes,
+      attempt_limit,
+      access_code
     );
     res.status(201).json(data);
   } catch (error: any) {
@@ -156,6 +186,18 @@ export const getClassAssignments = async (req: OrgAuthRequest, res: Response) =>
       return res.status(403).json({ error: 'Bạn không có quyền xem bài tập của lớp học này' });
     }
     const data = await assignmentService.getClassAssignments(req.params.classId);
+    res.json(data);
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+export const getAssignmentResults = async (req: OrgAuthRequest, res: Response) => {
+  try {
+    if (!(await checkClassAccess(req.params.organizationId, req.params.classId, req.user!.id, req.orgMembership!.org_role))) {
+      return res.status(403).json({ error: 'Bạn không có quyền xem kết quả của lớp học này' });
+    }
+    const data = await assignmentService.getAssignmentResults(req.params.assignmentId);
     res.json(data);
   } catch (error: any) {
     res.status(error.statusCode || 500).json({ error: error.message });

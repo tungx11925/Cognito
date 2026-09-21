@@ -9,7 +9,14 @@ export interface ClassAssignmentRow {
   assigned_by: number;
   due_date: string | null;
   is_mandatory: boolean;
+  title: string | null;
+  description: string | null;
+  start_date: string | null;
+  duration_minutes: number | null;
+  attempt_limit: number | null;
+  access_code: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 class AssignmentRepository {
@@ -20,14 +27,23 @@ class AssignmentRepository {
     assigned_by: number;
     due_date?: string;
     is_mandatory?: boolean;
+    title?: string;
+    description?: string;
+    start_date?: string;
+    duration_minutes?: number;
+    attempt_limit?: number;
+    access_code?: string;
   }): Promise<ClassAssignmentRow> {
     if (!data.test_set_id && !data.document_id) {
       throw new AppError('Phải có test_set_id hoặc document_id', 400);
     }
 
     const res = await db.query(
-      `INSERT INTO class_assignments (class_id, test_set_id, document_id, assigned_by, due_date, is_mandatory)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO class_assignments (
+        class_id, test_set_id, document_id, assigned_by, due_date, is_mandatory,
+        title, description, start_date, duration_minutes, attempt_limit, access_code
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         data.class_id,
@@ -35,7 +51,13 @@ class AssignmentRepository {
         data.document_id || null,
         data.assigned_by,
         data.due_date || null,
-        data.is_mandatory || false
+        data.is_mandatory || false,
+        data.title || null,
+        data.description || null,
+        data.start_date || null,
+        data.duration_minutes || null,
+        data.attempt_limit || 1,
+        data.access_code || null
       ]
     );
     return res.rows[0];

@@ -38,7 +38,7 @@ erDiagram
 ### 📋 Danh sách dữ liệu mẫu đã được nạp sẵn:
 
 1. **Người dùng (`users`)**:
-   * **Admin**: `admin@edushare.com` (Mật khẩu: `admin123` - đã được mã hóa bảo mật Bcrypt).
+   * **Admin**: `admin` (Mật khẩu: `admin123` - đã được mã hóa bảo mật Bcrypt).
    * **Học viên**: `hocvien@edushare.com` (Mật khẩu: `user123` - đã được mã hóa bảo mật Bcrypt).
 
 2. **Tài liệu học tập (`documents`)**:

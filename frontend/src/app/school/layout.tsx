@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Building2, Users, Upload, LogOut, ChevronLeft, BookOpen } from 'lucide-react';
+import { Building2, Users, Upload, LogOut, ChevronLeft, BookOpen, Settings, LayoutDashboard, Menu, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function SchoolLayout({
   children,
@@ -13,78 +14,110 @@ export default function SchoolLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
     } else {
-      router.push('/testhome'); // redirect to login page
+      router.push('/testhome');
     }
   }, [router]);
 
   if (!user) return null;
 
-  // Render Sidebar
+  const navItems = [
+    { name: 'Tổng quan', href: '/school', icon: LayoutDashboard },
+    { name: 'Năm học & Học kỳ', href: '/school/academic-years', icon: BookOpen },
+    { name: 'Môn học', href: '/school/subjects', icon: BookOpen },
+    { name: 'Quản lý lớp học', href: '/school/classes', icon: Users },
+    { name: 'Nhập danh sách học sinh', href: '/school/students/import', icon: Upload },
+    { name: 'Bài tập giao', href: '/school/assignments', icon: BookOpen },
+  ];
+
   return (
-    <div className="flex h-screen bg-gray-50">
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-6 border-b border-gray-200">
-          <Link href="/testhome" className="flex items-center text-gray-500 hover:text-blue-600 mb-6 transition-colors">
-            <ChevronLeft size={20} className="mr-1" />
-            <span className="font-medium text-sm">Về trang chủ</span>
-          </Link>
-          <h2 className="text-xl font-bold text-gray-800 flex items-center">
-            <Building2 className="mr-2 text-blue-600" />
-            Quản lý Trường học
+    <div className="flex h-screen bg-gray-50/50">
+      {/* Mobile Menu Button */}
+      <button 
+        className="md:hidden fixed top-4 right-4 z-50 p-2 bg-white rounded-full shadow-md"
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+      >
+        {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+      </button>
+
+      {/* Sidebar - Desktop */}
+      <aside className="hidden md:flex w-72 flex-col bg-white border-r border-gray-100 shadow-[2px_0_10px_rgba(0,0,0,0.02)] z-10">
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-900 flex items-center tracking-tight font-display">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center mr-3 shadow-sm">
+              <Building2 className="text-white" size={18} />
+            </div>
+            Admin Portal
           </h2>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4">
-          <ul className="space-y-1">
-            <li>
+        <div className="px-4 py-3">
+          <Link href="/testhome" className="flex items-center text-gray-400 hover:text-gray-700 text-sm font-medium transition-colors p-2 rounded-md hover:bg-gray-50 group">
+            <ChevronLeft size={16} className="mr-1 group-hover:-translate-x-1 transition-transform" />
+            Về trang chủ
+          </Link>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href || (item.href !== '/school' && pathname.includes(item.href));
+            const Icon = item.icon;
+            
+            return (
               <Link 
-                href="/school" 
-                className={`flex items-center px-6 py-3 text-sm font-medium transition-colors ${pathname === '/school' ? 'text-blue-700 bg-blue-50 border-r-4 border-blue-600' : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'}`}
+                key={item.name}
+                href={item.href} 
+                className={`relative flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 group ${
+                  isActive 
+                    ? 'text-blue-700 bg-blue-50/80 shadow-sm' 
+                    : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                }`}
               >
-                <Building2 size={20} className="mr-3" />
-                Tổng quan
+                {isActive && (
+                  <motion.div 
+                    layoutId="activeTab" 
+                    className="absolute left-0 w-1 h-6 bg-blue-600 rounded-r-full" 
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  />
+                )}
+                <Icon size={18} className={`mr-3 ${isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`} />
+                {item.name}
               </Link>
-            </li>
-            <li>
-              <Link 
-                href="/school/classes" 
-                className={`flex items-center px-6 py-3 text-sm font-medium transition-colors ${pathname === '/school/classes' ? 'text-blue-700 bg-blue-50 border-r-4 border-blue-600' : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'}`}
-              >
-                <Users size={20} className="mr-3" />
-                Quản lý lớp học
-              </Link>
-            </li>
-            <li>
-              <Link 
-                href="/school/students/import" 
-                className={`flex items-center px-6 py-3 text-sm font-medium transition-colors ${pathname === '/school/students/import' ? 'text-blue-700 bg-blue-50 border-r-4 border-blue-600' : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'}`}
-              >
-                <Upload size={20} className="mr-3" />
-                Nhập danh sách học sinh
-              </Link>
-            </li>
-            <li>
-              <Link 
-                href="/school/assignments" 
-                className={`flex items-center px-6 py-3 text-sm font-medium transition-colors ${pathname === '/school/assignments' ? 'text-blue-700 bg-blue-50 border-r-4 border-blue-600' : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'}`}
-              >
-                <BookOpen size={20} className="mr-3" />
-                Bài tập giao
-              </Link>
-            </li>
-          </ul>
+            )
+          })}
         </nav>
+
+        <div className="p-4 border-t border-gray-100">
+          <div className="flex items-center p-3 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold mr-3">
+              {user.name?.charAt(0) || 'A'}
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-sm font-bold text-gray-900 truncate">{user.name}</p>
+              <p className="text-xs text-gray-500 truncate">{user.email}</p>
+            </div>
+          </div>
+        </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-8">
-          {children}
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[#fafafa]">
+        {/* Header Component can go here if needed, but for Admin, a clean canvas is often better */}
+        <div className="flex-1 overflow-y-auto p-6 md:p-10">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="h-full"
+          >
+            {children}
+          </motion.div>
         </div>
       </main>
     </div>

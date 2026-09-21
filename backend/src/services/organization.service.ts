@@ -60,7 +60,7 @@ class OrganizationService {
     return classRepository.listByTeacher(organizationId, teacherId);
   }
 
-  async createClass(organizationId: string, name: string, majorId?: string, homeroomTeacherId?: number) {
+  async createClass(organizationId: string, name: string, majorId?: string, homeroomTeacherId?: number, semesterId?: string, subjectId?: string) {
     if (majorId) {
       const major = await majorRepository.getByIdAndOrganization(majorId, organizationId);
       if (!major) throw new AppError('Chuyên ngành không hợp lệ', 400);
@@ -74,7 +74,7 @@ class OrganizationService {
       }
     }
 
-    return classRepository.create(organizationId, name, majorId, homeroomTeacherId);
+    return classRepository.create(organizationId, name, majorId, homeroomTeacherId, semesterId, subjectId);
   }
 
   // --- Roster ---
@@ -87,6 +87,24 @@ class OrganizationService {
       class: cls,
       students: members.filter(m => m.org_role === 'student')
     };
+  }
+
+  // --- New Enrollments & Teachers ---
+  async enrollStudent(organizationId: string, classId: string, studentId: number) {
+    // Validate student is in org
+    const mem = await organizationMemberRepository.getMembership(studentId, organizationId);
+    if (!mem || mem.org_role !== 'student') throw new AppError('Sinh viên không hợp lệ', 400);
+
+    const { classMemberRepository } = await import('../repositories/class-member.repository');
+    return classMemberRepository.enrollStudent(classId, studentId);
+  }
+
+  async assignTeacherToClass(organizationId: string, classId: string, teacherId: number, role: string) {
+    const mem = await organizationMemberRepository.getMembership(teacherId, organizationId);
+    if (!mem || mem.org_role !== 'teacher') throw new AppError('Giáo viên không hợp lệ', 400);
+
+    const { classMemberRepository } = await import('../repositories/class-member.repository');
+    return classMemberRepository.assignTeacher(classId, teacherId, role);
   }
 }
 

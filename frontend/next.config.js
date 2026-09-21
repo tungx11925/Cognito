@@ -21,6 +21,12 @@ const nextConfig = {
     optimizeCss: false,
   },
 
+  eslint: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors. Next.js 14 currently has conflicts with ESLint 9.
+    ignoreDuringBuilds: true,
+  },
+
   // Tăng tốc Fast Refresh/HMR khi dev: không theo dõi các thư mục nặng ngoài frontend
   // (tránh tình trạng "[Fast Refresh] rebuilding" kéo dài hàng chục giây)
   webpack: (config, { dev }) => {

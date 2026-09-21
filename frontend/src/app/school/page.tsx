@@ -2,17 +2,27 @@
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Building2, Users, BookOpen, GraduationCap } from 'lucide-react';
+import { Building2, Users, BookOpen, GraduationCap, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useStudy } from '@/context/StudyContext';
+import { motion } from 'framer-motion';
 
 export default function SchoolDashboard() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // Lấy organization_id từ user session (giả lập đơn giản cho demo)
-  // Thực tế có thể lưu trong context hoặc token
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const orgId = user.primary_organization_id || '9873d6eb-901d-40ba-83ff-a128af55581b'; // Fallback for dev
+  const router = useRouter();
+  const { activeUser, loading: authLoading } = useStudy();
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!activeUser) {
+      router.push('/');
+    }
+  }, [activeUser, authLoading, router]);
+
+  const orgId = (activeUser as any)?.primary_organization_id || '9873d6eb-901d-40ba-83ff-a128af55581b';
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -33,61 +43,115 @@ export default function SchoolDashboard() {
     }
   }, [orgId]);
 
-  if (loading) return <div className="text-gray-500">Đang tải dữ liệu...</div>;
-  if (error) return <div className="text-red-500">{error}</div>;
+  if (loading) return (
+    <div className="flex h-[60vh] items-center justify-center">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    </div>
+  );
+  
+  if (error) return <div className="p-4 bg-red-50 text-red-600 rounded-xl">{error}</div>;
+
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1 }
+    }
+  };
+
+  const item: any = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  };
+
+  const statCards = [
+    {
+      title: 'Tổng học sinh',
+      value: stats?.totalStudents || 0,
+      subValue: `${stats?.activeStudents || 0} đang hoạt động`,
+      icon: Users,
+      color: 'blue'
+    },
+    {
+      title: 'Giáo viên',
+      value: stats?.totalTeachers || 0,
+      icon: GraduationCap,
+      color: 'indigo'
+    },
+    {
+      title: 'Lớp học',
+      value: stats?.totalClasses || 0,
+      icon: Building2,
+      color: 'amber'
+    },
+    {
+      title: 'Chuyên ngành',
+      value: stats?.totalMajors || 0,
+      icon: BookOpen,
+      color: 'emerald'
+    }
+  ];
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-8">Tổng quan Trường học</h1>
+    <div className="max-w-7xl mx-auto">
+      <motion.div 
+        initial={{ opacity: 0, y: -10 }} 
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-10"
+      >
+        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Tổng quan Hệ thống</h1>
+        <p className="text-gray-500 mt-2 text-sm">Chào mừng trở lại. Đây là tình hình tổng quan của tổ chức.</p>
+      </motion.div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Học sinh */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-          <div className="bg-blue-50 rounded-full p-4 mr-4">
-            <Users className="text-blue-600" size={24} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500 mb-1">Tổng học sinh</p>
-            <h3 className="text-2xl font-bold text-gray-900">{stats?.totalStudents || 0}</h3>
-            <p className="text-xs text-green-600 font-medium mt-1">
-              {stats?.activeStudents || 0} đang hoạt động
-            </p>
-          </div>
-        </div>
+      <motion.div 
+        variants={container}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+      >
+        {statCards.map((stat, i) => {
+          const Icon = stat.icon;
+          return (
+            <motion.div 
+              key={i} 
+              variants={item}
+              className="glass-card rounded-2xl p-6 relative overflow-hidden group"
+            >
+              <div className={`absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-${stat.color}-500/10 rounded-full blur-xl group-hover:bg-${stat.color}-500/20 transition-colors duration-500`} />
+              
+              <div className="flex items-center justify-between mb-4">
+                <div className={`p-3 bg-${stat.color}-50 text-${stat.color}-600 rounded-xl shadow-sm ring-1 ring-${stat.color}-500/20`}>
+                  <Icon size={22} />
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-3xl font-bold text-gray-900 font-display tracking-tight">{stat.value}</h3>
+                <p className="text-sm font-medium text-gray-500 mt-1">{stat.title}</p>
+                {stat.subValue && (
+                  <p className="text-xs text-emerald-600 font-medium mt-2 bg-emerald-50 inline-block px-2 py-1 rounded-md">
+                    {stat.subValue}
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          );
+        })}
+      </motion.div>
 
-        {/* Giáo viên */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-          <div className="bg-indigo-50 rounded-full p-4 mr-4">
-            <GraduationCap className="text-indigo-600" size={24} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500 mb-1">Giáo viên</p>
-            <h3 className="text-2xl font-bold text-gray-900">{stats?.totalTeachers || 0}</h3>
-          </div>
+      {/* Decorative empty state or chart placeholder for future */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="mt-8 glass-card rounded-2xl p-8 border border-dashed border-gray-200 flex flex-col items-center justify-center min-h-[300px]"
+      >
+        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+          <BookOpen className="text-gray-400" size={24} />
         </div>
-
-        {/* Lớp học */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-          <div className="bg-amber-50 rounded-full p-4 mr-4">
-            <Building2 className="text-amber-600" size={24} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500 mb-1">Lớp học</p>
-            <h3 className="text-2xl font-bold text-gray-900">{stats?.totalClasses || 0}</h3>
-          </div>
-        </div>
-
-        {/* Chuyên ngành */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-          <div className="bg-emerald-50 rounded-full p-4 mr-4">
-            <BookOpen className="text-emerald-600" size={24} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500 mb-1">Chuyên ngành</p>
-            <h3 className="text-2xl font-bold text-gray-900">{stats?.totalMajors || 0}</h3>
-          </div>
-        </div>
-      </div>
+        <h3 className="text-lg font-medium text-gray-900 mb-1">Hoạt động gần đây</h3>
+        <p className="text-gray-500 text-sm max-w-sm text-center">Các biểu đồ thống kê và luồng hoạt động chi tiết sẽ xuất hiện tại đây.</p>
+      </motion.div>
     </div>
   );
 }

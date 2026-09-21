@@ -18,7 +18,7 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   body: z.object({
-    email: z.string().email('Email không hợp lệ').toLowerCase().trim(),
+    email: z.string().min(1, 'Vui lòng nhập tài khoản').toLowerCase().trim(),
     password: z.string().min(1, 'Vui lòng nhập mật khẩu'),
   }),
 });

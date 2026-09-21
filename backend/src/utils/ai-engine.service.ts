@@ -131,3 +131,28 @@ NGUYÊN TẮC THIẾT KẾ SƠ ĐỒ TƯ DUY (MINDMAP RULES):
   return raw.replace(/```mermaid/gi, '').replace(/```/g, '').trim();
 }
 
+export async function parseExamWithAI(documentContent: string, opts?: GenerateWithAIOptions): Promise<GeneratedQuestion[]> {
+  const prompt = `Bạn là một chuyên gia nhận dạng và trích xuất câu hỏi từ đề thi. Dưới đây là nội dung văn bản được trích xuất từ một file đề thi (PDF/DOCX). Nhiệm vụ của bạn là đọc hiểu và trích xuất toàn bộ câu hỏi trong đề thi này sang định dạng JSON.
+
+ĐỊNH DẠNG TRẢ VỀ BẮT BUỘC: Chỉ trả về một mảng JSON thuần túy (không có markdown, không có \`\`\`json), mỗi phần tử có cấu trúc:
+{
+  "type": "MULTIPLE_CHOICE" | "FILL_BLANK" | "ESSAY" | "TRUE_FALSE",
+  "content": "<nội dung câu hỏi>",
+  "score": <điểm số, mặc định 1.0>,
+  "options": { "A": "...", "B": "...", "C": "...", "D": "..." },   // chỉ cho MULTIPLE_CHOICE
+  "correctAnswer": "<đáp án>"   // Bắt buộc trích xuất đáp án nếu có trong đề. Nếu không có, hãy tự giải và đưa ra đáp án đúng.
+}
+
+--- NỘI DUNG ĐỀ THI ---
+${documentContent}`;
+
+  const result = await aiProviderService.chat({
+    messages: [{ role: 'user', content: prompt }],
+    modelId: opts?.modelId ?? null,
+    temperature: 0.1, // Thấp để bám sát nội dung gốc
+    maxTokens: 8000,
+    taskType: 'question_generation',
+    userId: opts?.userId ?? null,
+  });
+  return parseAIResponse(result.text);
+}

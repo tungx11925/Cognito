@@ -31,12 +31,13 @@ const uploadMem = multer({
 
 // Protected routes
 router.use(authenticate);
+import { requireRole } from '../middlewares/auth.middleware';
 
 router.post('/chat', validate(aiChatSchema), AiController.chatWithDocument);
-router.post('/generate-quiz', validate(aiGenerateQuizSchema), AiController.generateQuiz);
-router.post('/generate-flashcards-from-file', uploadMem.single('document'), AiController.generateFlashcardsFromFile);
+router.post('/generate-quiz', requireRole('premium', 'admin'), validate(aiGenerateQuizSchema), AiController.generateQuiz);
+router.post('/generate-flashcards-from-file', requireRole('premium', 'admin'), uploadMem.single('document'), AiController.generateFlashcardsFromFile);
 router.get('/mindmap/:docId', validate(aiGetMindmapSchema), AiController.getMindmap);
-router.post('/generate-mindmap', validate(aiGenerateMindmapSchema), AiController.generateMindmap);
+router.post('/generate-mindmap', requireRole('premium', 'admin'), validate(aiGenerateMindmapSchema), AiController.generateMindmap);
 
 // ── Question Generator: danh sách AI model (dropdown) + prompt template ──
 router.get('/models', AiController.listAIModels);
