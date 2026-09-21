@@ -190,7 +190,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
-          <div className="flex items-center gap-2 cursor-pointer" onClick={isLoggedIn ? onDashboardClick : undefined}>
+          <div className="flex items-center gap-2 cursor-pointer shrink-0" onClick={isLoggedIn ? onDashboardClick : undefined}>
             <div
               className="w-7 h-7 rounded-md flex items-center justify-center"
               style={{ background: "#1a3d28" }}
@@ -203,16 +203,16 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           </div>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-3 lg:gap-6">
+          <nav className="hidden lg:flex flex-1 items-center justify-center gap-2 xl:gap-5 min-w-0 px-2">
             {isLoggedIn ? (
                 <>
                   <Link
                     href="/library"
                     prefetch={true}
-                    className={`transition-colors duration-150 text-sm font-semibold flex items-center mx-2 ${
+                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center shrink-0 whitespace-nowrap pb-1 border-b-2 ${
                       pathname === '/library'
-                        ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-1'
-                        : 'text-gray-600 hover:text-[#1a3d28]'
+                        ? 'font-bold text-[#1a3d28] border-[#1a3d28]'
+                        : 'text-gray-600 hover:text-[#1a3d28] border-transparent'
                     }`}
                   >
                     Thư viện của tôi
@@ -220,10 +220,10 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link
                     href="/flashcards"
                     prefetch={true}
-                    className={`transition-colors duration-150 text-sm font-semibold flex items-center mx-2 ${
+                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center shrink-0 whitespace-nowrap pb-1 border-b-2 ${
                       pathname?.startsWith('/flashcards')
-                        ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-1'
-                        : 'text-gray-600 hover:text-[#1a3d28]'
+                        ? 'font-bold text-[#1a3d28] border-[#1a3d28]'
+                        : 'text-gray-600 hover:text-[#1a3d28] border-transparent'
                     }`}
                   >
                     Flashcards
@@ -231,7 +231,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link
                     href="/ai-test"
                     prefetch={true}
-                    className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 mx-2 rounded-lg ${
+                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg ${
                       pathname === '/ai-test'
                         ? 'bg-[#1a3d28] text-white shadow-sm'
                         : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
@@ -244,7 +244,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link
                     href="/teacher/studio"
                     prefetch={true}
-                    className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 mx-2 rounded-lg ${
+                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg ${
                       pathname?.startsWith('/teacher')
                         ? 'bg-[#1a3d28] text-white shadow-sm font-bold'
                         : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
@@ -257,17 +257,17 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link
                     href="/community"
                     prefetch={true}
-                    className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1 mx-2 ${
+                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap pb-1 border-b-2 ${
                       pathname === '/community'
-                        ? 'text-emerald-800 font-bold border-b-2 border-emerald-700 pb-0.5'
-                        : 'text-emerald-600 hover:text-emerald-800'
+                        ? 'text-emerald-800 font-bold border-emerald-700'
+                        : 'text-emerald-600 hover:text-emerald-800 border-transparent'
                     }`}
                   >
                     Cộng đồng
                   </Link>
                   <Link
                     href="/leaderboard"
-                    className={`transition-colors duration-200 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 mx-2 rounded-lg ${
+                    className={`transition-colors duration-200 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg ${
                       pathname === '/leaderboard'
                         ? 'bg-amber-500 text-white font-bold'
                         : 'text-amber-700 hover:text-amber-900 font-bold'
@@ -281,7 +281,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                     <Link
                       href="/admin"
                       prefetch={true}
-                      className={`transition-colors duration-150 text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white mx-2`}
+                      className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white`}
                     >
                       <Shield size={14} />
                       Bảng điều khiển Admin
@@ -304,7 +304,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           </nav>
 
           {/* Actions */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-3 shrink-0">
             {isLoggedIn ? (
               <>
                 {activeUser?.role === 'premium' || activeUser?.role === 'admin' ? (
@@ -688,7 +688,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             )}
           </div>
 
-          <button className="md:hidden" onClick={() => setMobileOpen(!mobileOpen)} style={{ background: "none", border: "none", cursor: "pointer", color: "#0d1a14" }}>
+          <button className="lg:hidden" onClick={() => setMobileOpen(!mobileOpen)} style={{ background: "none", border: "none", cursor: "pointer", color: "#0d1a14" }}>
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
@@ -711,7 +711,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                     <FileQuestion size={16} /> Bài tập AI
                   </Link>
                   <Link href="/teacher/studio" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
-                    <Layout size={16} /> Slide Studio
+                    <Presentation size={16} /> Giảng dạy & Slide
                   </Link>
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
                   <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">
