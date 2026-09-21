@@ -209,10 +209,10 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link
                     href="/library"
                     prefetch={true}
-                    className={`transition-colors duration-150 text-sm mx-2 ${
+                    className={`transition-colors duration-150 text-sm font-semibold flex items-center mx-2 ${
                       pathname === '/library'
-                        ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-0.5'
-                        : 'font-semibold text-gray-600 hover:text-[#1a3d28]'
+                        ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-1'
+                        : 'text-gray-600 hover:text-[#1a3d28]'
                     }`}
                   >
                     Thư viện của tôi
@@ -220,10 +220,10 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link
                     href="/flashcards"
                     prefetch={true}
-                    className={`transition-colors duration-150 text-sm mx-2 ${
+                    className={`transition-colors duration-150 text-sm font-semibold flex items-center mx-2 ${
                       pathname?.startsWith('/flashcards')
-                        ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-0.5'
-                        : 'font-semibold text-gray-600 hover:text-[#1a3d28]'
+                        ? 'font-bold text-[#1a3d28] border-b-2 border-[#1a3d28] pb-1'
+                        : 'text-gray-600 hover:text-[#1a3d28]'
                     }`}
                   >
                     Flashcards
