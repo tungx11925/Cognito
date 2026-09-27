@@ -11,6 +11,9 @@ import { pdfToPng } from 'pdf-to-png-converter';
 import Tesseract from 'tesseract.js';
 import officeParser from 'officeparser';
 import mammoth from 'mammoth';
+import xlsx from 'xlsx';
+import { cleanVietnameseText } from '../utils/vietnamese';
+import { embedChunks, isEmbeddingConfigured } from './rag.service';
 
 const pdfParse = require('pdf-parse');
 
@@ -284,6 +287,21 @@ class DocumentProcessingService {
   }
 
   /**
+   * Chạy OCR trực tiếp cho 1 file ảnh (Buffer)
+   */
+  async runOcrFromImageBuffer(imageBuffer: Buffer): Promise<string> {
+    try {
+      const { data } = await Tesseract.recognize(imageBuffer, 'vie+eng', {
+        logger: () => {},
+      });
+      return (data?.text || '').trim();
+    } catch (ocrErr: any) {
+      console.warn('[DocProcessing] Direct image OCR failed:', ocrErr?.message);
+      return '';
+    }
+  }
+
+  /**
    * Chunk text theo từng trang (không cắt ngang câu, đoạn văn 500-800 tokens, giữ page_number và is_ocr)
    */
   chunkText(pages: PageContent[]): ChunkItem[] {
@@ -425,49 +443,93 @@ class DocumentProcessingService {
     await this.setProcessingStatus(documentId, 'PARSING');
 
     const fileBuffer = await this.fetchFileBuffer(doc.doc_url);
-    const fileName = doc.title || 'document';
-    const mimeType = doc.file_type || 'application/octet-stream';
-
-    // Xử lý PPTX / DOC nếu cần
-    const conversion = await this.convertToPdfIfNeeded(fileBuffer, fileName, mimeType);
+    const fileName = (doc.title || 'document').toLowerCase();
+    const mimeType = (doc.file_type || 'application/octet-stream').toLowerCase();
 
     let pages: PageContent[] = [];
 
-    if (conversion.pdfBuffer) {
-      // ── BƯỚC 2: Trích xuất text theo trang (pdf-parse) ──
-      pages = await this.extractTextByPage(conversion.pdfBuffer);
+    const isTxt = mimeType === 'text/plain' || fileName.endsWith('.txt');
+    const isSpreadsheet = mimeType.includes('spreadsheetml') || mimeType.includes('excel') || mimeType === 'text/csv' || /\.(xlsx?|csv)$/i.test(fileName);
+    const isImage = mimeType.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(fileName);
+    const isOffice = mimeType.includes('presentationml') || mimeType.includes('powerpoint') || mimeType.includes('msword') || mimeType.includes('wordprocessingml') || /\.(docx?|pptx?)$/i.test(fileName);
 
-      // Cập nhật số trang vào documents
-      if (pages.length > 0) {
-        await db.query('UPDATE documents SET page_count = $2 WHERE id = $1', [documentId, pages.length]);
+    if (isTxt) {
+      // 1. Plain text format
+      const text = cleanVietnameseText(fileBuffer.toString('utf-8'));
+      pages = [{ pageNumber: 1, text, isOcr: false }];
+    } else if (isSpreadsheet) {
+      // 2. Spreadsheet / CSV format
+      try {
+        const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
+        const sheetPages: PageContent[] = [];
+        for (let i = 0; i < workbook.SheetNames.length; i++) {
+          const sheetName = workbook.SheetNames[i];
+          const sheet = workbook.Sheets[sheetName];
+          const csvText = xlsx.utils.sheet_to_csv(sheet);
+          if (csvText && csvText.trim().length > 0) {
+            sheetPages.push({
+              pageNumber: i + 1,
+              text: cleanVietnameseText(`[Sheet: ${sheetName}]\n${csvText}`),
+              isOcr: false,
+            });
+          }
+        }
+        pages = sheetPages.length > 0 ? sheetPages : [{ pageNumber: 1, text: '', isOcr: false }];
+      } catch (err: any) {
+        console.warn('[DocProcessing] Spreadsheet parsing error:', err?.message);
       }
+    } else if (isImage) {
+      // 3. Image OCR format
+      const ocrText = await this.runOcrFromImageBuffer(fileBuffer);
+      pages = [{
+        pageNumber: 1,
+        text: cleanVietnameseText(ocrText),
+        isOcr: true,
+      }];
+    } else if (isOffice) {
+      // 4. Word / PowerPoint format
+      const conversion = await this.convertToPdfIfNeeded(fileBuffer, fileName, mimeType);
+      if (conversion.pdfBuffer) {
+        pages = await this.extractTextByPage(conversion.pdfBuffer);
+      } else if (conversion.directText) {
+        pages = [{
+          pageNumber: 1,
+          text: cleanVietnameseText(conversion.directText),
+          isOcr: false,
+        }];
+      }
+    } else {
+      // 5. Default PDF format
+      pages = await this.extractTextByPage(fileBuffer);
 
-      // ── BƯỚC 3: OCR Fallback cho các trang là ảnh/scan ──
+      // OCR Fallback cho các trang là ảnh/scan
       for (const page of pages) {
         if (this.needsOcr(page.text)) {
           console.log(`[DocProcessing] Page ${page.pageNumber} of doc ${documentId} needs OCR (< ${OCR_THRESHOLD} chars)...`);
-          const ocrText = await this.runOcr(conversion.pdfBuffer, page.pageNumber);
+          const ocrText = await this.runOcr(fileBuffer, page.pageNumber);
           if (ocrText && ocrText.length > 0) {
-            page.text = ocrText;
+            page.text = cleanVietnameseText(ocrText);
             page.isOcr = true;
             console.log(`[DocProcessing] Page ${page.pageNumber} OCR success: ${ocrText.length} chars`);
           }
         }
       }
-    } else if (conversion.directText) {
-      // Tài liệu phân tích text layer trực tiếp từ PPTX / DOCX (fallback không có LibreOffice)
-      pages = [{
-        pageNumber: 1,
-        text: conversion.directText,
-        isOcr: false,
-      }];
-    } else {
-      throw new Error('Không thể phân tích hoặc chuyển đổi định dạng tệp tin này');
     }
 
-    // Kiểm tra tổng dung lượng văn bản sau parse + OCR
+    // Chuẩn hóa tiếng Việt cho tất cả các trang
+    pages = pages.map(p => ({
+      ...p,
+      text: cleanVietnameseText(p.text),
+    }));
+
+    // Cập nhật số trang vào documents
+    if (pages.length > 0) {
+      await db.query('UPDATE documents SET page_count = $2 WHERE id = $1', [documentId, pages.length]);
+    }
+
+    // Kiểm tra tổng dung lượng văn bản sau parse + OCR (ngưỡng tối thiểu 10 ký tự)
     const totalChars = pages.reduce((sum, p) => sum + (p.text || '').trim().length, 0);
-    if (totalChars < 50) {
+    if (totalChars < 10) {
       throw new Error('Không trích xuất được nội dung từ file này (tài liệu rỗng hoặc không đọc được chữ)');
     }
 
@@ -500,6 +562,13 @@ class DocumentProcessingService {
 
     // Gán lại keywords cho từng chunk
     await this.assignKeywordsToChunks(insertedChunks, docKeywords);
+
+    // ── BƯỚC 5.5: EMBEDDING (RAG preparation nếu configured) ──
+    if (isEmbeddingConfigured()) {
+      embedChunks(insertedChunks.map(c => ({ id: c.id, content: c.content }))).catch(err => {
+        console.warn(`[DocProcessing] Background embedding generation notice: ${err?.message}`);
+      });
+    }
 
     // ── BƯỚC 6: READY ──
     await this.setProcessingStatus(documentId, 'READY', { pageCount: pages.length });

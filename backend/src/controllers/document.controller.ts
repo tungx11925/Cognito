@@ -26,10 +26,9 @@ function uploadToCloudinary(
 }
 
 // ─── Resource type: dùng 'auto' để Cloudinary tự phát hiện ───────────────────
-// Dùng 'auto' tránh lỗi 403 với 'raw' trên Cloudinary free plan
 function getResourceType(mimetype: string): 'auto' | 'image' {
   if (mimetype.startsWith('image/')) return 'image';
-  return 'auto'; // PDF, DOCX, TXT → auto (Cloudinary tự detect)
+  return 'auto'; // PDF, DOCX, TXT, XLSX → auto
 }
 
 // ─── POST /api/documents/upload ───────────────────────────────────────────────
@@ -37,7 +36,7 @@ export const uploadDocument = async (req: AuthRequest, res: Response, next: any)
   try {
     const file = req.file;
     if (!file) {
-      return res.status(400).json({ error: 'Vui lòng chọn file hợp lệ (PDF, DOC, DOCX, TXT, ảnh)' });
+      return res.status(400).json({ error: 'Vui lòng chọn file hợp lệ (PDF, DOC, DOCX, TXT, ảnh, XLSX, CSV)' });
     }
 
     const userId = req.user?.id;
@@ -45,15 +44,13 @@ export const uploadDocument = async (req: AuthRequest, res: Response, next: any)
       return res.status(401).json({ error: 'Vui lòng đăng nhập' });
     }
 
-    const { title, description, category } = req.body;
+    const { title, description, category, visibility, is_community_published } = req.body;
 
     if (!title || title.trim() === '') {
       return res.status(400).json({ error: 'Tiêu đề tài liệu là bắt buộc' });
     }
 
     // Upload buffer to Cloudinary
-    // Dùng resource_type 'auto' để Cloudinary tự phát hiện loại file
-    // Tránh lỗi 403 xảy ra khi dùng 'raw' trên một số Cloudinary accounts
     const ext = path.extname(file.originalname || '').toLowerCase();
     const resourceType = getResourceType(file.mimetype);
     const cloudinaryResult = await uploadToCloudinary(file.buffer, {
@@ -64,11 +61,15 @@ export const uploadDocument = async (req: AuthRequest, res: Response, next: any)
       overwrite: false,
     });
 
+    const isCommunity = is_community_published === true || is_community_published === 'true';
+
     const document = await documentService.uploadDocument({
       userId,
       title: title.trim(),
       description,
       category,
+      visibility,
+      isCommunityPublished: isCommunity,
       docUrl: cloudinaryResult.secure_url,
       fileType: file.mimetype,
       fileSize: file.size,
@@ -115,8 +116,9 @@ export const getDocumentById = async (req: AuthRequest, res: Response, next: any
     }
 
     const docId = parseInt(req.params.id, 10);
+    const userRole = req.user?.role;
 
-    const document = await documentService.getDocumentById(docId, userId);
+    const document = await documentService.getDocumentById(docId, userId, userRole);
 
     // Log study activity and update streak asynchronously in background
     Promise.all([
@@ -151,6 +153,9 @@ export const getDocumentChunks = async (req: AuthRequest, res: Response, next: a
     if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
 
     const docId = parseInt(req.params.id, 10);
+    // Verify accessibility before returning chunks
+    await documentService.getDocumentById(docId, userId, req.user?.role);
+
     const data = await documentProcessingService.getDocumentChunks(docId, userId);
     if (!data) {
       return res.status(404).json({ error: 'Không tìm thấy tài liệu' });
@@ -160,7 +165,6 @@ export const getDocumentChunks = async (req: AuthRequest, res: Response, next: a
     next(error);
   }
 };
-
 
 // ─── POST /api/documents/:id/reprocess — chạy lại pipeline (khi FAILED) ────────
 export const reprocessDocument = async (req: AuthRequest, res: Response, next: any) => {
@@ -198,9 +202,18 @@ export const updateDocument = async (req: AuthRequest, res: Response, next: any)
     if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
 
     const docId = parseInt(req.params.id, 10);
-    const { title, description, category } = req.body;
+    const { title, description, category, visibility, is_community_published, solution_text } = req.body;
 
-    const document = await documentService.updateDocument(docId, userId, { title, description, category });
+    const document = await documentService.updateDocument(docId, userId, { 
+      title, 
+      description, 
+      category, 
+      visibility, 
+      is_community_published: is_community_published !== undefined 
+        ? (is_community_published === true || is_community_published === 'true')
+        : undefined,
+      solution_text 
+    });
     res.status(200).json(document);
   } catch (error: any) {
     next(error);

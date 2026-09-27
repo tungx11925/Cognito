@@ -59,6 +59,21 @@ export const reprocessDocument = (id: string | number) => apiFetch(`/documents/$
     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
 });
 
+export const updateDocument = (
+    id: string | number, 
+    data: { 
+        title?: string; 
+        description?: string; 
+        category?: string; 
+        visibility?: 'private' | 'public'; 
+        is_community_published?: boolean; 
+    }
+) => apiFetch(`/documents/${id}`, {
+    method: 'PUT',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+});
+
 export const deleteDocument = (id: string | number) => apiFetch(`/documents/${id}`, {
     method: 'DELETE',
     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },

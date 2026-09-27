@@ -608,6 +608,121 @@ Thực hiện chuẩn hóa toàn diện tầng Auth và User Core theo đúng qu
 
 ### 4. Trạng thái và bước tiếp theo
 - **Phase 3 đã hoàn tất trọn vẹn và đạt toàn bộ tiêu chuẩn acceptance criteria**.
-- Sẵn sàng chuyển sang **PHASE 4 — DOCUMENT LEARNING** (Upload -> Validate -> Store -> Process -> Parse -> Extract -> Index -> READY -> Viewer).
+- Chuyển sang **PHASE 4 — DOCUMENT LEARNING**.
+
+---
+
+## [2026-09-27] — PHASE 4: DOCUMENT LEARNING — HOÀN THÀNH 100%
+
+### 1. Mục tiêu và phạm vi Phase 4
+Thực hiện chuẩn hóa toàn diện nền tảng Document Learning theo đúng quy định tại Master Prompt:
+- Chuẩn hóa toàn bộ vòng đời Ingestion Pipeline:
+  ```text
+  Upload -> Validate File -> Store File -> Create Document -> Process -> Parse -> Extract Text / Structure -> Index / Prepare Context -> READY -> Viewer
+  ```
+- Chuẩn hóa 10 thuộc tính bắt buộc của Document:
+  `owner`, `title`, `description`, `file`, `type`, `size`, `status`, `visibility`, `createdAt`, `updatedAt`.
+- Visibility: Chỉ chấp nhận 2 trạng thái `private` và `public` (mặc định: `private`).
+- Thực thi nghiêm ngặt nguyên tắc cốt lõi: `PUBLIC ≠ Community Published`.
+- Hỗ trợ đúng và đầy đủ các định dạng file mà hệ thống thực sự có parser (PDF, Word, PowerPoint, TXT, Excel/CSV, Ảnh).
+
+---
+
+### 2. Các thay đổi kỹ thuật chi tiết
+
+#### 2.1. Cơ sở dữ liệu & Migration chuẩn hóa Schema (`1790300000000_document_learning_schema.js`)
+1. **Bổ sung cột `updated_at`**:
+   - Thêm cột `updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP` vào bảng `documents`.
+   - Backfill dữ liệu `updated_at = COALESCE(created_at, CURRENT_TIMESTAMP)` cho 100% tài liệu hiện có.
+   - Tạo Database Trigger `trg_documents_updated_at` tự động cập nhật `updated_at = CURRENT_TIMESTAMP` bất cứ khi nào tài liệu được cập nhật.
+2. **Bổ sung cột `is_community_published`**:
+   - Thêm cột `is_community_published BOOLEAN DEFAULT false` vào bảng `documents` nhằm phân tách hoàn toàn giữa tài liệu công khai xem link/profile (`visibility = 'public'`) và tài liệu xuất bản lên sàn tài nguyên cộng đồng (`is_community_published = true`).
+3. **Chuẩn hóa ràng buộc `visibility`**:
+   - Gán giá trị mặc định `'private'`.
+   - Thêm constraint `chk_documents_visibility CHECK (visibility IN ('private', 'public'))`.
+
+#### 2.2. Chuẩn hóa Pipeline xử lý đa định dạng (`backend/src/services/document-processing.service.ts`)
+1. **Phân loại và trích xuất đúng định dạng file**:
+   - **Plain Text (TXT)**: Đọc UTF-8 buffer trực tiếp -> Chuẩn hóa Unicode/dấu tiếng Việt qua `cleanVietnameseText`.
+   - **Spreadsheets / CSV (XLSX, XLS, CSV)**: Phân tích bảng tính qua thư viện `xlsx` theo từng Sheet -> Chuẩn hóa văn bản.
+   - **Images (PNG, JPG, JPEG, WEBP)**: Chạy OCR trực tiếp qua `Tesseract.js` (`vie+eng`) trên buffer hình ảnh, không ép qua PDF parse.
+   - **Office (DOCX, DOC, PPTX, PPT)**: Thử nghiệm LibreOffice headless convert sang PDF; nếu không có LibreOffice tự động fallback sang `mammoth` (Word) hoặc `officeparser` (PowerPoint).
+   - **PDF**: Trích xuất text từng trang bảo toàn số trang qua `pdf-parse` + OCR fallback trang scan (`needsOcr` khi < 30 ký tự).
+2. **Chuẩn hóa tiếng Việt & Diacritics**:
+   - Áp dụng `cleanVietnameseText()` cho toàn bộ nội dung sau trích xuất, khắc phục triệt để lỗi phân rã Unicode NFD/NFC và lỗi khoảng trắng dấu huyền/sắc.
+3. **Phân đoạn (Chunking) & Trích xuất từ khóa học thuật (Academic Keywords)**:
+   - Chunk đoạn văn thông minh 500–700 tokens không cắt ngang câu, lưu vào bảng `document_chunks` kèm `token_count`, `page_number`, `is_ocr`.
+   - AI keyword extraction (Gemini/Groq fast tier) trích xuất 8–15 từ khóa chuyên sâu đại diện toàn tài liệu và gán cho từng chunk.
+4. **Chuẩn bị Context RAG & Vector Embeddings**:
+   - Tích hợp `embedChunks()` từ `rag.service.ts`: tự động tạo vector 768-chiều cho các chunk tài liệu ngay khi hoàn tất phân tích (nếu API key được cấu hình).
+5. **Cập nhật trạng thái**:
+   - Chuyển `processing_status` qua các bước: `PENDING` -> `PARSING` -> `CHUNKING` -> `EXTRACTING_KEYWORDS` -> `READY` (hoặc `FAILED` nếu có lỗi kèm message).
+   - Cột `status` của tài liệu phản ánh: `PROCESSING` -> `READY` / `FAILED`.
+
+#### 2.3. Định dạng chuẩn Document Response & Quyền riêng tư
+1. **`backend/src/services/document.service.ts`**:
+   - Cài đặt helper `formatDocument()` đảm bảo response API luôn cung cấp đủ 10 thuộc tính Master Prompt yêu cầu:
+     `owner` (user_id), `title`, `description`, `file` (doc_url), `type` (file_type), `size` (file_size), `status`, `visibility`, `createdAt`, `updatedAt`.
+   - Đồng thời giữ lại các trường truyền thống (`user_id`, `doc_url`, `file_type`, `file_size`, `created_at`, `updated_at`) để tương thích 100% với frontend hiện tại.
+2. **Strict Privacy Guard**:
+   - `getDocumentById()` & `getDocumentChunks()`: Kiểm tra quyền sở hữu nghiêm ngặt. Nếu tài liệu là `private`, chỉ chủ sở hữu (`user_id`) hoặc tài khoản `admin` mới được xem. Người dùng khác truy cập nhận ngay HTTP 403 Forbidden.
+   - Nếu `visibility = 'public'`, bất kỳ người dùng nào có link đều được truy cập xem nội dung.
+3. **Đồng bộ hóa Xuất bản Cộng đồng (Community Sync)**:
+   - Khi `is_community_published = true` và `visibility = 'public'`, tự động đăng ký tài nguyên vào bảng `community_resources`.
+   - Khi hủy xuất bản (`is_community_published = false`), tự động gỡ trạng thái hiển thị khỏi `community_resources`.
+
+#### 2.4. Thực thi nguyên tắc cốt lõi: `PUBLIC ≠ Community Published`
+1. **`backend/src/controllers/marketplace.controller.ts`**:
+   - Truy vấn danh sách tài liệu trên Marketplace được siết chặt:
+     Thay vì `WHERE d.visibility = 'public'`, đổi thành `WHERE d.visibility = 'public' AND d.is_community_published = true`.
+   - Endpoint mở khóa (`unlockResource`) kiểm tra nghiêm ngặt `d.is_community_published = true`.
+   - Đảm bảo tài liệu được set công khai (để chia sẻ bạn bè hoặc hiển thị trang cá nhân) **KHÔNG BAO GIỜ** bị tự ý đưa lên sàn Marketplace nếu chủ sở hữu chưa chủ động xuất bản.
+
+#### 2.5. Cập nhật giao diện Frontend
+1. **`frontend/src/components/documents/UploadDocumentModal.tsx`**:
+   - Bổ sung UI lựa chọn Chế độ hiển thị trực quan: `🔒 Riêng tư (Chỉ mình tôi)` vs `🌐 Công khai (Có liên kết)`.
+   - Cập nhật định dạng file chấp nhận bao gồm cả bảng tính Excel/CSV (`.xlsx,.xls,.csv`).
+   - Gửi trường `visibility` lên server trong multipart form data.
+2. **`frontend/src/components/documents/DocumentViewerWrapper.tsx`**:
+   - Bổ sung trình xem ảnh bản địa (`<img>` viewer có zoom/contain và xử lý lỗi) cho các định dạng hình ảnh (`png`, `jpg`, `jpeg`, `webp`, `gif`), thay thế iframe không ổn định.
+3. **`frontend/src/context/StudyContext.tsx`**:
+   - Mở rộng interface `DocumentItem` hỗ trợ `owner`, `file`, `type`, `size`, `visibility`, `is_community_published`, `createdAt`, `updatedAt`.
+   - Cập nhật hàm `handleEditDocument` hỗ trợ cập nhật `visibility` và `is_community_published`.
+4. **`frontend/src/services/document.service.ts`**:
+   - Bổ sung hàm API `updateDocument(id, data)`.
+
+---
+
+### 3. Kết quả Gate Checks (Rule 0.1.3)
+1. 🟢 **Backend Build (`npm run build`)**: Pass 100% (0 errors).
+2. 🟢 **Frontend TypeScript Check (`npx tsc --noEmit`)**: Pass 100% (0 errors).
+3. 🟢 **Frontend ESLint (`npx eslint src`)**: Pass 100% (0 errors, 22 pre-existing warnings).
+4. 🟢 **Automated Integration Test Suite (`backend/scripts/test-phase4.ts`) — 20/20 tests passed**:
+   - Test 1: Validation Gate từ chối document thiếu tiêu đề (HTTP 400 Bad Request).
+   - Test 2: Tạo Document thành công (HTTP 201 Created).
+   - Test 3: Document trả về chứa đầy đủ 10 thuộc tính Master Prompt Phase 4 (`owner`, `title`, `description`, `file`, `type`, `size`, `status`, `visibility`, `createdAt`, `updatedAt`).
+   - Test 4: Document Chunks và Academic Keywords được trích xuất và phân đoạn chính xác trong bảng `document_chunks`.
+   - Test 5: Endpoint trạng thái pipeline (`GET /api/documents/:id/status`) trả về `READY` kèm số lượng chunk.
+   - Test 6: Chủ sở hữu truy cập được tài liệu riêng tư (HTTP 200 OK).
+   - Test 7: Người ngoài bị từ chối truy cập tài liệu riêng tư (HTTP 403 Forbidden).
+   - Test 8: Người ngoài bị từ chối truy cập chunks của tài liệu riêng tư (HTTP 403 Forbidden).
+   - Test 9: Người ngoài bị từ chối sửa tài liệu riêng tư (HTTP 403 Forbidden).
+   - Test 10: Chủ sở hữu cập nhật thành công trạng thái `visibility: 'public'`.
+   - Test 11: Trigger DB `trg_documents_updated_at` tự động cập nhật timestamp `updatedAt`.
+   - Test 12: Người ngoài truy cập xem được tài liệu khi chuyển sang public (HTTP 200 OK).
+   - Test 13: **RULE ENFORCED: PUBLIC ≠ Community Published** (Tài liệu public nhưng chưa xuất bản cộng đồng KHÔNG xuất hiện trên Marketplace).
+   - Test 14: Chủ sở hữu chủ động xuất bản tài liệu lên cộng đồng (`is_community_published: true`).
+   - Test 15: Tài liệu xuất hiện hợp lệ trên danh sách Marketplace.
+   - Test 16: Chủ sở hữu gỡ xuất bản tài liệu khỏi cộng đồng (`is_community_published: false`).
+   - Test 17: Tài liệu lập tức biến mất khỏi danh sách Marketplace.
+   - Test 18: Chủ sở hữu xóa tài liệu thành công (HTTP 200 OK).
+   - Test 19: Bản ghi tài liệu được xóa khỏi bảng `documents`.
+   - Test 20: Chunks trong bảng `document_chunks` được xóa dọn dẹp sạch sẽ (cascade cleanup).
+
+---
+
+### 4. Trạng thái và bước tiếp theo
+- **Phase 4 đã hoàn tất 100% và vượt qua toàn bộ Gate Checks kỹ thuật**.
+- Hệ thống đã sẵn sàng cho **PHASE 5 — DOCUMENT VIEWER + AI LEARNING** (Trình xem tài liệu, AI Assistant phân tích ngữ cảnh GENERAL vs DOCUMENT_CONTEXT, bảo vệ Prompt Injection `sanitizeUserInstruction`).
 
 

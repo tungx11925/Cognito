@@ -17,7 +17,7 @@ export const getMarketplaceResources = async (req: AuthRequest, res: Response) =
         SELECT 'document' as type, d.id, d.title, d.description, d.price, u.name as author_name, d.created_at
         FROM documents d
         JOIN users u ON d.user_id = u.id
-        WHERE d.visibility = 'public'
+        WHERE d.visibility = 'public' AND d.is_community_published = true
       `;
       if (search) {
         params.push(`%${search}%`);
@@ -41,7 +41,7 @@ export const getMarketplaceResources = async (req: AuthRequest, res: Response) =
       params.push(limitNum, offset);
       finalQuery = deckQuery;
     } else {
-      let docWhere = `d.visibility = 'public'`;
+      let docWhere = `d.visibility = 'public' AND d.is_community_published = true`;
       let deckWhere = `c.visibility = 'public'`;
       if (search) {
         params.push(`%${search}%`);
@@ -98,8 +98,8 @@ export const unlockResource = async (req: AuthRequest, res: Response) => {
     let ownerId = null;
 
     if (documentId) {
-      const docCheck = await db.query('SELECT price, user_id FROM documents WHERE id = $1 AND visibility = $2', [documentId, 'public']);
-      if (docCheck.rows.length === 0) return res.status(404).json({ error: 'Public document not found' });
+      const docCheck = await db.query('SELECT price, user_id FROM documents WHERE id = $1 AND visibility = $2 AND is_community_published = true', [documentId, 'public']);
+      if (docCheck.rows.length === 0) return res.status(404).json({ error: 'Tài liệu cộng đồng không tồn tại hoặc chưa được xuất bản' });
       price = docCheck.rows[0].price;
       ownerId = docCheck.rows[0].user_id;
     } else {

@@ -5,6 +5,12 @@ export const uploadDocumentSchema = z.object({
     title: z.string({ message: 'Tiêu đề tài liệu là bắt buộc' }).min(1, 'Tiêu đề tài liệu là bắt buộc').trim(),
     description: z.string().nullable().optional(),
     category: z.string().nullable().optional(),
+    visibility: z.string().optional().transform(val => {
+      if (!val) return 'private';
+      const lower = val.toLowerCase().trim();
+      return lower === 'public' ? 'public' : 'private';
+    }),
+    is_community_published: z.union([z.boolean(), z.string().transform(val => val === 'true')]).optional().default(false),
   }),
 });
 
@@ -29,6 +35,12 @@ export const createDocumentSchema = z.object({
     description: z.string().nullable().optional(),
     category: z.string().nullable().optional(),
     solution_text: z.string().nullable().optional(),
+    visibility: z.string().optional().transform(val => {
+      if (!val) return 'private';
+      const lower = val.toLowerCase().trim();
+      return lower === 'public' ? 'public' : 'private';
+    }),
+    is_community_published: z.union([z.boolean(), z.string().transform(val => val === 'true')]).optional().default(false),
   }),
 });
 
@@ -41,5 +53,11 @@ export const updateDocumentSchema = z.object({
     description: z.string().nullable().optional(),
     category: z.string().nullable().optional(),
     solution_text: z.string().nullable().optional(),
+    visibility: z.string().optional().transform(val => {
+      if (!val) return undefined;
+      const lower = val.toLowerCase().trim();
+      return lower === 'public' ? 'public' : 'private';
+    }),
+    is_community_published: z.union([z.boolean(), z.string().transform(val => val === 'true')]).optional(),
   }),
 });

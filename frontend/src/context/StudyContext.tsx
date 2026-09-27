@@ -5,13 +5,28 @@ import toast, { Toaster } from 'react-hot-toast';
 export interface DocumentItem {
   id: number;
   user_id: number;
+  owner?: number;
   title: string;
   description: string;
   doc_url: string;
-  solution_text: string;
-  solution_url: string;
+  file?: string;
+  solution_text?: string;
+  solution_url?: string;
   category: string;
+  file_type?: string;
+  type?: string;
+  file_size?: number;
+  size?: number;
+  status?: string;
+  processing_status?: string;
+  processing_error?: string | null;
+  visibility?: 'private' | 'public';
+  is_community_published?: boolean;
+  page_count?: number;
   created_at: string;
+  updated_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface NoteItem {
@@ -100,7 +115,14 @@ interface StudyContextType {
   setNewDocSolution: (s: string) => void;
   handleAddDocumentSubmit: (e: React.FormEvent) => Promise<void>;
   handleDeleteDocument: (id: number) => Promise<boolean>;
-  handleEditDocument: (id: number, title: string, category?: string, description?: string) => Promise<boolean>;
+  handleEditDocument: (
+    id: number, 
+    title: string, 
+    category?: string, 
+    description?: string,
+    visibility?: 'private' | 'public',
+    is_community_published?: boolean
+  ) => Promise<boolean>;
 
   // Decks & Flashcards
   decks: FlashcardDeck[];
@@ -1043,7 +1065,14 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   // API Call: Edit Document (Rename / Edit)
-  const handleEditDocument = async (id: number, title: string, category?: string, description?: string): Promise<boolean> => {
+  const handleEditDocument = async (
+    id: number, 
+    title: string, 
+    category?: string, 
+    description?: string,
+    visibility?: 'private' | 'public',
+    is_community_published?: boolean
+  ): Promise<boolean> => {
     try {
       const res = await fetch(`${API_BASE_URL}/documents/${id}`, {
         method: 'PUT',
@@ -1051,7 +1080,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
           'Content-Type': 'application/json',
           ...getAuthHeaders()
         },
-        body: JSON.stringify({ title, category, description })
+        body: JSON.stringify({ title, category, description, visibility, is_community_published })
       });
       if (res.ok) {
         triggerMessage("Đã chỉnh sửa thông tin tài liệu thành công");

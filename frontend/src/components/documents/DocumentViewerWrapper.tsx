@@ -50,6 +50,23 @@ export default function DocumentViewerWrapper({
     (fileType && fileType.includes('pdf')) || 
     (!isDocx && fileExt === 'pdf');
 
+  const isImage = 
+    (fileType && fileType.startsWith('image/')) || 
+    ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(fileExt);
+
+  if (isImage) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gray-900/5 p-4 overflow-auto">
+        <img
+          src={url}
+          alt="Document preview"
+          className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
+          onError={() => setError('Không thể tải tệp ảnh.')}
+        />
+      </div>
+    );
+  }
+
   if (isDocx) {
     return (
       <div className="w-full h-full bg-gray-100 overflow-hidden">
