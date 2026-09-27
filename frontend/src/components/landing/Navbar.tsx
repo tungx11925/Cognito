@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown, CheckCheck, MessageSquare, Presentation, Building2 } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown, CheckCheck, MessageSquare, Presentation } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
@@ -553,18 +553,6 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                             </button>
                           )}
 
-                          {(activeUser as any)?.primary_organization_id && (
-                            <button
-                              onClick={() => {
-                                setDropdownOpen(false);
-                                router.push('/school');
-                              }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-lg transition-colors text-left"
-                            >
-                              <Building2 size={14} className="text-blue-600" />
-                              Bảng điều khiển Trường học
-                            </button>
-                          )}
 
                           <button
                             onClick={() => {

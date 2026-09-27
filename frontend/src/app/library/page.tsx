@@ -15,7 +15,6 @@ import { Navbar } from "@/components/landing/Navbar";
 import RegisterModal from "@/components/auth/RegisterModal";
 import UploadDocumentModal from "@/components/documents/UploadDocumentModal";
 import ShareModal from "@/components/documents/ShareModal";
-import TeacherStudioSection from "@/components/teacher/TeacherStudioSection";
 import { Background, BackgroundStyle } from "@/components/flashcards/Background";
 
 // Category tag colors matching the mockup
@@ -486,17 +485,9 @@ export default function LibraryPage() {
   } = useStudy();
 
   const [mounted, setMounted] = useState(false);
-  const [libraryTab, setLibraryTab] = useState<'documents' | 'teacher_studio'>('documents');
 
   useEffect(() => {
     setMounted(true);
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const tab = params.get('tab');
-      if (tab === 'teacher' || tab === 'studio') {
-        setLibraryTab('teacher_studio');
-      }
-    }
   }, []);
 
   const [dark, setDark] = useState(false);
@@ -905,54 +896,8 @@ export default function LibraryPage() {
 
       <div className="max-w-5xl mx-auto w-full px-4 md:px-6 mt-6 flex-1 flex flex-col overflow-x-hidden relative z-10">
         <div className="flex-1 flex flex-col space-y-6 w-full">
-          
-          {/* Main Library View Tabs */}
-          <div 
-            className="flex items-center gap-1.5 p-1 rounded-2xl w-fit border shadow-xs"
-            style={{
-              background: dark ? "#1e1e1e" : "#eae7dd",
-              borderColor: sidebarBorder
-            }}
-          >
-            <button
-              onClick={() => setLibraryTab("documents")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                libraryTab === "documents"
-                  ? (dark ? "bg-[#2d5a3c] text-white shadow-sm" : "bg-[#1a3d28] text-white shadow-sm")
-                  : (dark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900")
-              }`}
-            >
-              <FileText size={15} />
-              Tài liệu học tập
-            </button>
-
-            <button
-              onClick={() => setLibraryTab("teacher_studio")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                libraryTab === "teacher_studio"
-                  ? (dark ? "bg-[#2d5a3c] text-white shadow-sm" : "bg-[#1a3d28] text-white shadow-sm")
-                  : (dark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900")
-              }`}
-            >
-              <Presentation size={15} />
-              Slide Giảng dạy (Teacher Studio)
-              <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-emerald-400 text-black font-extrabold uppercase">Mới</span>
-            </button>
-          </div>
-
-          {libraryTab === "teacher_studio" ? (
-            <TeacherStudioSection
-              dark={dark}
-              primaryColor={primaryColor}
-              textMain={textMain}
-              textSub={textSub}
-              sidebarBorder={sidebarBorder}
-              cardBorder={cardBorder}
-            />
-          ) : (
-            <>
-              {/* Page Heading Section */}
-              <div className="flex justify-between items-center" style={{ marginBottom: 4 }}>
+          {/* Page Heading Section */}
+          <div className="flex justify-between items-center" style={{ marginBottom: 4 }}>
                 <div>
                   <h1
                     style={{
@@ -1311,8 +1256,6 @@ export default function LibraryPage() {
               ))}
             </div>
           )}
-        </>
-      )}
     </div>
   </div>
 

@@ -20,8 +20,7 @@ import {
   Activity,
   Zap,
   Share2,
-  Palette,
-  UploadCloud
+  Palette
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -35,7 +34,6 @@ import {
   createFlashcard
 } from "@/services/flashcard.service";
 import { Background, BackgroundStyle } from "@/components/flashcards/Background";
-import AIFlashcardLab from "@/components/flashcards/AIFlashcardLab";
 import ShareModal from "@/components/documents/ShareModal";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -247,7 +245,6 @@ export default function FlashcardsPage() {
   const [dark, setDark] = useState(false);
   
   // Modals
-  const [showAILab, setShowAILab] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [shareDeck, setShareDeck] = useState<Deck | null>(null);
 
@@ -540,13 +537,6 @@ export default function FlashcardsPage() {
             {isAuthenticated && (
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setShowAILab(true)}
-                  className="px-4 py-2 bg-emerald-50 text-emerald-600 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm border border-emerald-200 hover:bg-emerald-100"
-                >
-                  <UploadCloud size={14} />
-                  Tạo từ File
-                </button>
-                <button
                   onClick={() => setShowCreateModal(true)}
                   className="px-4 py-2 bg-[#1a2e1c] hover:opacity-90 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
                   style={{ background: primaryColor }}
@@ -789,42 +779,6 @@ export default function FlashcardsPage() {
         </div>
       )}
 
-      {/* AI Flashcard Lab Modal */}
-      <AnimatePresence>
-        {showAILab && (
-          <AIFlashcardLab 
-            onClose={() => setShowAILab(false)} 
-            onSaveDeck={async (cards, deckName) => {
-              try {
-                // 1. Tạo bộ thẻ rỗng trước
-                const resDeck = await createDeck(deckName || "Bộ thẻ từ File", "Bộ thẻ được tạo từ file tài liệu");
-                
-                if (resDeck.error) {
-                  triggerMessage(resDeck.error, "error");
-                  return;
-                }
-
-                const deckId = resDeck.id;
-                
-                // 2. Loop qua tất cả các cards do AI sinh ra và insert vào database
-                const insertPromises = cards.map(card => 
-                  createFlashcard(deckId, card.front, card.back)
-                );
-                
-                await Promise.all(insertPromises);
-
-                triggerMessage(`Đã lưu ${cards.length} thẻ vào bộ "${deckName}" thành công!`, "success");
-                setShowAILab(false);
-                
-                // Refresh lại danh sách decks để nó hiện số lượng thẻ đúng
-                fetchDecks();
-              } catch (e) {
-                triggerMessage("Có lỗi khi lưu bộ thẻ", "error");
-              }
-            }} 
-          />
-        )}
-      </AnimatePresence>
 
       {/* Login Modal for guest user */}
       <AnimatePresence>

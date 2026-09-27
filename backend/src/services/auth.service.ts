@@ -86,22 +86,8 @@ export class AuthService {
       return { requires2FA: true, email: user.email };
     }
 
-    // --- CHECK FOR FIRST LOGIN ---
-    const membershipCheck = await db.query(
-      'SELECT status, organization_id FROM organization_members WHERE user_id = $1 AND status = $2 LIMIT 1',
-      [user.id, 'PENDING_FIRST_LOGIN']
-    );
-    if (membershipCheck.rows.length > 0) {
-      return { 
-        requiresPasswordChange: true, 
-        email: user.email, 
-        organizationId: membershipCheck.rows[0].organization_id 
-      };
-    }
-    // -----------------------------
-
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'student' }, 
+      { id: user.id, email: user.email, role: user.role || 'user' }, 
       process.env.JWT_SECRET_KEY!, 
       { expiresIn: '24h' }
     );

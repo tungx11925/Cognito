@@ -13,8 +13,7 @@ import {
   changePassword,
   upgradePremium,
   forgotPassword,
-  resetPassword,
-  forceChangePassword
+  resetPassword
 } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import multer from 'multer';
@@ -73,6 +72,5 @@ router.put('/change-password', authenticate, validate(changePasswordSchema), cha
 router.post('/upgrade-premium', authenticate, upgradePremium);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
-router.post('/force-change-password', forceChangePassword);
 
 export default router;

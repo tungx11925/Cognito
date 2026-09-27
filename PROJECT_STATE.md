@@ -368,11 +368,109 @@ Status: DONE
   - `backend/src/controllers/user.controller.ts`
 
 ### Việc còn lại / rủi ro chuyển sang phase sau (PHASE 2):
-- **PHASE 2 — REMOVE SCHOOL / TEACHER SYSTEM**:
-  - Áp dụng Checkpoint SHA `cc6e425`.
-  - Thực hiện Soft-remove: Rename 12 bảng School thành `_deprecated_*`.
-  - Dọn dẹp routes/controllers/services của School và pages/components School/Teacher trên Frontend.
-  - Chạy vòng kiểm tra Gate (Build + Lint + Typescript).
-  - Hard-delete các bảng `_deprecated_*` sau khi pass gate.
+- Đã hoàn thành toàn bộ trong Phase 2 bên dưới.
+
+---
+
+## PHASE 2 — REMOVE SCHOOL / TEACHER SYSTEM & AI FLASHCARD GENERATOR — 2026-09-27
+Status: DONE
+Checkpoint trước xóa: Commit SHA `cc6e425` / `a749b92` (đã commit và xác nhận backup đầy đủ trước khi thực hiện).
+
+### Hai giai đoạn xóa (Two-Stage Removal - Quy tắc 0.1.4):
+1. **Giai đoạn 1 (Soft-remove)**:
+   - Áp dụng migration `1790100000000_soft_remove_school_tables.js`: Đổi tên toàn bộ 12 bảng School/LMS nếu tồn tại sang tiền tố `_deprecated_*`:
+     `organizations`, `majors`, `academic_years`, `semesters`, `subjects`, `school_classes`, `organization_members`, `class_enrollments`, `class_teacher_assignments`, `class_assignments`, `assignment_attempts`, `attempt_answers`.
+   - Gỡ bỏ toàn bộ routes, controllers, services, repositories và middleware của School khỏi backend codebase.
+   - Gỡ bỏ AI Flashcard Generator khỏi route/controller AI.
+   - Gỡ bỏ toàn bộ trang và component của School/Teacher và AI Flashcard Lab khỏi frontend codebase.
+   - Vòng kiểm tra trung gian:
+     - Backend `tsc`: PASSED (0 errors).
+     - Frontend `npx tsc --noEmit`: PASSED (0 errors).
+     - Frontend `npx eslint src`: PASSED (0 errors, 22 warnings pre-existing).
+2. **Giai đoạn 2 (Hard-delete)**:
+   - Áp dụng migration `1790200000000_drop_deprecated_school_tables.js`: Thực hiện DROP vĩnh viễn toàn bộ các bảng `_deprecated_*` và xóa sạch 4 ENUM School cũ (`academic_status`, `semester_status`, `enrollment_status`, `attempt_status`).
+   - Kiểm tra xác nhận cuối cùng:
+     - Backend `npm run build` (`tsc`): PASSED (0 errors).
+     - Frontend `npx tsc --noEmit`: PASSED (0 errors).
+     - Frontend `npx eslint src`: PASSED (0 errors).
+
+### Tóm tắt thay đổi:
+1. **Xóa bỏ hoàn toàn hệ thống School/LMS ở Backend**:
+   - Routes đã xóa: `backend/src/routes/school.routes.ts`, `backend/src/routes/attempt.routes.ts`.
+   - Controllers đã xóa: `backend/src/controllers/school.controller.ts`, `backend/src/controllers/attempt.controller.ts`, `backend/src/controllers/academic.controller.ts`.
+   - Services đã xóa: `backend/src/services/academic.service.ts`, `backend/src/services/assignment.service.ts`, `backend/src/services/assignment-attempt.service.ts`, `backend/src/services/organization.service.ts`, `backend/src/services/bulk-import.service.ts`.
+   - Repositories đã xóa: `backend/src/repositories/academic.repository.ts`, `backend/src/repositories/assignment.repository.ts`, `backend/src/repositories/assignment-attempt.repository.ts`, `backend/src/repositories/class.repository.ts`, `backend/src/repositories/class-member.repository.ts`, `backend/src/repositories/major.repository.ts`, `backend/src/repositories/organization.repository.ts`, `backend/src/repositories/organization-member.repository.ts`.
+   - Middleware đã xóa: `backend/src/middlewares/orgRole.middleware.ts`.
+   - Đã gỡ unmount `schoolRoutes` và `attemptRoutes` trong `backend/src/app.ts`.
+   - Đã xóa sạch logic `PENDING_FIRST_LOGIN` (đổi mật khẩu lần đầu của tài khoản nhà trường cấp) và endpoint `/force-change-password` trong `auth.service.ts`, `auth.controller.ts`, `auth.routes.ts`.
+2. **Xóa bỏ AI Flashcard Generator (Giữ nguyên toàn bộ tính năng Flashcard thủ công & Spaced Repetition)**:
+   - Backend: Gỡ endpoint `POST /api/ai/generate-flashcards-from-file`, controller `generateFlashcardsFromFile`, và multer `uploadMem` khỏi `ai.routes.ts` & `ai.controller.ts`.
+   - Frontend: Xóa file `frontend/src/components/flashcards/AIFlashcardLab.tsx`.
+   - Giao diện Flashcards (`frontend/src/app/flashcards/page.tsx`): Gỡ nút "Tạo từ File" và modal `AIFlashcardLab`. Giữ nguyên đầy đủ: tạo bộ thẻ thủ công, tạo thẻ, chỉnh sửa thẻ, xóa thẻ, chia sẻ bộ thẻ, thuật toán Spaced Repetition, các chế độ ôn tập (Learn, MatchGame, Spell, Test, Write).
+3. **Xóa bỏ toàn bộ giao diện School & Teacher Studio trên Frontend**:
+   - Xóa thư mục trang:
+     - `frontend/src/app/school/` (toàn bộ trang quản lý trường học)
+     - `frontend/src/app/teacher/` (toàn bộ trang giáo viên/lớp học/bài tập)
+     - `frontend/src/app/student/` (toàn bộ trang làm bài của học sinh theo lớp)
+     - `frontend/src/app/testhome/` (trang landing page cũ redirect theo vai trò trường học)
+   - Xóa component: `frontend/src/components/teacher/TeacherStudioSection.tsx` và thư mục `components/teacher/`.
+   - Cập nhật trang Thư viện (`frontend/src/app/library/page.tsx`): Gỡ bỏ hoàn toàn tab `teacher_studio` và component `TeacherStudioSection`, hiển thị thư viện tài liệu cá nhân trực tiếp.
+   - Cập nhật Navbar (`frontend/src/components/landing/Navbar.tsx`): Gỡ bỏ liên kết "Bảng điều khiển Trường học" (`/school`) và icon `Building2`.
+   - Cập nhật Auth & Home (`RegisterModal.tsx`, `home/page.tsx`): Gỡ bỏ redirect `role === 'teacher'`, gỡ bỏ modal ép đổi mật khẩu của nhà trường cấp.
+   - Xóa dead service: `frontend/src/services/course.service.ts`.
+
+### Bảng/API/Component đã đụng tới:
+- Migrations mới:
+  - `backend/migrations/1790100000000_soft_remove_school_tables.js` (Soft-remove rename sang `_deprecated_*`)
+  - `backend/migrations/1790200000000_drop_deprecated_school_tables.js` (Hard-delete DROP tables & types)
+- Backend Files đã sửa:
+  - `backend/src/app.ts`
+  - `backend/src/routes/ai.routes.ts`
+  - `backend/src/controllers/ai.controller.ts`
+  - `backend/src/routes/auth.routes.ts`
+  - `backend/src/controllers/auth.controller.ts`
+  - `backend/src/services/auth.service.ts`
+- Backend Files đã xóa (19 files):
+  - `src/routes/school.routes.ts`
+  - `src/routes/attempt.routes.ts`
+  - `src/controllers/school.controller.ts`
+  - `src/controllers/attempt.controller.ts`
+  - `src/controllers/academic.controller.ts`
+  - `src/services/academic.service.ts`
+  - `src/services/assignment.service.ts`
+  - `src/services/assignment-attempt.service.ts`
+  - `src/services/organization.service.ts`
+  - `src/services/bulk-import.service.ts`
+  - `src/repositories/academic.repository.ts`
+  - `src/repositories/assignment.repository.ts`
+  - `src/repositories/assignment-attempt.repository.ts`
+  - `src/repositories/class.repository.ts`
+  - `src/repositories/class-member.repository.ts`
+  - `src/repositories/major.repository.ts`
+  - `src/repositories/organization.repository.ts`
+  - `src/repositories/organization-member.repository.ts`
+  - `src/middlewares/orgRole.middleware.ts`
+- Frontend Files đã sửa:
+  - `frontend/src/app/flashcards/page.tsx`
+  - `frontend/src/app/library/page.tsx`
+  - `frontend/src/app/home/page.tsx`
+  - `frontend/src/components/landing/Navbar.tsx`
+  - `frontend/src/components/auth/RegisterModal.tsx`
+- Frontend Files & Dirs đã xóa:
+  - `frontend/src/components/flashcards/AIFlashcardLab.tsx`
+  - `frontend/src/components/teacher/TeacherStudioSection.tsx`
+  - `frontend/src/services/course.service.ts`
+  - `frontend/src/app/school/`
+  - `frontend/src/app/teacher/`
+  - `frontend/src/app/student/`
+  - `frontend/src/app/testhome/`
+
+### Việc còn lại / rủi ro chuyển sang phase sau (PHASE 3):
+- Hệ thống đã hoàn toàn sạch bóng School/LMS và AI Flashcard Generator, đạt 100% tiêu chí Personal Learning Platform.
+- Chuẩn bị bước vào **PHASE 3 — AUTH + USER CORE**:
+  - Chuẩn hóa toàn diện 2 role (`user`, `admin`).
+  - Kiểm tra và hoàn thiện trọn vẹn luồng Auth: Register, Login, Logout, Session, Refresh, Forgot Password, Reset Password, 401 Unauthorized, 403 Forbidden.
+  - Chuẩn hóa User Profile: Avatar, Display Name, Bio, Settings, Privacy.
+  - Đảm bảo tính bảo mật nghiêm ngặt cho Private Data (Documents, Notes, AI Chats, Quiz Attempts, Learning History).
 
 

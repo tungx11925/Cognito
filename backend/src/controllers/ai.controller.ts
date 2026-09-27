@@ -1,10 +1,8 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { aiService } from '../services/ai.service';
-import { aiProviderService } from '../services/ai-provider.service';
 import { db } from '../db';
 import { generateMindmapWithAI } from '../utils/ai-engine.service';
-import { parserService } from '../services/parser.service';
 
 export const chatWithDocument = async (req: AuthRequest, res: Response, next: any) => {
   try {
@@ -41,54 +39,6 @@ export const generateQuiz = async (req: AuthRequest, res: Response, next: any) =
     res.status(200).json({ quizzes });
   } catch (error) {
     next(error);
-  }
-};
-
-export const generateFlashcardsFromFile = async (req: Request, res: Response, next: any) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Vui lòng chọn file' });
-
-    const { mimetype, buffer } = req.file;
-    const extractedText = await parserService.parseFromBuffer(buffer, mimetype);
-
-    if (!extractedText.trim()) {
-      return res.status(400).json({ error: 'Không tìm thấy chữ trong tài liệu này.' });
-    }
-
-    const truncatedText = extractedText.substring(0, 20000);
-    const systemPrompt = `Bạn là một chuyên gia học thuật. Hãy đọc đoạn văn bản sau đây và trích xuất ra các khái niệm quan trọng nhất để tạo thành bộ thẻ Flashcard ghi nhớ. 
-Yêu cầu đầu ra BẮT BUỘC phải là một mảng JSON có cấu trúc chính xác như sau, không được chứa thêm bất kỳ đoạn text giải thích nào khác bên ngoài JSON, KHÔNG BỌC TRONG \`\`\`json:
-[
-  { "front": "Thuật ngữ hoặc câu hỏi ngắn bằng ngôn ngữ gốc của tài liệu", "back": "Định nghĩa hoặc câu trả lời chi tiết bằng Tiếng Việt hoặc cùng ngôn ngữ" }
-]`;
-
-    // Đi qua AIProviderAdapter (Groq → Gemini, có timeout + log ai_request_logs)
-    const aiResult = await aiProviderService.chat({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `NỘI DUNG TÀI LIỆU:\n${truncatedText}` },
-      ],
-      temperature: 0.2,
-      maxTokens: 4096,
-      jsonMode: true,
-      taskType: 'flashcard',
-    });
-    const responseText = aiResult.text;
-    const cleanedJsonStr = responseText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
-    
-    let cards = [];
-    try {
-      cards = JSON.parse(cleanedJsonStr);
-    } catch (parseError) {
-      console.error("Lỗi Parse JSON từ AI:", responseText);
-      return res.status(500).json({ error: 'AI trả về định dạng dữ liệu không hợp lệ. Vui lòng thử lại.' });
-    }
-
-    res.status(200).json({ cards });
-
-  } catch (error: any) {
-    console.error("Lỗi AI Flashcard Generator:", error);
-    res.status(500).json({ error: error.message || 'Lỗi server nội bộ' });
   }
 };
 

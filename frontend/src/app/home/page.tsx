@@ -31,8 +31,6 @@ function LandingPageContent() {
     if (isAuthenticated && activeUser) {
       if (activeUser.role === 'admin') {
         router.push('/admin');
-      } else if (activeUser.role === 'teacher') {
-        router.push('/teacher');
       }
     }
   }, [isAuthenticated, activeUser, router]);
