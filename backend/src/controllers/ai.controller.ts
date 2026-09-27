@@ -22,7 +22,7 @@ export const chatWithDocument = async (req: AuthRequest, res: Response, next: an
       document = docResult.rows[0];
     }
 
-    const reply = await aiService.chatWithDocument(document, message || '', history, images || image);
+    const reply = await aiService.chatWithDocument(document, message || '', history, images || image, userId);
     res.status(200).json({ reply });
   } catch (error) {
     next(error);
@@ -134,7 +134,7 @@ export const generateMindmap = async (req: AuthRequest, res: Response, next: any
     }
 
     // 3. AI Generate
-    const mermaidCode = await generateMindmapWithAI(docTitle, docContent);
+    const mermaidCode = await generateMindmapWithAI(docTitle, docContent, { userId, documentId: document_id });
 
     // 4. Save Cache
     if (document_id) {

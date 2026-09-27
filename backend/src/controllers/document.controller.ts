@@ -1,3 +1,4 @@
+import path from 'path';
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { documentService } from '../services/document.service';
@@ -53,11 +54,12 @@ export const uploadDocument = async (req: AuthRequest, res: Response, next: any)
     // Upload buffer to Cloudinary
     // Dùng resource_type 'auto' để Cloudinary tự phát hiện loại file
     // Tránh lỗi 403 xảy ra khi dùng 'raw' trên một số Cloudinary accounts
+    const ext = path.extname(file.originalname || '').toLowerCase();
     const resourceType = getResourceType(file.mimetype);
     const cloudinaryResult = await uploadToCloudinary(file.buffer, {
       folder: `cognito/documents/${userId}`,
       resource_type: resourceType,
-      public_id: `doc_${Date.now()}`,
+      public_id: `doc_${Date.now()}${ext}`,
       use_filename: false,
       overwrite: false,
     });

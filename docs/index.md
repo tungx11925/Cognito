@@ -69,6 +69,7 @@ docker-compose exec backend npm run migrate:up
 
 | Document | Description |
 |---|---|
+| [AI Architecture & Document Processing](./ai-document.md) | Multi-provider LLM gateway, parsing pipeline, Mindmap & Slide generator |
 | [Project Overview](./project-overview.md) | Feature overview, tech stack summary, service ports |
 | [Architecture](./architecture.md) | Frontend + backend architecture, patterns, security |
 | [Source Tree Analysis](./source-tree-analysis.md) | Annotated directory tree for both parts |

@@ -10,7 +10,41 @@ mermaid.initialize({
   theme: 'forest',
   securityLevel: 'loose',
   fontFamily: 'var(--font-sans), sans-serif',
+  suppressErrorRendering: true,
 });
+
+function sanitizeMindmapCode(raw: string): string {
+  if (!raw) return '';
+  const lines = raw.trim().split('\n');
+  const out: string[] = [];
+  let rootIndented = false;
+  let baseIndent = 0;
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+    if (trimmed.toLowerCase() === 'mindmap') {
+      out.push('mindmap');
+      continue;
+    }
+    if (!rootIndented && (trimmed.startsWith('root(') || trimmed.startsWith('root(('))) {
+      out.push('  ' + trimmed);
+      rootIndented = true;
+      baseIndent = rawLine.match(/^(\s*)/)?.[0].length || 0;
+      continue;
+    }
+
+    const curIndent = rawLine.match(/^(\s*)/)?.[0].length || 0;
+    let level = 1;
+    if (curIndent > baseIndent) {
+      level = 1 + Math.max(1, Math.round((curIndent - baseIndent) / 2));
+    }
+    const cleanText = trimmed.replace(/[()\[\]{}:\"']/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!cleanText) continue;
+    out.push(' '.repeat(2 + level * 2) + cleanText);
+  }
+  return out.length > 0 ? out.join('\n') : raw.trim();
+}
 
 interface MermaidViewerProps {
   chartCode: string;
@@ -28,16 +62,29 @@ export default function MermaidViewer({ chartCode }: MermaidViewerProps) {
 
     if (containerRef.current && chartCode) {
       const renderChart = async () => {
+        const uniqueId = `mermaid-svg-${Math.random().toString(36).substring(2, 9)}`;
         try {
           containerRef.current!.innerHTML = '';
-          const uniqueId = `mermaid-svg-${Math.random().toString(36).substring(2, 9)}`;
-          const { svg } = await mermaid.render(uniqueId, chartCode.trim());
+          const cleanedCode = chartCode.trim().startsWith('mindmap')
+            ? sanitizeMindmapCode(chartCode)
+            : chartCode.trim();
+          const { svg } = await mermaid.render(uniqueId, cleanedCode);
           if (isMounted && containerRef.current) {
             containerRef.current.innerHTML = svg;
           }
         } catch (err) {
           console.error('[MermaidViewer] Render error:', err);
           if (isMounted) setRenderError(true);
+        } finally {
+          // Remove any rogue error SVG elements injected by Mermaid into document.body
+          const rogue = document.getElementById(`d${uniqueId}`) || document.getElementById(uniqueId);
+          if (rogue && rogue.parentElement === document.body) {
+            rogue.remove();
+          }
+          const allRogue = document.querySelectorAll('svg[id^="dmermaid-svg"], .mermaid-error');
+          allRogue.forEach(el => {
+            if (el.parentElement === document.body) el.remove();
+          });
         }
       };
 
@@ -46,6 +93,11 @@ export default function MermaidViewer({ chartCode }: MermaidViewerProps) {
 
     return () => {
       isMounted = false;
+      // Clean up any remaining rogue SVGs on unmount
+      const rogue = document.querySelectorAll('svg[id^="dmermaid-svg"], .mermaid-error');
+      rogue.forEach(el => {
+        if (el.parentElement === document.body) el.remove();
+      });
     };
   }, [chartCode]);
 

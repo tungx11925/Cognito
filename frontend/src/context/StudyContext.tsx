@@ -195,7 +195,7 @@ interface StudyContextType {
   setShowPremiumModal: (show: boolean) => void;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 const getAuthHeaders = (): Record<string, string> => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;

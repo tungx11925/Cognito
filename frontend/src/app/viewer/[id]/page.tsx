@@ -5,24 +5,23 @@ import { useParams, useRouter } from 'next/navigation';
 import { getDocumentById } from '@/services/document.service';
 import { ArrowLeft, Share2, Download, AlertCircle, Send, Languages, PenLine, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import PomodoroWidget from '@/components/documents/PomodoroWidget';
-import SmartNotesWorkspace from '@/components/documents/SmartNotesWorkspace';
-import AIChatWorkspace from '@/components/documents/AIChatWorkspace';
-import MindmapWorkspace from '@/components/documents/MindmapWorkspace';
-
 import dynamic from 'next/dynamic';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
+const PomodoroWidget = dynamic(() => import('@/components/documents/PomodoroWidget'), { ssr: false });
+const SmartNotesWorkspace = dynamic(() => import('@/components/documents/SmartNotesWorkspace'), { ssr: false });
+const AIChatWorkspace = dynamic(() => import('@/components/documents/AIChatWorkspace'), { ssr: false });
+const MindmapWorkspace = dynamic(() => import('@/components/documents/MindmapWorkspace'), { ssr: false });
+
 const DocumentViewerWrapper = dynamic(() => import('@/components/documents/DocumentViewerWrapper'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100">
-      <div className="w-8 h-8 border-4 border-[#1a3a2a]/30 border-t-[#1a3a2a] rounded-full animate-spin mb-4" />
-      <p className="text-sm text-gray-500 font-medium">Đang tải trình xem tài liệu...</p>
+    <div className="w-full h-96 flex items-center justify-center bg-gray-50">
+      <div className="w-8 h-8 border-4 border-[#1a3a2a]/30 border-t-[#1a3a2a] rounded-full animate-spin" />
     </div>
-  )
+  ),
 });
 
 export default function DocumentViewerPage() {
@@ -233,7 +232,7 @@ export default function DocumentViewerPage() {
             <div className="min-h-full p-4 md:p-8 flex justify-center min-w-0 bg-[#EBECEF]">
               {/* Document Container with soft shadow mimicking real paper */}
               <div className="w-full max-w-5xl bg-white shadow-xl rounded-md overflow-hidden border border-gray-300/40">
-                <DocumentViewerWrapper url={document.doc_url} />
+                <DocumentViewerWrapper url={document.doc_url} fileType={document.file_type} />
               </div>
             </div>
           </Panel>

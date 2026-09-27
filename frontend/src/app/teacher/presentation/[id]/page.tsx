@@ -29,6 +29,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import 'katex/dist/katex.min.css';
+import { preprocessMathContent } from '@/utils/math';
 
 interface Slide {
   id: number;
@@ -42,6 +43,8 @@ interface Slide {
   callout_title?: string;
   callout_content?: string;
   speaker_notes?: string;
+  page_number?: number;
+  image_url?: string;
 }
 
 interface Lecture {
@@ -51,6 +54,9 @@ interface Lecture {
   subject: string;
   chapter_count: number;
   total_slides: number;
+  file_url?: string;
+  presentation_mode?: string;
+  original_filename?: string;
   slides: Slide[];
 }
 
@@ -361,27 +367,39 @@ export default function TeacherPresentationPage() {
                 <button
                   key={slide.id || idx}
                   onClick={() => setCurrentSlideIndex(idx)}
-                  className={`w-20 h-16 rounded-xl relative flex flex-col p-1.5 transition-all cursor-pointer group text-left ${
+                  className={`w-22 h-16 rounded-xl relative flex flex-col p-1 transition-all cursor-pointer group text-left ${
                     isActive 
                       ? (isDarkMode 
                           ? 'ring-2 ring-emerald-500 bg-emerald-950/60 border border-emerald-500/80 shadow-md scale-105' 
                           : 'ring-2 ring-[#1a3d28] bg-white border border-[#1a3d28] shadow-md scale-105')
-                    : (isDarkMode 
-                        ? 'bg-[#14281e] border border-[#224830] hover:border-emerald-500/50 opacity-70 hover:opacity-100' 
-                        : 'bg-white/90 border border-[#1a3d28]/20 hover:border-[#1a3d28]/60 hover:bg-white')
+                      : (isDarkMode 
+                          ? 'bg-[#14281e] border border-[#224830] hover:border-emerald-500/50 opacity-70 hover:opacity-100' 
+                          : 'bg-white/90 border border-[#1a3d28]/20 hover:border-[#1a3d28]/60 hover:bg-white')
                   }`}
+                  title={`Xem trang ${slide.slide_number || idx + 1}`}
                 >
-                  {/* Miniature slide skeleton */}
-                  <div className="flex-1 flex flex-col justify-center space-y-1 overflow-hidden opacity-60">
-                    <div className={`h-1.5 w-3/4 rounded ${isActive ? (isDarkMode ? 'bg-emerald-400' : 'bg-[#1a3d28]') : (isDarkMode ? 'bg-emerald-700/60' : 'bg-stone-400')}`} />
-                    <div className={`h-1 w-full rounded ${isDarkMode ? 'bg-emerald-900/60' : 'bg-stone-300'}`} />
-                    <div className={`h-1 w-5/6 rounded ${isDarkMode ? 'bg-emerald-900/60' : 'bg-stone-300'}`} />
-                  </div>
+                  {slide.image_url ? (
+                    <div className="flex-1 w-full h-full overflow-hidden rounded-lg relative bg-black/10 dark:bg-black/40 flex items-center justify-center">
+                      <img 
+                        src={slide.image_url} 
+                        alt={`Trang ${idx + 1}`}
+                        className="w-full h-full object-contain pointer-events-none select-none"
+                        loading="lazy"
+                      />
+                    </div>
+                  ) : (
+                    /* Miniature slide skeleton */
+                    <div className="flex-1 flex flex-col justify-center space-y-1 overflow-hidden opacity-60 px-1">
+                      <div className={`h-1.5 w-3/4 rounded ${isActive ? (isDarkMode ? 'bg-emerald-400' : 'bg-[#1a3d28]') : (isDarkMode ? 'bg-emerald-700/60' : 'bg-stone-400')}`} />
+                      <div className={`h-1 w-full rounded ${isDarkMode ? 'bg-emerald-900/60' : 'bg-stone-300'}`} />
+                      <div className={`h-1 w-5/6 rounded ${isDarkMode ? 'bg-emerald-900/60' : 'bg-stone-300'}`} />
+                    </div>
+                  )}
                   
                   {/* Number Badge */}
-                  <div className="flex items-center justify-between text-[10px] font-bold pt-1 border-t border-stone-200 dark:border-white/5">
+                  <div className="flex items-center justify-between text-[10px] font-bold pt-0.5 border-t border-stone-200 dark:border-white/5">
                     <span className={isActive ? (isDarkMode ? 'text-emerald-400 font-extrabold' : 'text-[#1a3d28] font-extrabold') : (isDarkMode ? 'text-emerald-200/50' : 'text-stone-500')}>
-                      {slide.slide_number || idx + 1}
+                      Trang {slide.slide_number || idx + 1}
                     </span>
                   </div>
                 </button>
@@ -390,117 +408,161 @@ export default function TeacherPresentationPage() {
           </aside>
         )}
 
-        {/* CENTER SLIDE PRESENTATION CANVAS (CANVA 16:9 RATIO IN FULLSCREEN) */}
+        {/* CENTER SLIDE PRESENTATION CANVAS */}
         <main 
           ref={slideContainerRef}
           className={`flex-1 overflow-y-auto flex flex-col items-center justify-center relative scrollbar-thin transition-all ${
             isFullscreen 
-              ? (isDarkMode ? 'bg-[#060c08] p-3 md:p-6 pb-20' : 'bg-[#ece9e0] p-3 md:p-6 pb-20') 
-              : 'p-4 md:p-8 pt-4 pb-14'
+              ? (isDarkMode ? 'bg-[#060c08] p-2 md:p-4' : 'bg-[#ece9e0] p-2 md:p-4') 
+              : 'p-3 md:p-6 pb-12'
           }`}
         >
-          <div 
-            className={`w-full rounded-3xl transition-all duration-300 border flex flex-col justify-between relative my-auto shrink-0 ${
-              isFullscreen 
-                ? 'max-w-[1200px] max-h-[84vh] p-6 md:p-10 shadow-2xl overflow-hidden' 
-                : 'max-w-4xl min-h-[480px] max-h-[82vh] p-6 md:p-10 shadow-xl overflow-hidden'
-            } ${
-              isDarkMode 
-                ? 'bg-gradient-to-b from-[#102419] via-[#0d1e15] to-[#0a1710] border-[#224830] text-[#f5f3ee] shadow-[0_20px_50px_rgba(0,0,0,0.8)]' 
-                : 'bg-white border-2 border-[#1a3d28]/15 text-[#1a2e1c] shadow-[0_16px_40px_rgba(26,61,40,0.1)]'
-            }`}
-            style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'center center' }}
-          >
-            {/* Top Slide Header */}
-            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto pr-1 scrollbar-thin">
-              {currentSlide.subtitle && (
-                <div className={`font-bold uppercase tracking-widest mb-2 flex items-center gap-2 ${
-                  isFullscreen ? 'text-xs md:text-sm' : 'text-[11px] md:text-xs'
-                } ${
-                  isDarkMode ? 'text-emerald-400' : 'text-[#1a3d28]'
+          {currentSlide.image_url ? (
+            /* TRÌNH CHIẾU SLIDE NGUYÊN BẢN (100% VISUAL FIDELITY - KHÔNG STYLE LẠI) */
+            <div className="w-full h-full flex flex-col items-center justify-center relative select-none">
+              <div 
+                className={`relative max-w-full flex items-center justify-center rounded-2xl overflow-hidden transition-transform duration-200 ${
+                  isFullscreen
+                    ? 'max-h-[92vh] shadow-[0_25px_60px_rgba(0,0,0,0.85)] border border-white/10 bg-black'
+                    : 'max-h-[82vh] shadow-[0_16px_45px_rgba(26,61,40,0.18)] border-2 border-[#1a3d28]/20 bg-white dark:bg-black dark:border-[#224830]'
+                }`}
+                style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'center center' }}
+              >
+                <img
+                  src={currentSlide.image_url}
+                  alt={`${lecture.title} - Trang ${currentSlide.slide_number || currentSlideIndex + 1}`}
+                  className={`${isFullscreen ? 'max-h-[90vh]' : 'max-h-[80vh]'} w-auto max-w-full object-contain select-none pointer-events-none rounded-xl`}
+                  draggable={false}
+                />
+              </div>
+
+              {/* Thông tin trang slide nguyên bản */}
+              {!isFullscreen && (
+                <div className={`mt-2.5 px-3.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-2 border shadow-xs ${
+                  isDarkMode 
+                    ? 'bg-[#14281e]/90 border-[#224830] text-emerald-300' 
+                    : 'bg-white/90 border-[#1a3d28]/15 text-[#1a3d28]'
                 }`}>
-                  <span className={`w-2 h-2 rounded-full animate-pulse ${isDarkMode ? 'bg-emerald-400' : 'bg-[#1a3d28]'}`} />
-                  {currentSlide.subtitle}
+                  <span>Trang {currentSlide.slide_number || currentSlideIndex + 1} / {lecture.total_slides || lecture.slides.length}</span>
+                  <span className="opacity-40">·</span>
+                  <span className="font-normal opacity-80 truncate max-w-xs">{lecture.original_filename || lecture.title}</span>
                 </div>
               )}
-
-              <h2 className={`font-serif font-black tracking-tight mb-4 leading-tight shrink-0 ${
-                isFullscreen ? 'text-2xl md:text-4xl' : 'text-xl md:text-2xl'
+            </div>
+          ) : lecture.file_url && lecture.file_url.toLowerCase().endsWith('.pdf') ? (
+            /* Fallback hiển thị iframe PDF nếu chưa kịp sinh ảnh */
+            <div className="w-full h-full flex items-center justify-center p-2">
+              <iframe
+                src={`${lecture.file_url}#page=${currentSlide.page_number || currentSlideIndex + 1}&toolbar=0&navpanes=0`}
+                className="w-full h-[82vh] rounded-2xl border-0 shadow-xl"
+                title={`Slide ${currentSlideIndex + 1}`}
+              />
+            </div>
+          ) : (
+            /* Fallback giao diện card cho tài liệu sinh tự động AI (không có tệp gốc) */
+            <div 
+              className={`w-full rounded-3xl transition-all duration-300 border flex flex-col justify-between relative my-auto shrink-0 ${
+                isFullscreen 
+                  ? 'max-w-[1200px] max-h-[84vh] p-6 md:p-10 shadow-2xl overflow-hidden' 
+                  : 'max-w-4xl min-h-[480px] max-h-[82vh] p-6 md:p-10 shadow-xl overflow-hidden'
               } ${
-                isDarkMode ? 'text-white' : 'text-[#1a2e1c]'
-              }`}>
-                {currentSlide.title}
-              </h2>
-
-              {/* Callout Container (Definition Box in Cognito Emerald/Forest Theme) */}
-              {currentSlide.callout_content && (
-                <div className={`mb-4 rounded-xl border transition-all shrink-0 ${
-                  isFullscreen ? 'p-4 md:p-5' : 'p-3.5 md:p-4'
-                } ${
-                  isDarkMode 
-                    ? 'bg-[#142e20] border-emerald-500/30 border-l-4 border-l-emerald-500 text-emerald-100 shadow-md' 
-                    : 'bg-[#f4f8f5] border-emerald-300/80 border-l-4 border-l-[#1a3d28] text-[#1a2e1c] shadow-xs'
-                }`}>
-                  <div className={`font-bold uppercase tracking-wider mb-1.5 flex items-center gap-2 ${
+                isDarkMode 
+                  ? 'bg-gradient-to-b from-[#102419] via-[#0d1e15] to-[#0a1710] border-[#224830] text-[#f5f3ee] shadow-[0_20px_50px_rgba(0,0,0,0.8)]' 
+                  : 'bg-white border-2 border-[#1a3d28]/15 text-[#1a2e1c] shadow-[0_16px_40px_rgba(26,61,40,0.1)]'
+              }`}
+              style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'center center' }}
+            >
+              {/* Top Slide Header */}
+              <div className="flex-1 flex flex-col min-h-0 overflow-y-auto pr-1 scrollbar-thin">
+                {currentSlide.subtitle && (
+                  <div className={`font-bold uppercase tracking-widest mb-2 flex items-center gap-2 ${
                     isFullscreen ? 'text-xs md:text-sm' : 'text-[11px] md:text-xs'
                   } ${
                     isDarkMode ? 'text-emerald-400' : 'text-[#1a3d28]'
                   }`}>
-                    <Layers size={isFullscreen ? 15 : 13} className={isDarkMode ? 'text-emerald-400' : 'text-[#1a3d28]'} />
-                    {currentSlide.callout_title || 'Definition / Trọng tâm'}
+                    <span className={`w-2 h-2 rounded-full animate-pulse ${isDarkMode ? 'bg-emerald-400' : 'bg-[#1a3d28]'}`} />
+                    {currentSlide.subtitle}
                   </div>
-                  <div className={`italic leading-relaxed font-sans opacity-90 ${
-                    isFullscreen ? 'text-sm md:text-base' : 'text-[13.5px] md:text-sm'
-                  }`}>
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[rehypeKatex, rehypeRaw]}
-                    >
-                      {currentSlide.callout_content}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              )}
+                )}
 
-              {/* Slide Body Content */}
-              <div className={`leading-relaxed space-y-2.5 font-sans break-words ${
-                isFullscreen ? 'text-sm md:text-base' : 'text-[14px] md:text-[15px]'
+                <h2 className={`font-serif font-black tracking-tight mb-4 leading-tight shrink-0 ${
+                  isFullscreen ? 'text-2xl md:text-4xl' : 'text-xl md:text-2xl'
+                } ${
+                  isDarkMode ? 'text-white' : 'text-[#1a2e1c]'
+                }`}>
+                  {currentSlide.title}
+                </h2>
+
+                {/* Callout Container (Definition Box in Cognito Emerald/Forest Theme) */}
+                {currentSlide.callout_content && (
+                  <div className={`mb-4 rounded-xl border transition-all shrink-0 ${
+                    isFullscreen ? 'p-4 md:p-5' : 'p-3.5 md:p-4'
+                  } ${
+                    isDarkMode 
+                      ? 'bg-[#142e20] border-emerald-500/30 border-l-4 border-l-emerald-500 text-emerald-100 shadow-md' 
+                      : 'bg-[#f4f8f5] border-emerald-300/80 border-l-4 border-l-[#1a3d28] text-[#1a2e1c] shadow-xs'
+                  }`}>
+                    <div className={`font-bold uppercase tracking-wider mb-1.5 flex items-center gap-2 ${
+                      isFullscreen ? 'text-xs md:text-sm' : 'text-[11px] md:text-xs'
+                    } ${
+                      isDarkMode ? 'text-emerald-400' : 'text-[#1a3d28]'
+                    }`}>
+                      <Layers size={isFullscreen ? 15 : 13} className={isDarkMode ? 'text-emerald-400' : 'text-[#1a3d28]'} />
+                      {currentSlide.callout_title || 'Definition / Trọng tâm'}
+                    </div>
+                    <div className={`italic leading-relaxed font-sans opacity-90 ${
+                      isFullscreen ? 'text-sm md:text-base' : 'text-[13.5px] md:text-sm'
+                    }`}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }], rehypeRaw]}
+                      >
+                        {preprocessMathContent(currentSlide.callout_content)}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+
+                {/* Slide Body Content */}
+                <div className={`leading-relaxed space-y-2.5 font-sans break-words ${
+                  isFullscreen ? 'text-sm md:text-base' : 'text-[14px] md:text-[15px]'
+                }`}>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }], rehypeRaw]}
+                    components={{
+                      p: ({ node, ...props }) => <p className={`leading-relaxed my-1.5 ${isDarkMode ? 'text-emerald-100/85' : 'text-[#2e3e33]'}`} {...props} />,
+                      strong: ({ node, ...props }) => <strong className={isDarkMode ? 'font-bold text-emerald-300' : 'font-bold text-[#1a3d28]'} {...props} />,
+                      ul: ({ node, children }) => <ul className="space-y-2 my-2 list-none p-0">{children}</ul>,
+                      ol: ({ node, children }) => <ol className="space-y-2 my-2 list-none p-0">{children}</ol>,
+                      li: ({ node, children }) => (
+                        <li className={`p-3 rounded-xl border flex items-start gap-3 transition-all list-none ${
+                          isDarkMode 
+                            ? 'bg-[#142e20]/80 border-[#224830] text-emerald-100 hover:border-emerald-500/40' 
+                            : 'bg-[#FAF8F5] border-[#1a3d28]/15 text-[#1a2e1c] hover:border-[#1a3d28]/35'
+                        }`}>
+                          <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${isDarkMode ? 'bg-emerald-400' : 'bg-[#1a3d28]'}`} />
+                          <div className="flex-1">{children}</div>
+                        </li>
+                      ),
+                    }}
+                  >
+                    {currentSlide.content}
+                  </ReactMarkdown>
+                </div>
+              </div>
+
+              {/* Slide Footer Info Inside Card */}
+              <div className={`mt-4 pt-3 border-t flex items-center justify-between font-medium shrink-0 ${
+                isFullscreen ? 'text-xs md:text-sm' : 'text-[11px] md:text-xs'
+              } ${
+                isDarkMode ? 'border-[#1e3d2a] text-emerald-400/60' : 'border-[#1a3d28]/15 text-[#1a3d28]/60'
               }`}>
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkMath]}
-                  rehypePlugins={[rehypeKatex, rehypeRaw]}
-                  components={{
-                    p: ({ node, ...props }) => <p className={`leading-relaxed my-1.5 ${isDarkMode ? 'text-emerald-100/85' : 'text-[#2e3e33]'}`} {...props} />,
-                    strong: ({ node, ...props }) => <strong className={isDarkMode ? 'font-bold text-emerald-300' : 'font-bold text-[#1a3d28]'} {...props} />,
-                    ul: ({ node, children }) => <ul className="space-y-2 my-2 list-none p-0">{children}</ul>,
-                    ol: ({ node, children }) => <ol className="space-y-2 my-2 list-none p-0">{children}</ol>,
-                    li: ({ node, children }) => (
-                      <li className={`p-3 rounded-xl border flex items-start gap-3 transition-all list-none ${
-                        isDarkMode 
-                          ? 'bg-[#142e20]/80 border-[#224830] text-emerald-100 hover:border-emerald-500/40' 
-                          : 'bg-[#FAF8F5] border-[#1a3d28]/15 text-[#1a2e1c] hover:border-[#1a3d28]/35'
-                      }`}>
-                        <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${isDarkMode ? 'bg-emerald-400' : 'bg-[#1a3d28]'}`} />
-                        <div className="flex-1">{children}</div>
-                      </li>
-                    ),
-                  }}
-                >
-                  {currentSlide.content}
-                </ReactMarkdown>
+                <span>{lecture.title}</span>
+                <span>{currentSlide.slide_number || currentSlideIndex + 1}</span>
               </div>
             </div>
-
-            {/* Slide Footer Info Inside Card */}
-            <div className={`mt-4 pt-3 border-t flex items-center justify-between font-medium shrink-0 ${
-              isFullscreen ? 'text-xs md:text-sm' : 'text-[11px] md:text-xs'
-            } ${
-              isDarkMode ? 'border-[#1e3d2a] text-emerald-400/60' : 'border-[#1a3d28]/15 text-[#1a3d28]/60'
-            }`}>
-              <span>{lecture.title}</span>
-              <span>{currentSlide.slide_number || currentSlideIndex + 1}</span>
-            </div>
-          </div>
+          )}
         </main>
       </div>
 
@@ -552,8 +614,11 @@ export default function TeacherPresentationPage() {
             <div className={`text-sm leading-relaxed whitespace-pre-wrap ${
               isDarkMode ? 'text-emerald-100/90' : 'text-[#374151]'
             }`}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {aiSummary}
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }], rehypeRaw]}
+              >
+                {preprocessMathContent(aiSummary)}
               </ReactMarkdown>
             </div>
           </div>
@@ -700,6 +765,61 @@ export default function TeacherPresentationPage() {
             <span className="text-[11px] font-medium hidden md:inline">Phím tắt: <b>←</b> / <b>→</b> / <b>F</b> (Toàn màn hình)</span>
           </div>
         </footer>
+      )}
+
+      {/* FLOATING PRESENTER CONTROLLER IN FULLSCREEN */}
+      {isFullscreen && showPresenterBar && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2 rounded-2xl bg-black/85 backdrop-blur-md border border-white/20 text-white shadow-2xl transition-opacity animate-in fade-in duration-200">
+          <button
+            onClick={prevSlide}
+            disabled={currentSlideIndex === 0}
+            className="p-1.5 rounded-lg hover:bg-white/20 transition-colors disabled:opacity-30 cursor-pointer"
+            title="Trang trước"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <span className="text-xs font-bold font-mono px-2">
+            {currentSlideIndex + 1} / {lecture.slides.length}
+          </span>
+          <button
+            onClick={nextSlide}
+            disabled={currentSlideIndex === lecture.slides.length - 1}
+            className="p-1.5 rounded-lg hover:bg-white/20 transition-colors disabled:opacity-30 cursor-pointer"
+            title="Trang tiếp"
+          >
+            <ChevronRight size={20} />
+          </button>
+
+          <div className="w-[1px] h-4 bg-white/20 mx-1" />
+
+          <button
+            onClick={() => setLaserPointer(prev => !prev)}
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+              laserPointer ? 'bg-red-500 text-white' : 'hover:bg-white/20 text-white/80'
+            }`}
+            title="Con trỏ Laser (Phím L)"
+          >
+            <Crosshair size={16} />
+          </button>
+
+          <button
+            onClick={() => setShowNotes(prev => !prev)}
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+              showNotes ? 'bg-amber-500 text-white' : 'hover:bg-white/20 text-white/80'
+            }`}
+            title="Ghi chú (Phím N)"
+          >
+            <FileText size={16} />
+          </button>
+
+          <button
+            onClick={exitFullscreen}
+            className="p-1.5 rounded-lg hover:bg-white/20 text-white/80 transition-colors cursor-pointer"
+            title="Thoát toàn màn hình (Phím Esc / F)"
+          >
+            <Minimize2 size={16} />
+          </button>
+        </div>
       )}
     </div>
   );

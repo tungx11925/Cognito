@@ -41,6 +41,63 @@ export class LectureService {
       [id]
     );
 
+    // Auto-generate high-res slide images for PDF lectures if missing
+    if (lecture.file_url && lecture.file_url.toLowerCase().endsWith('.pdf')) {
+      const uploadsDir = path.join(__dirname, '../../uploads');
+      const missingImages = slidesRes.rows.some((s: any) => {
+        if (!s.image_url) return true;
+        const localFile = path.join(uploadsDir, s.image_url.replace(/^\/uploads\//, ''));
+        return !fs.existsSync(localFile);
+      });
+      if (missingImages) {
+        try {
+          const uploadsDir = path.join(__dirname, '../../uploads');
+          const cleanFileName = path.basename(lecture.file_url);
+          let pdfPath = path.join(uploadsDir, cleanFileName);
+
+          // If exact file not found, try finding file matching original name or pattern
+          if (!fs.existsSync(pdfPath) && lecture.original_filename) {
+            const allFiles = fs.readdirSync(uploadsDir);
+            const found = allFiles.find(f => f.endsWith(lecture.original_filename) && f.endsWith('.pdf'));
+            if (found) {
+              pdfPath = path.join(uploadsDir, found);
+            }
+          }
+
+          if (fs.existsSync(pdfPath)) {
+            const slideSubDir = `slides/${id}`;
+            const slideImagesDir = path.join(uploadsDir, slideSubDir);
+            if (!fs.existsSync(slideImagesDir)) {
+              fs.mkdirSync(slideImagesDir, { recursive: true });
+            }
+            const { pdfToPng } = require('pdf-to-png-converter');
+            const fileBuf = fs.readFileSync(pdfPath);
+            const pngPages = await pdfToPng(fileBuf, {
+              outputFolder: slideImagesDir,
+              viewportScale: 2.0,
+              outputFileMaskFunc: (pageNum: number) => `page_${pageNum}.png`
+            });
+            if (pngPages && pngPages.length > 0) {
+              for (const p of pngPages) {
+                const imgUrl = `/uploads/${slideSubDir}/${p.name}`;
+                await db.query(
+                  'UPDATE lecture_slides SET image_url = $1 WHERE lecture_id = $2 AND (page_number = $3 OR slide_number = $3)',
+                  [imgUrl, id, p.pageNumber]
+                );
+              }
+              const refreshed = await db.query(
+                'SELECT * FROM lecture_slides WHERE lecture_id = $1 ORDER BY slide_number ASC',
+                [id]
+              );
+              slidesRes.rows = refreshed.rows;
+            }
+          }
+        } catch (autoErr) {
+          console.warn('Auto conversion error for lecture', id, autoErr);
+        }
+      }
+    }
+
     return {
       ...lecture,
       title: cleanVietnameseText(lecture.title),
@@ -55,6 +112,7 @@ export class LectureService {
         callout_title: cleanVietnameseText(s.callout_title),
         callout_content: cleanVietnameseText(s.callout_content),
         speaker_notes: cleanVietnameseText(s.speaker_notes),
+        image_url: s.image_url || null,
       }))
     };
   }
@@ -87,14 +145,42 @@ export class LectureService {
     // ─── CHẾ ĐỘ 1: TRÌNH CHIẾU NGUYÊN BẢN (ORIGINAL SLIDE VIEWER) ───────────
     if (mode === 'ORIGINAL') {
       let pageCount = 1;
+      const generatedImages: { [pageNum: number]: string } = {};
+
       if (ext === 'pdf') {
         try {
-          const pdfParse = require('pdf-parse/lib/pdf-parse.js');
-          const data = await pdfParse(fileBuffer);
-          pageCount = data.numpages || 1;
-        } catch (e) {
-          console.warn('PDF parse page count error:', e);
+          const slideFolder = `slides/${Date.now()}`;
+          const slideImagesDir = path.join(uploadsDir, slideFolder);
+          if (!fs.existsSync(slideImagesDir)) {
+            fs.mkdirSync(slideImagesDir, { recursive: true });
+          }
+
+          const { pdfToPng } = require('pdf-to-png-converter');
+          const pngPages = await pdfToPng(fileBuffer, {
+            outputFolder: slideImagesDir,
+            viewportScale: 2.0,
+            outputFileMaskFunc: (pageNumber: number) => `page_${pageNumber}.png`
+          });
+
+          if (pngPages && pngPages.length > 0) {
+            pageCount = pngPages.length;
+            for (const p of pngPages) {
+              generatedImages[p.pageNumber] = `/uploads/${slideFolder}/${p.name}`;
+            }
+          }
+        } catch (convErr) {
+          console.warn('PDF to PNG conversion error, trying pdf-parse fallback:', convErr);
+          try {
+            const pdfParse = require('pdf-parse/lib/pdf-parse.js');
+            const data = await pdfParse(fileBuffer);
+            pageCount = data.numpages || 1;
+          } catch (e) {
+            console.warn('PDF parse page count error:', e);
+          }
         }
+      } else if (['png', 'jpg', 'jpeg', 'webp'].includes(ext || '')) {
+        pageCount = 1;
+        generatedImages[1] = fileUrl;
       }
 
       // Save Lecture record in DB
@@ -122,8 +208,8 @@ export class LectureService {
       for (let i = 1; i <= pageCount; i++) {
         await db.query(`
           INSERT INTO lecture_slides (
-            lecture_id, slide_number, chapter_index, chapter_title, title, subtitle, content, callout_type, callout_title, callout_content, speaker_notes, page_number
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            lecture_id, slide_number, chapter_index, chapter_title, title, subtitle, content, callout_type, callout_title, callout_content, speaker_notes, page_number, image_url
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         `, [
           createdLecture.id,
           i,
@@ -131,12 +217,13 @@ export class LectureService {
           'Slide gốc',
           `${lectureTitle} - Trang ${i}`,
           `TRANG ${i} / ${pageCount}`,
-          `Nội dung trang ${i}`,
+          `Trang ${i} của file ${originalname}`,
           'takeaway',
           'Trang slide',
           `Trang ${i} của file ${originalname}`,
           `Ghi chú cho trang ${i}`,
-          i
+          i,
+          generatedImages[i] || null
         ]);
       }
 

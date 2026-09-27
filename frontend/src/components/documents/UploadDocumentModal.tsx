@@ -104,7 +104,7 @@ export default function UploadDocumentModal({
     pollStopRef.current = false;
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
     const formData = new FormData();
     formData.append('file', file);

@@ -39,6 +39,7 @@ export async function bootstrapLectureSchema() {
       ALTER TABLE lectures ADD COLUMN IF NOT EXISTS presentation_mode VARCHAR(50) DEFAULT 'ORIGINAL';
       ALTER TABLE lectures ADD COLUMN IF NOT EXISTS original_filename VARCHAR(255);
       ALTER TABLE lecture_slides ADD COLUMN IF NOT EXISTS page_number INTEGER;
+      ALTER TABLE lecture_slides ADD COLUMN IF NOT EXISTS image_url TEXT;
     `);
 
     // 2. Check if sample lecture exists, if not seed it for instant testing

@@ -2,12 +2,9 @@
 const nextConfig = {
   swcMinify: true,
   reactStrictMode: false,
+  transpilePackages: ['mermaid', 'framer-motion'],
 
-  // Keep dev pages in memory longer to prevent constant re-compilation delays
-  onDemandEntries: {
-    maxInactiveAge: 3600 * 1000, // keep compiled pages in memory for 1 hour
-    pagesBufferLength: 20,       // keep up to 20 pages hot in memory
-  },
+
 
   // Fast image optimization
   images: {
@@ -28,7 +25,6 @@ const nextConfig = {
   },
 
   // Tăng tốc Fast Refresh/HMR khi dev: không theo dõi các thư mục nặng ngoài frontend
-  // (tránh tình trạng "[Fast Refresh] rebuilding" kéo dài hàng chục giây)
   webpack: (config, { dev }) => {
     if (dev) {
       config.watchOptions = {
@@ -48,8 +44,11 @@ const nextConfig = {
     return config;
   },
 
-  // Cache static asset headers
+  // Cache static asset headers (chỉ cache immutable ở production, tránh phá hỏng dev HMR)
   async headers() {
+    if (process.env.NODE_ENV !== 'production') {
+      return [];
+    }
     return [
       {
         source: '/uploads/:path*',
