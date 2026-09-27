@@ -5,17 +5,24 @@ const getAuthHeaders = (): Record<string, string> => {
     return token ? { 'Authorization': `Bearer ${token}` } : {};
 };
 
-export const chatWithAI = (document_id: number, message: string, history?: any[], images?: string[] | string) => {
+export const chatWithAI = (
+    document_id?: number | null, 
+    message: string = '', 
+    history?: any[], 
+    images?: string[] | string,
+    context_mode?: 'GENERAL' | 'DOCUMENT_CONTEXT'
+) => {
     const imagesPayload = Array.isArray(images) ? images : (images ? [images] : []);
     return apiFetch('/ai/chat', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-            document_id, 
+            document_id: document_id || undefined, 
             message, 
             history, 
             images: imagesPayload,
-            image: imagesPayload[0] || undefined 
+            image: imagesPayload[0] || undefined,
+            context_mode: context_mode || (document_id ? 'DOCUMENT_CONTEXT' : 'GENERAL'),
         })
     });
 };

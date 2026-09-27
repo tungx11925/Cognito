@@ -119,6 +119,7 @@ const MarkdownRenderer = ({ content, isUser }: { content: string; isUser: boolea
 };
 
 export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
+  const [contextMode, setContextMode] = useState<'DOCUMENT_CONTEXT' | 'GENERAL'>('DOCUMENT_CONTEXT');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [selectedImages, setSelectedImages] = useState<UploadedImage[]>([]);
@@ -159,13 +160,7 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    const handleSendAI = (e: any) => {
-      handleSend(e.detail);
-    };
-    window.addEventListener('SEND_AI_MESSAGE', handleSendAI);
-    return () => window.removeEventListener('SEND_AI_MESSAGE', handleSendAI);
-  }, [documentId]);
+
 
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -263,7 +258,7 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
           content: m.content
         }));
 
-      const response = await chatWithAI(documentId, userMsg.content, history, currentImages);
+      const response = await chatWithAI(documentId, userMsg.content, history, currentImages, contextMode);
       const aiMsg: Message = { 
         id: (Date.now() + 1).toString(), 
         role: 'ai', 
@@ -284,6 +279,18 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
       setIsLoading(false);
     }
   };
+
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+
+  useEffect(() => {
+    const handleSendAI = (e: any) => {
+      setContextMode('DOCUMENT_CONTEXT');
+      handleSendRef.current(e.detail);
+    };
+    window.addEventListener('SEND_AI_MESSAGE', handleSendAI);
+    return () => window.removeEventListener('SEND_AI_MESSAGE', handleSendAI);
+  }, []);
 
   const handleGenerateQuiz = async () => {
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: 'Tạo bài trắc nghiệm từ tài liệu này' };
@@ -348,19 +355,53 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
 
   return (
     <div className="flex-1 flex flex-col relative bg-[#EBE9E4] overflow-hidden">
-      {/* Header with Clear Button */}
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-        <button 
-          onClick={clearHistory}
-          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shadow-sm bg-white border border-gray-300 cursor-pointer"
-          title="Xóa lịch sử trò chuyện"
-        >
-          <Trash2 size={16} />
-        </button>
+      {/* Context Mode Toggle Header (Master Prompt Phase 5: GENERAL vs DOCUMENT_CONTEXT) */}
+      <div className="px-3.5 py-2 bg-white/95 backdrop-blur-md border-b border-gray-300 flex items-center justify-between shrink-0 z-10 shadow-xs">
+        <div className="flex items-center gap-1 bg-[#EBE9E4] p-0.5 rounded-lg border border-gray-300">
+          <button 
+            type="button"
+            onClick={() => setContextMode('DOCUMENT_CONTEXT')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
+              contextMode === 'DOCUMENT_CONTEXT' 
+                ? 'bg-[#0D2B24] text-white shadow-xs' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-white/40'
+            }`}
+            title="AI ưu tiên đối chiếu và trích xuất ngữ cảnh tài liệu đang mở"
+          >
+            <span>📄</span>
+            <span>Theo tài liệu</span>
+          </button>
+          <button 
+            type="button"
+            onClick={() => setContextMode('GENERAL')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
+              contextMode === 'GENERAL' 
+                ? 'bg-[#0D2B24] text-white shadow-xs' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-white/40'
+            }`}
+            title="Hỏi đáp kiến thức học tập tổng quát ngoài tài liệu"
+          >
+            <span>🌐</span>
+            <span>Tổng quát</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-gray-500 hidden sm:inline">
+            {contextMode === 'DOCUMENT_CONTEXT' ? 'Ưu tiên tài liệu' : 'Kiến thức chung'}
+          </span>
+          <button 
+            onClick={clearHistory}
+            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shadow-xs bg-white border border-gray-300 cursor-pointer"
+            title="Xóa lịch sử trò chuyện"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Chat Messages Area */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-[#EBE9E4] pb-44 pt-10">
+      <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-[#EBE9E4] pb-44 pt-3">
         {messages.map((msg) => {
           const displayImages = msg.images || (msg.image ? [msg.image] : []);
           const isUser = msg.role === 'user';

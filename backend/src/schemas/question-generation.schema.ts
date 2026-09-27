@@ -110,15 +110,15 @@ const INJECTION_PATTERNS = [
   /<\s*script/i,
 ];
 
-export function sanitizeUserInstruction(raw?: string | null): string | null {
+export function sanitizeUserInstruction(raw?: string | null, maxLength = 500): string | null {
   const value = (raw || '').trim();
   if (!value) return null;
-  if (value.length > 500) {
-    throw new AppError('Hướng dẫn thêm tối đa 500 ký tự', 400);
+  if (value.length > maxLength) {
+    throw new AppError(`Nội dung tối đa ${maxLength} ký tự`, 400);
   }
   for (const pattern of INJECTION_PATTERNS) {
     if (pattern.test(value)) {
-      throw new AppError('Hướng dẫn thêm chứa nội dung không được phép (cố tình ghi đè chỉ dẫn hệ thống)', 400);
+      throw new AppError('Nội dung chứa chỉ dẫn không được phép (cố tình ghi đè hoặc trích xuất cấu hình hệ thống)', 400);
     }
   }
   return value;

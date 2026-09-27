@@ -3,10 +3,11 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 import { aiService } from '../services/ai.service';
 import { db } from '../db';
 import { generateMindmapWithAI } from '../utils/ai-engine.service';
+import { sanitizeUserInstruction } from '../schemas/question-generation.schema';
 
 export const chatWithDocument = async (req: AuthRequest, res: Response, next: any) => {
   try {
-    const { document_id, message, history, image, images } = req.body;
+    const { document_id, context_mode, message, history, image, images } = req.body;
     const userId = req.user!.id;
     
     // Check old style requests from previous version
@@ -14,14 +15,30 @@ export const chatWithDocument = async (req: AuthRequest, res: Response, next: an
        return res.status(400).json({ error: 'Endpoint deprecated for direct context. Use document_id instead.' });
     }
 
-    let document = null;
-    if (document_id) {
-      const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
-      document = docResult.rows[0];
+    // 1. Prompt Injection Protection
+    if (message) {
+      sanitizeUserInstruction(message, 4000);
     }
 
-    const reply = await aiService.chatWithDocument(document, message || '', history, images || image, userId);
-    res.status(200).json({ reply });
+    let document = null;
+    let effectiveMode: 'GENERAL' | 'DOCUMENT_CONTEXT' = context_mode || (document_id ? 'DOCUMENT_CONTEXT' : 'GENERAL');
+
+    if (document_id) {
+      // Permission check: owner or public document
+      const docResult = await db.query(
+        'SELECT * FROM documents WHERE id = $1 AND (user_id = $2 OR visibility = \'public\')',
+        [document_id, userId]
+      );
+      if (docResult.rows.length === 0) {
+        return res.status(403).json({ error: 'Không có quyền truy cập tài liệu này hoặc tài liệu không tồn tại' });
+      }
+      document = docResult.rows[0];
+    } else {
+      effectiveMode = 'GENERAL';
+    }
+
+    const reply = await aiService.chatWithDocument(document, message || '', history, images || image, userId, effectiveMode);
+    res.status(200).json({ reply, context_mode: effectiveMode });
   } catch (error) {
     next(error);
   }

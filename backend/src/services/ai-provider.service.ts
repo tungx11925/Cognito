@@ -82,7 +82,7 @@ class GroqAdapter implements AIProviderAdapter {
   }
 
   defaultModelName(): string {
-    return process.env.GROQ_CHAT_MODEL || 'groq/compound';
+    return process.env.GROQ_CHAT_MODEL || 'openai/gpt-oss-120b';
   }
 
   async complete(req: AdapterCompleteRequest): Promise<AdapterCompleteResult> {
