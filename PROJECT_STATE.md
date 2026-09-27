@@ -569,13 +569,24 @@ Thực hiện chuẩn hóa toàn diện tầng Auth và User Core theo đúng qu
 3. **AI Chat & Quiz Attempts**:
    - Các truy vấn AI Chat và Quiz cấu hình đều scoped theo `req.user.id`.
 
+#### 2.5. Xác nhận tính năng đổi Avatar End-to-End
+- **Giao diện Client**: Tại `frontend/src/app/profile/page.tsx`, người dùng bấm vào biểu tượng Camera / Avatar để chọn file ảnh.
+- **Client Validation**: Hàm `handleAvatarChange` kiểm tra MIME type bắt đầu bằng `image/` và kích thước `<= 5MB` (`5 * 1024 * 1024`).
+- **Server Validation & Multer**: Tại `backend/src/routes/auth.routes.ts`, Multer kiểm tra whitelist định dạng (`jpeg`, `png`, `webp`, `gif`, `jpg`) và chặn file vượt quá `5MB` (HTTP 400).
+- **Lưu trữ đám mây & Transform**: `backend/src/controllers/auth.controller.ts` stream ảnh lên Cloudinary (`folder: 'cognito_avatars'`) với cấu hình tự động cắt vuông nhận diện khuôn mặt (`300x300, crop: 'fill', gravity: 'face'`), sau đó xóa file tạm trong `uploads/`.
+- **Database & State**: Đường dẫn an toàn HTTPS được lưu vào cột `avatar_url` của bảng `users` trong PostgreSQL. Response trả về cập nhật tức thì `activeUser.avatar_url` trên toàn bộ hệ thống giao diện.
+- **Kết luận**: Tính năng đổi Avatar đã hoạt động **100% End-to-End**.
+
+#### 2.6. Xác nhận cơ chế Logout và Kiến trúc Stateless JWT
+- Logout hiện tại là xóa cookie phía client (và xóa token trong localStorage), JWT cũ về mặt kỹ thuật vẫn valid tới khi hết hạn tự nhiên (24h) — đây là giới hạn thiết kế của kiến trúc JWT stateless, không phải bug, sẽ cân nhắc token blacklist (Redis/DB) nếu cần ở Phase 26 (Security).
+
 ---
 
 ### 3. Kết quả Gate Checks (Rule 0.1.3)
 1. 🟢 **Backend Build (`npm run build`)**: Pass 100% (0 errors).
 2. 🟢 **Frontend TypeScript Check (`npx tsc --noEmit`)**: Pass 100% (0 errors).
 3. 🟢 **Frontend ESLint (`npx eslint src`)**: Pass 100% (0 errors, 22 pre-existing warnings).
-4. 🟢 **Automated Integration Test Suite (8/8 tests passed)**:
+4. 🟢 **Automated Integration Test Suite (10/10 tests passed)**:
    - Test 1 (Unauthorized 401 check): PASS.
    - Test 2 (Register with role 'user'): PASS (HTTP 201, `role: 'user'`).
    - Test 3 (Session check `GET /api/auth/me`): PASS (HTTP 200).
@@ -584,6 +595,14 @@ Thực hiện chuẩn hóa toàn diện tầng Auth và User Core theo đúng qu
    - Test 6 (Profile update with Bio and Headline): PASS (HTTP 200).
    - Test 7 (Privacy Guard - Stranger viewing private profile): PASS (`isRestricted: true`).
    - Test 8 (Logout): PASS (HTTP 200).
+   - Test 9 (Forgot & Reset Password Lifecycle):
+     - Test 9A: `POST /api/auth/forgot-password` thành công (HTTP 200, tạo token 30 phút trong DB).
+     - Test 9B: `POST /api/auth/reset-password` thành công với token hợp lệ (HTTP 200, cập nhật bcrypt hash mới, xóa token).
+     - Test 9C: Đăng nhập bằng mật khẩu cũ bị từ chối (HTTP 401 Unauthorized).
+     - Test 9D: Đăng nhập bằng mật khẩu mới thành công (HTTP 200 OK, cấp token JWT mới).
+   - Test 10 (Token Invalidation & Replay Attack Defense):
+     - Test 10A: Thử dùng lại token đã reset thành công -> Bị từ chối (HTTP 400 Bad Request).
+     - Test 10B: Thử dùng token giả mạo / hết hạn -> Bị từ chối (HTTP 400 Bad Request).
 
 ---
 
