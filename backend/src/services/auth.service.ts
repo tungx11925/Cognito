@@ -220,7 +220,9 @@ export class AuthService {
   }
 
   async upgradePremium(userId: number) {
-    const user = await userRepository.updateRole(userId, 'premium');
+    const nextMonth = new Date();
+    nextMonth.setDate(nextMonth.getDate() + 30);
+    const user = await userRepository.updatePremiumStatus(userId, true, nextMonth);
     if (!user) throw new Error('Người dùng không tồn tại');
 
     const studyDates = await this.getUserStudyDates(userId);

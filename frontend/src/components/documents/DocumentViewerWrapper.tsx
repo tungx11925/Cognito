@@ -26,6 +26,9 @@ export default function DocumentViewerWrapper({
   url: string;
   fileType?: string;
 }) {
+  const [error, setError] = useState<string | null>(null);
+  const [useFallback, setUseFallback] = useState(false);
+
   if (!rawUrl) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center p-8 text-gray-400">
@@ -37,9 +40,6 @@ export default function DocumentViewerWrapper({
   const url = typeof window !== 'undefined' && window.location.protocol === 'https:' && rawUrl.startsWith('http://') && !rawUrl.includes('localhost') && !rawUrl.includes('127.0.0.1')
     ? rawUrl.replace('http://', 'https://')
     : rawUrl;
-
-  const [error, setError] = useState<string | null>(null);
-  const [useFallback, setUseFallback] = useState(false);
 
   const fileExt = getFileExtension(url);
   const isDocx = 

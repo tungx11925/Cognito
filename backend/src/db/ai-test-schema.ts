@@ -1,19 +1,13 @@
 import { db } from './index';
 
 export const DEFAULT_CUSTOM_PROMPT = `- Phân bổ câu hỏi theo các mức nhận thức (Bloom's Taxonomy):
-+ Nhận biết (0%): Hỏi định nghĩa, liệt kê, nhận diện khái niệm cơ bản.
-+ Thông hiểu (20%): Giải thích, so sánh, phân biệt các khái niệm.
-+ Vận dụng (40%): Áp dụng kiến thức vào tình huống cụ thể, giải quyết vấn đề thực tế.
-+ Vận dụng cao (40%): Phân tích nguyên nhân-kết quả, đánh giá, tổng hợp, đề xuất giải pháp.
-- Ưu tiên câu hỏi kích thích tư duy phân tích, không chỉ kiểm tra học thuộc lòng.
-
-Tôi là một giảng viên cho môn "Đạo đức kinh doanh" tại trường đại học CMC, 1 trường tư. Môn học này được giảng dạy cho sinh viên năm 2 ngành các khối ngành kinh tế.
-Phải phân bổ đáp án chia đều cho A, B, C, D, không được tập trung vào 1 loại đáp án từ đầu tới cuối, tỉ lệ phải là 25% mỗi đáp án.
-
-B. Đối với bài test, cần bám sát nội dung bài học (Input)
-1. Trắc nghiệm: Phân bổ đồng đều đáp án ABCD
-2. Điền từ: các định nghĩa có trong slide, có thể có nhiều cách điền đáp án đúng, miễn là cùng ý nghĩa
-3. Bám sát chuẩn đầu ra Môn học`;
++ Nhận biết (20%): Hỏi định nghĩa, liệt kê, nhận diện khái niệm cơ bản.
++ Thông hiểu (30%): Giải thích, so sánh, làm rõ các khái niệm cốt lõi.
++ Vận dụng (30%): Áp dụng kiến thức vào bài tập, tình huống cụ thể.
++ Vận dụng cao (20%): Phân tích nguyên nhân-kết quả, liên hệ thực tế.
+- Ưu tiên câu hỏi kích thích tư duy và kiểm tra hiểu sâu bản chất, có lời giải thích chi tiết cho từng phương án.
+- Bám sát toàn bộ nội dung tài liệu học tập được cung cấp.
+- Trắc nghiệm: Phân bổ đồng đều đáp án đúng A, B, C, D (25% mỗi đáp án).`;
 
 export async function bootstrapAITestSchema() {
   try {
