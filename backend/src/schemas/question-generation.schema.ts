@@ -36,10 +36,12 @@ export const generateQuestionsSchema = z.object({
     customInstruction: z.string().max(500, 'Hướng dẫn thêm tối đa 500 ký tự').optional(),
     mode: z.enum(['practice', 'exam']).default('practice'),
     name: z.string().trim().max(200).optional(),
+    /** Nguồn chủ đề / yêu cầu tùy chỉnh (Source 3) — dùng khi không chọn file hoặc text */
+    topic: z.string().min(3, 'Chủ đề tối thiểu 3 ký tự').max(2000, 'Chủ đề tối đa 2000 ký tự').optional(),
     /** configKey của ai_task_configs (mặc định 'default' — khớp FE hiện tại) */
     configKey: z.string().trim().max(255).optional(),
-  }).refine(b => !!b.sourceIds || !!b.textContent, {
-    message: 'Cần chọn ít nhất 1 tài liệu hoặc cung cấp nội dung văn bản',
+  }).refine(b => !!b.sourceIds || !!b.textContent || !!b.topic, {
+    message: 'Cần chọn ít nhất 1 tài liệu, cung cấp nội dung văn bản, hoặc nhập chủ đề câu hỏi',
   }),
 });
 
@@ -86,7 +88,7 @@ export const GeneratedQuestionSchema = z.object({
   explanation: z.string().min(1).max(5000),
   difficulty: z.enum(['easy', 'medium', 'hard']).default('medium'),
   sourceKeyword: z.string().min(1).max(100),
-  sourceChunkId: z.number().int().positive().nullable().optional(),
+  sourceChunkId: z.number().int().nullable().optional(),
 });
 
 export const GenerateQuestionsOutputSchema = z.object({

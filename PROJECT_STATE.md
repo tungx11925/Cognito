@@ -851,5 +851,83 @@ hoặc cơ chế tương đương.
   3. 🟢 *Ghi chú chuyển tiếp Phase 27 (AI Security & Governance)*: Cơ chế `sanitizeUserInstruction` hiện tại sử dụng Regex pattern matching (chặn các mẫu jailbreak phổ biến). Cần đưa vào backlog Phase 27 để đánh giá bổ sung lớp kiểm tra LLM-based Guardrail nhằm phát hiện các biến thể ngữ nghĩa tinh vi hơn.
 - Hệ thống đã sẵn sàng cho **PHASE 6 — QUESTION GENERATOR** (Pipeline sinh đề thi AI chuẩn chỉnh: Context Preparation → Chunking → Importance Scoring → Coverage Allocation → AI Generation → Deduplication Cosine Similarity → Grounding Check → Answer-Key Balancing → User Review & Approve).
 
+---
+
+## Phase 6 — QUESTION GENERATOR (Hoàn thành)
+- **Thời gian hoàn thành**: 2026-09-27
+- **Trạng thái**: Hoàn tất 100% (Backend, Frontend Types, Deduplication, Pipeline 10 bước, Integration Tests, 3 Gate Checks).
+
+### 1. Mục tiêu & Luồng nghiệp vụ đã triển khai
+- **Pipeline sinh câu hỏi 10 bước chuẩn chỉnh (Không rewrite API AI đơn giản)**:
+  1. *Context Preparation*: Hỗ trợ trọn vẹn 3 nguồn câu hỏi (Source 1: Tài liệu/Slide `sourceIds`, Source 2: Đoạn văn bản `textContent`, Source 3: Chủ đề tùy chỉnh `topic`). Hỗ trợ tài liệu công khai (`visibility = 'public'`) và tài liệu cá nhân của user.
+  2. *Chunking*: Đảm bảo tài liệu được chunk và bóc tách thành các đoạn nội dung học thuật (`documentProcessingService.ensureChunked`).
+  3. *Importance Scoring*: Kết hợp TF-IDF, vị trí tiêu đề, tần suất xuất hiện và AI Salience Scoring để chọn lọc trọng tâm từ khóa (`MCQ_GENERATION_CONSTRAINTS`). Tự động trích xuất tokens từ văn bản nếu tài liệu chưa có sẵn keywords.
+  4. *Coverage Allocation*: Phân bổ số lượng câu hỏi đều theo trọng số nội dung slide, tránh dồn cục câu hỏi vào 1 slide đơn lẻ.
+  5. *AI Generation (Batching with Context)*: Gọi AI theo batch với slide ngữ cảnh liền kề trước/sau, kiểm soát concurrency (tối đa 4 request song song) chống rate limit. Hệ thống bóc tách JSON và tự động sửa lỗi qua vòng retry nếu JSON trả về bị sai format.
+  6. *QA Automation*:
+     - **Deduplication Cosine Similarity & Jaccard Fallback**: Sử dụng Cosine similarity trên vector embedding; tự động fallback sang Jaccard lexical similarity khi embedding offline để triệt để loại bỏ câu hỏi trùng lặp ý tưởng hoặc nội dung (> 90%).
+     - **Grounding Check**: So sánh độ tương đồng ngữ nghĩa giữa câu hỏi và chunk nguồn, gán cờ `LOW_GROUNDING` vào ghi chú nếu độ tương đồng dưới ngưỡng 0.72.
+     - **Answer-Key Balancing**: Kiểm soát tỷ lệ phân bổ đáp án đúng trên các phương án A, B, C, D (độ lệch tối đa 40%). Tự động đảo hoán vị các distractors để cân bằng chìa khóa đáp án.
+     - **JSON Schema Validation**: Kiểm định nghiêm ngặt qua Zod schema (`GenerateQuestionsOutputSchema`).
+     - **Prompt Injection Protection**: Kiểm tra và chặn đứng các câu lệnh can thiệp system prompt thông qua hàm `sanitizeUserInstruction`.
+  7. *Draft / Preview*: Lưu kết quả ban đầu ở trạng thái `DRAFT` trong `test_sets` và `questions`, chưa công bố cho học sinh.
+  8. *User Review & Edit*: Giáo viên xem trước danh sách câu hỏi, chỉnh sửa nội dung, điểm số, đáp án, giải thích qua `PATCH /api/questions/:id` hoặc xóa câu hỏi không ưng ý qua `DELETE /api/questions/:id` (tự động cập nhật lại tổng số câu và tổng điểm của bộ đề).
+  9. *Approve*: Giáo viên duyệt bộ đề qua `POST /api/test-sets/:id/approve` -> chuyển trạng thái cả bộ đề và toàn bộ câu hỏi sang `APPROVED`.
+  10. *Question Set*: Bộ đề chính thức hoàn tất, sẵn sàng cho học sinh làm bài hoặc xuất bản.
+
+### 2. Bảng/API/Component đã đụng tới
+- **Backend Schema & Validation**:
+  - `backend/src/schemas/question-generation.schema.ts`:
+    - Bổ sung trường `topic` (Source 3) vào `generateQuestionsSchema`.
+    - Mở rộng validation `.refine(b => !!b.sourceIds || !!b.textContent || !!b.topic)`.
+    - Điều chỉnh `sourceChunkId: z.number().int().nullable().optional()` trong `GeneratedQuestionSchema` cho phép câu hỏi từ text/topic nguồn tự do (không phụ thuộc chunk id dương).
+- **Backend Mathematical Utilities**:
+  - `backend/src/utils/math.utils.ts`: Thêm thuật toán `jaccardSimilarity(strA, strB)` đóng vai trò fallback khử trùng lặp từ vựng khi không có vector embedding.
+- **Backend Services & Controllers**:
+  - `backend/src/controllers/question-generation.controller.ts`: Truyền tham số `topic` từ request body vào service.
+  - `backend/src/services/question-generation.service.ts`:
+    - Bổ sung `topic` vào `GenerateQuestionsInput` và xử lý tạo synthetic context cho Source 3.
+    - Cho phép sinh đề từ tài liệu công khai `(user_id = $2 OR visibility = 'public')`.
+    - Tự động trích xuất tokens ứng viên khi tập keywords ban đầu rỗng.
+    - Nâng cấp `parseJSONStrict` bóc tách linh hoạt JSON object hoặc array, lọc markdown fences.
+    - Cải tiến Stage 5 Post-Generation QA: Kết hợp Cosine Similarity và Jaccard Fallback cho Deduplication, Grounding check, Answer-key balancing.
+  - `backend/src/services/ai-provider.service.ts`:
+    - Nâng cấp `GroqAdapter.complete` đảm bảo `max_tokens >= 4096` cho reasoning models và fallback trích xuất `reasoning` nếu content trống.
+- **Database Fix**:
+  - `ai_request_logs`: `ALTER COLUMN user_id DROP NOT NULL` cho phép ghi log hệ thống an toàn mà không xung đột ràng buộc.
+  - `ai_models`: Cập nhật `openai/gpt-oss-120b` (id: 2) phân cấp sang tier `'balanced'` đảm bảo task yêu cầu balanced tier có provider hoạt động ngay cả khi GEMINI_API_KEY chưa cấu hình.
+- **Frontend Services**:
+  - `frontend/src/services/ai-test.service.ts`: Đồng bộ `topic?: string` vào `GenerateQuestionsPayload`.
+- **Automated Tests**:
+  - `backend/scripts/test-phase6.ts`: Bộ test tích hợp độc lập toàn diện cho Phase 6 gồm 13 test suites (23 assertions chi tiết).
+
+### 3. Kết quả Integration Test Phase 6 (`backend/scripts/test-phase6.ts`) — 100% Passed
+- Test 1.1 & 1.2: Danh sách AI Models và AI Templates trả về đầy đủ.
+- Test 2.1 - 2.7: SOURCE 1 — Sinh câu hỏi từ tài liệu/slide (`sourceIds`), lưu trạng thái `DRAFT`, cấu trúc câu hỏi đầy đủ options A, B, C, D và đáp án đúng.
+- Test 3.1 - 3.2: SOURCE 2 — Sinh câu hỏi từ đoạn văn bản thuần (`textContent`) thành công ở trạng thái `DRAFT`.
+- Test 4.1 - 4.2: SOURCE 3 — Sinh câu hỏi từ chủ đề tùy chỉnh (`topic`) thành công ở trạng thái `DRAFT`.
+- Test 5: Hệ thống bảo mật chặn đứng tấn công Prompt Injection vào `customInstruction` (HTTP 400 Bad Request).
+- Test 6.1 - 6.3: Preview & Chỉnh sửa câu hỏi (`PATCH /api/questions/:id`) cập nhật chính xác nội dung, điểm số và độ khó.
+- Test 7.1 - 7.2: Preview & Xóa câu hỏi (`DELETE /api/questions/:id`) tự động cập nhật giảm số lượng câu hỏi của bộ đề.
+- Test 8.1 - 8.2: Phân quyền chặt chẽ — người dùng lạ bị chặn khi cố sửa câu hỏi hoặc duyệt bộ đề của người khác (HTTP 403/404).
+- Test 9.1 - 9.3: Duyệt bộ đề (`POST /api/test-sets/:id/approve`) chuyển trạng thái cả bộ đề và toàn bộ câu hỏi sang `APPROVED`.
+- Test 10.1 - 10.2: Lấy chi tiết bộ đề đã duyệt (`GET /api/test-sets/:id`) trả về đầy đủ thông tin và danh sách câu hỏi.
+- Test 11: Trích xuất từ khóa tài liệu (`GET /api/documents/:id/keywords`) hoạt động chính xác.
+- Test 12.1 - 12.4: Kiểm chứng thuật toán Deduplication Cosine Similarity & Jaccard Lexical Similarity phát hiện chính xác câu hỏi trùng lặp.
+- Test 13: Toàn bộ dữ liệu kiểm thử được dọn dẹp sạch sẽ sau khi test hoàn tất.
+
+### 4. Kết quả Gate Checks
+- **Backend Build (`npm run build`)**: 0 errors (Pass).
+- **Frontend TypeCheck (`npx tsc --noEmit`)**: 0 errors (Pass).
+- **Frontend Linter (`npx eslint src`)**: 0 errors (Pass, 21 warnings pre-existing).
+- **Regression Tests (`test-phase4.ts`)**: 25/25 passed (Zero regression).
+- **Regression Tests (`test-phase5.ts`)**: 16/16 passed (Zero regression).
+- **Phase 6 Tests (`test-phase6.ts`)**: 100% passed.
+
+### 5. Việc còn lại / Chuẩn bị cho Phase tiếp theo
+- Phase 6 đã hoàn tất 100% và sẵn sàng bàn giao.
+- Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu Phase 6 trước khi tiến hành **PHASE 7 — EXISTING EXAM IMPORT** (Import file Word .docx / PDF / Excel đề thi có sẵn, regex tách câu hỏi, options, answer key, preview và import vào ngân hàng đề).
+
+
 
 

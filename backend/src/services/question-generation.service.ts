@@ -11,7 +11,7 @@ import {
 } from '../schemas/question-generation.schema';
 import { AppError } from '../utils/AppError';
 import { MCQ_GENERATION_CONSTRAINTS } from '../utils/mcq-constraints';
-import { TfIdfCalculator, cosineSimilarity, asyncMapConcurrent } from '../utils/math.utils';
+import { TfIdfCalculator, cosineSimilarity, asyncMapConcurrent, jaccardSimilarity } from '../utils/math.utils';
 
 export const QUESTION_GEN_SYSTEM_PROMPT = `Bạn là AI Question Generator. Chỉ được dùng nội dung trong DOCUMENT_CONTEXT để tạo câu hỏi.
 Không bịa thêm kiến thức ngoài tài liệu. Mỗi câu hỏi phải khớp với đúng 1 giá trị trong FOCUS_KEYWORDS (nếu rỗng thì dùng toàn bộ context).
@@ -61,6 +61,7 @@ export interface GenerateQuestionsInput {
   templateId?: string;
   modelId?: number;
   customInstruction?: string;
+  topic?: string;
   mode?: 'practice' | 'exam';
   name?: string;
   configKey?: string;
@@ -108,10 +109,19 @@ function resolveTemplatePrompt(templateId?: string, audienceLevel?: string): str
 
 function parseJSONStrict(text: string): any {
   let cleaned = text.trim();
+  cleaned = cleaned.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
   const firstBrace = cleaned.indexOf('{');
-  const lastBrace = cleaned.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  const firstBracket = cleaned.indexOf('[');
+  if (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
+    const lastBracket = cleaned.lastIndexOf(']');
+    if (lastBracket > firstBracket) {
+      cleaned = cleaned.substring(firstBracket, lastBracket + 1);
+    }
+  } else if (firstBrace !== -1) {
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (lastBrace > firstBrace) {
+      cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
   }
   return JSON.parse(cleaned);
 }
@@ -144,7 +154,7 @@ async generate(input: GenerateQuestionsInput): Promise<GenerateQuestionsResult> 
       const docsRes = await db.query(
         `SELECT id, title, status, doc_url, file_type, user_id
          FROM documents
-         WHERE id = ANY($1::int[]) AND user_id = $2`,
+         WHERE id = ANY($1::int[]) AND (user_id = $2 OR visibility = 'public')`,
         [input.sourceIds, userId]
       );
 
@@ -175,8 +185,19 @@ async generate(input: GenerateQuestionsInput): Promise<GenerateQuestionsResult> 
       processedChunks = [{
         id: -1, content, slideTitle: 'Văn bản cung cấp', wordCount: content.split(/\s+/).length, isContentSlide: true, positionRatio: 1, keywords: []
       }];
+    } else if (input.topic && input.topic.trim()) {
+      const topicText = input.topic.trim().substring(0, 10000);
+      processedChunks = [{
+        id: -1,
+        content: `CHỦ ĐỀ YÊU CẦU: ${topicText}`,
+        slideTitle: `Chủ đề: ${topicText.substring(0, 50)}`,
+        wordCount: topicText.split(/\s+/).length,
+        isContentSlide: true,
+        positionRatio: 1,
+        keywords: input.focusKeywords || []
+      }];
     } else {
-      throw new AppError('Cần chọn ít nhất 1 tài liệu hoặc nhập nội dung văn bản', 400);
+      throw new AppError('Cần chọn ít nhất 1 tài liệu, cung cấp nội dung văn bản, hoặc nhập chủ đề câu hỏi', 400);
     }
 
     let contentSlides = processedChunks.filter(c => c.isContentSlide);
@@ -193,6 +214,12 @@ async generate(input: GenerateQuestionsInput): Promise<GenerateQuestionsResult> 
       const tfidfCalc = new TfIdfCalculator(contentSlides.map(c => c.content));
       const keywordSet = new Set<string>();
       contentSlides.forEach(c => { if (c.keywords) c.keywords.forEach((k: string) => keywordSet.add(k)); });
+      if (keywordSet.size === 0) {
+        contentSlides.forEach(c => {
+          const words = c.content.split(/[\s,.;:!?()[\]{}"'<>/\\]+/).map((w: string) => w.trim()).filter((w: string) => w.length >= 3 && !/^\d+$/.test(w));
+          words.slice(0, 20).forEach((w: string) => keywordSet.add(w));
+        });
+      }
       
       let aiScores: Record<number, number> = {};
       if (input.sourceIds && input.sourceIds.length > 0) {
@@ -337,13 +364,18 @@ RÀNG BUỘC KHẮT KHE:
         });
 
         const tryParse = (text: string) => {
-          const rawObj = parseJSONStrict(text);
+          let rawObj = parseJSONStrict(text);
+          if (Array.isArray(rawObj)) {
+            rawObj = { questions: rawObj };
+          }
           if (Array.isArray(rawObj?.questions)) {
             rawObj.questions = rawObj.questions.map((q: any) => ({
               ...q,
               type: (q.type || 'MULTIPLE_CHOICE').toUpperCase(),
               score: Number(q.score) || DEFAULT_SCORES[(q.type || '').toUpperCase()] || 1.0,
               difficulty: (q.difficulty || difficulty || 'medium').toLowerCase(),
+              sourceChunkId: (typeof q.sourceChunkId === 'number' && q.sourceChunkId > 0) ? q.sourceChunkId : null,
+              sourceKeyword: q.sourceKeyword || finalFocusKeywords[0] || 'Tổng quan',
             }));
             const validated = GenerateQuestionsOutputSchema.safeParse(rawObj);
             if (validated.success) return validated.data.questions;
@@ -362,7 +394,8 @@ RÀNG BUỘC KHẮT KHE:
         }
 
         return { success: true, questions: batchQuestions || [] };
-      } catch (err) {
+      } catch (err: any) {
+        console.error('[QuestionGen] Batch error:', err?.message || err);
         return { success: false, questions: [] };
       }
     });
@@ -392,9 +425,14 @@ RÀNG BUỘC KHẮT KHE:
       let duplicate = false;
 
       for (let j = 0; j < validQuestions.length; j++) {
+         const vQ = validQuestions[j].q;
          const vVec = qEmbeddings[validQuestions[j].index]; 
          if (qVec && vVec && qVec.length > 0 && vVec.length > 0) {
            if (cosineSimilarity(qVec, vVec) > MCQ_GENERATION_CONSTRAINTS.DUPLICATE_THRESHOLD) {
+             duplicate = true; break;
+           }
+         } else {
+           if (jaccardSimilarity(q.content, vQ.content) > 0.8) {
              duplicate = true; break;
            }
          }

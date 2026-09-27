@@ -87,16 +87,20 @@ class GroqAdapter implements AIProviderAdapter {
 
   async complete(req: AdapterCompleteRequest): Promise<AdapterCompleteResult> {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const maxTokens = Math.max(req.maxTokens || 4096, 4096);
     const completion = await groq.chat.completions.create({
       messages: req.messages.map(m => ({ role: m.role, content: m.content })) as any,
       model: req.modelName,
       temperature: req.temperature,
-      max_tokens: req.maxTokens,
+      max_tokens: maxTokens,
       ...(req.jsonMode && this.supportsJsonMode(req.modelName)
         ? { response_format: { type: 'json_object' as const } }
         : {}),
     });
-    const text = completion.choices[0]?.message?.content || '';
+    let text = completion.choices[0]?.message?.content || '';
+    if (!text.trim() && (completion.choices[0]?.message as any)?.reasoning) {
+      text = (completion.choices[0]?.message as any).reasoning;
+    }
     const usage = (completion as any)?.usage;
     return {
       text,

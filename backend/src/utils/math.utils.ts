@@ -146,3 +146,21 @@ export async function asyncMapConcurrent<T, R>(
   await Promise.all(workers);
   return results;
 }
+
+/**
+ * Calculates Jaccard similarity between two text strings.
+ * Used as a lexical deduplication fallback when vector embeddings are not available.
+ * Returns a value between 0 and 1.
+ */
+export function jaccardSimilarity(strA: string, strB: string): number {
+  const setA = new Set(strA.toLowerCase().split(/[\s,.;:!?()[\]{}"'<>/\\]+/).filter(Boolean));
+  const setB = new Set(strB.toLowerCase().split(/[\s,.;:!?()[\]{}"'<>/\\]+/).filter(Boolean));
+  if (setA.size === 0 || setB.size === 0) return 0;
+  let intersection = 0;
+  for (const word of setA) {
+    if (setB.has(word)) intersection++;
+  }
+  const union = setA.size + setB.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+

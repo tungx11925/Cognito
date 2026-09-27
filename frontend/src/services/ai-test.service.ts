@@ -88,6 +88,7 @@ export interface GenerateQuestionsPayload {
   templateId: string;
   modelId?: number;
   customInstruction?: string;
+  topic?: string;
   mode: 'practice' | 'exam';
   name?: string;
   configKey?: string;
