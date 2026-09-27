@@ -332,6 +332,77 @@ Chương 3: Ứng dụng đạo hàm trong khảo sát sự biến thiên và v�
     );
 
     // ─────────────────────────────────────────────────────────────
+    // TEST 10: FAILED State Handling on Corrupt/Empty Document
+    // ─────────────────────────────────────────────────────────────
+    const corruptDocRes = await axios.post(
+      `${API_BASE}/documents`,
+      {
+        title: 'Corrupt Empty File.pdf',
+        description: 'Tài liệu giả mạo file hỏng',
+        category: 'Test',
+        docUrl: 'http://127.0.0.1:9999/non-existent-corrupt.pdf',
+        visibility: 'private',
+      },
+      { headers: authHeadersA }
+    );
+    const corruptDoc = corruptDocRes.data;
+
+    // Trigger pipeline processing on corrupt document
+    await documentProcessingService.processDocument(corruptDoc.id);
+
+    // Wait 500ms for async worker to complete
+    await new Promise(r => setTimeout(r, 600));
+
+    const corruptStatusRes = await axios.get(
+      `${API_BASE}/documents/${corruptDoc.id}/status`,
+      { headers: authHeadersA }
+    );
+
+    assert(
+      corruptStatusRes.data.status === 'FAILED' &&
+      corruptStatusRes.data.processing_status === 'FAILED' &&
+      typeof corruptStatusRes.data.processing_error === 'string' &&
+      corruptStatusRes.data.processing_error.length > 0,
+      'Corrupt/unparseable document transitions to status FAILED with error explanation (no infinite hanging)'
+    );
+
+    await axios.delete(`${API_BASE}/documents/${corruptDoc.id}`, { headers: authHeadersA });
+
+    // ─────────────────────────────────────────────────────────────
+    // TEST 11: Delete Document while Community-Published Clean up
+    // ─────────────────────────────────────────────────────────────
+    const pubDocRes = await axios.post(
+      `${API_BASE}/documents`,
+      {
+        title: 'Tài liệu Xuất bản Trực tiếp và Xóa',
+        description: 'Kiểm tra dọn dẹp khi xóa thẳng tài liệu công khai',
+        category: 'Test',
+        visibility: 'public',
+        is_community_published: true,
+      },
+      { headers: authHeadersA }
+    );
+    const pubDoc = pubDocRes.data;
+
+    // Verify it is in marketplace
+    const checkMarketBefore = await axios.get(`${API_BASE}/marketplace/resources?type=document`, { headers: authHeadersB });
+    const inMarketBefore = (checkMarketBefore.data.resources || []).some((r: any) => r.id === pubDoc.id);
+    assert(inMarketBefore, 'Published document appears in marketplace');
+
+    // Owner deletes directly without unpublishing
+    const delPubRes = await axios.delete(`${API_BASE}/documents/${pubDoc.id}`, { headers: authHeadersA });
+    assert(delPubRes.status === 200, 'Owner deletes published document directly (HTTP 200)');
+
+    // Verify gone from marketplace
+    const checkMarketAfter = await axios.get(`${API_BASE}/marketplace/resources?type=document`, { headers: authHeadersB });
+    const inMarketAfter = (checkMarketAfter.data.resources || []).some((r: any) => r.id === pubDoc.id);
+    assert(!inMarketAfter, 'Deleted published document immediately disappears from marketplace');
+
+    // Verify community_resources record is removed
+    const checkCommRes = await db.query('SELECT * FROM community_resources WHERE resource_type = $1 AND resource_id = $2', ['document', pubDoc.id]);
+    assert(checkCommRes.rows.length === 0, 'Community resource listing cleanly wiped upon document deletion');
+
+    // ─────────────────────────────────────────────────────────────
     // Clean up test users
     // ─────────────────────────────────────────────────────────────
     await db.query(`DELETE FROM users WHERE email IN ('test_p4_user_a@cognito.test', 'test_p4_user_b@cognito.test')`);

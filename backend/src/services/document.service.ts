@@ -153,7 +153,7 @@ class DocumentService {
     isCommunityPublished?: boolean;
   }) {
     const visibility = data.visibility === 'public' ? 'public' : 'private';
-    const isCommunityPublished = !!data.isCommunityPublished;
+    const isCommunityPublished = !!(data.isCommunityPublished ?? (data as any).is_community_published);
 
     const result = await db.query(
       `INSERT INTO documents (

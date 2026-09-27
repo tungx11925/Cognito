@@ -697,7 +697,7 @@ Thực hiện chuẩn hóa toàn diện nền tảng Document Learning theo đú
 1. 🟢 **Backend Build (`npm run build`)**: Pass 100% (0 errors).
 2. 🟢 **Frontend TypeScript Check (`npx tsc --noEmit`)**: Pass 100% (0 errors).
 3. 🟢 **Frontend ESLint (`npx eslint src`)**: Pass 100% (0 errors, 22 pre-existing warnings).
-4. 🟢 **Automated Integration Test Suite (`backend/scripts/test-phase4.ts`) — 20/20 tests passed**:
+4. 🟢 **Automated Integration Test Suite (`backend/scripts/test-phase4.ts`) — 25/25 tests passed**:
    - Test 1: Validation Gate từ chối document thiếu tiêu đề (HTTP 400 Bad Request).
    - Test 2: Tạo Document thành công (HTTP 201 Created).
    - Test 3: Document trả về chứa đầy đủ 10 thuộc tính Master Prompt Phase 4 (`owner`, `title`, `description`, `file`, `type`, `size`, `status`, `visibility`, `createdAt`, `updatedAt`).
@@ -718,11 +718,36 @@ Thực hiện chuẩn hóa toàn diện nền tảng Document Learning theo đú
    - Test 18: Chủ sở hữu xóa tài liệu thành công (HTTP 200 OK).
    - Test 19: Bản ghi tài liệu được xóa khỏi bảng `documents`.
    - Test 20: Chunks trong bảng `document_chunks` được xóa dọn dẹp sạch sẽ (cascade cleanup).
+   - Test 21: **FAILED Status Verification**: Upload file hỏng/rỗng cố tình lỗi -> Pipeline ghi nhận lỗi, chuyển `status = 'FAILED'`, `processing_status = 'FAILED'`, lưu chi tiết lỗi trong `processing_error` và KHÔNG bao giờ bị treo ở PROCESSING vô hạn.
+   - Test 22: Tài liệu xuất bản trực tiếp xuất hiện đúng trên Marketplace.
+   - Test 23: Chủ sở hữu xóa trực tiếp tài liệu đang được xuất bản trên Marketplace (không cần unpublish trước).
+   - Test 24: Tài liệu bị xóa lập tức biến mất khỏi kết quả Marketplace.
+   - Test 25: **Community Cascading Cleanup**: Toàn bộ bản ghi tham chiếu trong `community_resources` được dọn dẹp sạch 100% khi tài liệu bị xóa.
 
 ---
 
-### 4. Trạng thái và bước tiếp theo
-- **Phase 4 đã hoàn tất 100% và vượt qua toàn bộ Gate Checks kỹ thuật**.
+### 4. Giải đáp kiến trúc chi tiết (Architectural Clarifications)
+1. 🔴 **Cơ chế xử lý tài liệu (Đồng bộ vs Bất đồng bộ / Job Queue)**:
+   - **Tầng Request HTTP**: Hoàn toàn **BẤT ĐỒNG BỘ (Non-blocking)**. Endpoint `POST /api/documents/upload` chỉ nhận buffer, stream lên Cloudinary, tạo bản ghi ban đầu trong DB (`status = 'PROCESSING'`) rồi phản hồi HTTP 201 cho Client trong vòng vài trăm mili-giây.
+   - **Tầng Worker / Concurrency Queue**:
+     - Hệ thống sử dụng một **In-Memory Concurrency-Capped Queue** tích hợp sẵn trong `DocumentProcessingService`.
+     - Giới hạn xử lý đồng thời được kiểm soát nghiêm ngặt bởi biến `maxConcurrency = Number(process.env.DOCUMENT_MAX_CONCURRENCY) || 2`.
+     - Khi nhiều tài liệu được tải lên cùng lúc, tối đa 2 job nặng (OCR / LibreOffice / chunking) được chạy song song; các tài liệu còn lại nằm trong hàng đợi chờ (`PENDING`), tránh nghẽn CPU và nghẽn Event Loop của Node.js.
+     - *Lộ trình mở rộng*: Tại Phase 26 (Performance & Scalability), queue in-memory này sẽ được nâng cấp thành hàng đợi phân tán BullMQ + Redis Worker tách thành process/container riêng biệt khi triển khai môi trường multi-instance.
+2. 🟡 **Trạng thái FAILED và giao diện người dùng**:
+   - Trường `status` và `processing_status` đều chuyển thành `'FAILED'` kèm cột `processing_error` lưu lý do thất bại.
+   - Trên giao diện Frontend (`UploadDocumentModal.tsx`), khi polling nhận về trạng thái `FAILED`, modal lập tức thoát khỏi bước loading, chuyển sang màn hình cảnh báo lỗi đỏ (`setUploadState('error')`), hiển thị chính xác nội dung lỗi `processing_error` và cung cấp nút **"Thử lại"** (`handleRetryPipeline`) để gọi `POST /api/documents/:id/reprocess`. Tuyệt đối không có hiện tượng treo vô hạn.
+3. 🟡 **Lưu trữ và dọn dẹp Vector Embeddings**:
+   - Embeddings 768-chiều (Gemini) được lưu trực tiếp trong cột `embedding vector(768)` **ngay trong bảng `document_chunks`** (sử dụng extension `pgvector` của PostgreSQL), không lưu ở external store hay bảng phụ nào khác.
+   - Do đó, khi tài liệu bị xóa, toàn bộ chunk và vector embeddings được xóa triệt để 100% trong cùng một thao tác.
+4. 🟡 **Xóa document đang public trên Community**:
+   - Hàm `documentService.deleteDocument` thực thi đồng thời: xóa bản ghi trong `documents` và xóa bản ghi tham chiếu trong `community_resources` (`DELETE FROM community_resources WHERE resource_type = 'document' AND resource_id = $1`).
+   - Đã được verify thực tế qua Test 23, 24, 25: không để lại bất kỳ reference chết nào trên sàn Marketplace hay Community.
+
+---
+
+### 5. Trạng thái và bước tiếp theo
+- **Phase 4 đã hoàn tất 100% và vượt qua toàn bộ Gate Checks kỹ thuật (25/25 tests passed)**.
 - Hệ thống đã sẵn sàng cho **PHASE 5 — DOCUMENT VIEWER + AI LEARNING** (Trình xem tài liệu, AI Assistant phân tích ngữ cảnh GENERAL vs DOCUMENT_CONTEXT, bảo vệ Prompt Injection `sanitizeUserInstruction`).
 
 

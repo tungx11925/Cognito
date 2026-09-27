@@ -410,11 +410,30 @@ class DocumentProcessingService {
     }
   }
 
+  // ─── Concurrency Capped Job Queue ──────────────────────────────────────────
+  // Giới hạn số lượng tài liệu xử lý đồng thời để tránh nghẽn CPU/Event Loop (mặc định: 2)
+  private queue: number[] = [];
+  private activeJobs = 0;
+  private readonly maxConcurrency = Number(process.env.DOCUMENT_MAX_CONCURRENCY) || 2;
+
   /**
-   * PIPELINE CHÍNH: Xử lý tài liệu end-to-end (bọc timeout ~5 phút)
+   * PIPELINE CHÍNH: Đưa tài liệu vào hàng đợi xử lý nền có kiểm soát concurrency
    */
   async processDocument(documentId: number): Promise<void> {
-    console.log(`[DocProcessing] >>> START processing document ${documentId}`);
+    this.queue.push(documentId);
+    setImmediate(() => this.processNext());
+  }
+
+  private async processNext(): Promise<void> {
+    if (this.activeJobs >= this.maxConcurrency || this.queue.length === 0) {
+      return;
+    }
+
+    const documentId = this.queue.shift();
+    if (!documentId) return;
+
+    this.activeJobs++;
+    console.log(`[DocProcessing] >>> START processing document ${documentId} (Active: ${this.activeJobs}/${this.maxConcurrency}, Queued: ${this.queue.length})`);
 
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Thời gian xử lý tài liệu vượt quá giới hạn cho phép (5 phút)')), PROCESS_TIMEOUT_MS);
@@ -428,6 +447,9 @@ class DocumentProcessingService {
       await this.setProcessingStatus(documentId, 'FAILED', {
         error: err?.message || 'Lỗi xử lý tài liệu không xác định',
       }).catch(e => console.error('[DocProcessing] Failed to set FAILED status:', e));
+    } finally {
+      this.activeJobs--;
+      setImmediate(() => this.processNext());
     }
   }
 
