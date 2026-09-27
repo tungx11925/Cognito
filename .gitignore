@@ -41,3 +41,5 @@ backend/prisma/*.db
 # Uploaded files
 backend/uploads/
 
+
+frontend/tsconfig.tsbuildinfo
