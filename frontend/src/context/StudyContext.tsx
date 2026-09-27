@@ -63,11 +63,11 @@ interface StudyContextType {
   setShowLanding: (show: boolean) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  activeUser: { id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null;
-  setActiveUser: (user: { id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null) => void;
+  activeUser: { id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string; bio?: string; headline?: string; is_premium?: boolean; premium_until?: string } | null;
+  setActiveUser: (user: { id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string; bio?: string; headline?: string; is_premium?: boolean; premium_until?: string } | null) => void;
   updateWalletBalance: (amount: number) => void;
   updateAvatar: (file: File) => Promise<boolean>;
-  updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string; privacy_setting?: string }) => Promise<boolean>;
+  updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string; privacy_setting?: string; bio?: string; headline?: string }) => Promise<boolean>;
   toggleVerification: (enable: boolean) => Promise<boolean>;
   verify2FA: (email: string, code: string) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
@@ -342,7 +342,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null>(null);
+  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string; bio?: string; headline?: string; is_premium?: boolean; premium_until?: string } | null>(null);
 
   const updateWalletBalance = (amount: number) => {
     setActiveUser(prev => prev ? { ...prev, wallet_balance: (prev.wallet_balance || 0) + amount } : null);
@@ -562,7 +562,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
-  const updateProfile = async (fields: { name: string; phone?: string; education?: string; address?: string; privacy_setting?: string }): Promise<boolean> => {
+  const updateProfile = async (fields: { name: string; phone?: string; education?: string; address?: string; privacy_setting?: string; bio?: string; headline?: string }): Promise<boolean> => {
     const token = localStorage.getItem('token');
     if (!token) {
       triggerMessage("Bạn chưa đăng nhập", "error");

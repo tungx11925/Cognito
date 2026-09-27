@@ -140,6 +140,7 @@ export default function SettingsPage() {
       setDisplayName(activeUser.name || "");
       setTwoFA(!!activeUser.is_verified);
       setPrivacySetting(activeUser.privacy_setting || "public");
+      if (activeUser.bio) setBio(activeUser.bio);
     }
   }, [activeUser]);
 
@@ -163,10 +164,11 @@ export default function SettingsPage() {
     }
     setSavingProfile(true);
     try {
-      // Save display name to database
+      // Save display name, privacy setting and bio to database
       const success = await updateProfile({
         name: displayName,
         privacy_setting: privacySetting,
+        bio: bio,
       });
 
       if (success) {

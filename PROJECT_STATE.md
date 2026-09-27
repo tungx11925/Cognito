@@ -504,10 +504,91 @@ Checkpoint trước xóa: Commit SHA `cc6e425` / `a749b92` (đã commit và xác
 ### Việc còn lại / rủi ro chuyển sang phase sau (PHASE 3):
 - Hệ thống đã hoàn toàn sạch bóng School/LMS và AI Flashcard Generator, đạt 100% tiêu chí Personal Learning Platform.
 - Toàn bộ tính toàn vẹn dữ liệu (Documents, TestSets, Questions, Users) đã được verify trực tiếp bằng query thực tế.
-- Chuẩn bị bước vào **PHASE 3 — AUTH + USER CORE**:
-  - Chuẩn hóa toàn diện 2 role (`user`, `admin`).
-  - Kiểm tra và hoàn thiện trọn vẹn luồng Auth: Register, Login, Logout, Session, Refresh, Forgot Password, Reset Password, 401 Unauthorized, 403 Forbidden.
-  - Chuẩn hóa User Profile: Avatar, Display Name, Bio, Settings, Privacy.
-  - Đảm bảo tính bảo mật nghiêm ngặt cho Private Data (Documents, Notes, AI Chats, Quiz Attempts, Learning History).
+
+---
+
+## [2026-09-27] — PHASE 3: AUTH + USER CORE — HOÀN THÀNH 100%
+
+### 1. Mục tiêu và phạm vi Phase 3
+Thực hiện chuẩn hóa toàn diện tầng Auth và User Core theo đúng quy định tại Master Prompt:
+- Chỉ còn duy nhất 2 role trong toàn bộ hệ thống: `USER` và `ADMIN`.
+- Đầy đủ các luồng Auth: Register, Login, Logout, Session, Refresh, Forgot Password, Reset Password, 401 Unauthorized, 403 Forbidden.
+- User Profile: Avatar, Display Name, Bio, Headline, Settings, Privacy.
+- Bảo vệ dữ liệu riêng tư tuyệt đối (Private Data Protection): Private Documents, Private Notes, AI Conversations, Learning History, Quiz Attempts, Focus Details.
+
+---
+
+### 2. Các thay đổi kỹ thuật chi tiết
+
+#### 2.1. Chuẩn hóa 2-Role System (`user` và `admin`)
+1. **`backend/src/services/auth.service.ts`**:
+   - Thay thế toàn bộ fallback role cũ (`role || 'student'`) thành `role || 'user'` tại các hàm tạo JWT: `register`, `verify2FA`, `googleLogin`.
+2. **`backend/src/middlewares/auth.middleware.ts`**:
+   - Chuẩn hóa fallback trong `requireRole`: chuyển từ `'student'` sang `'user'`.
+   - Cập nhật thông báo lỗi 403 phản ánh đúng hệ thống 2 role (`user` / `admin`).
+   - Bổ sung middleware `requirePremium`: Tách biệt hoàn toàn quyền gói cước (subscription flag `is_premium: boolean`) khỏi vai trò người dùng (role `user` vs `admin`).
+3. **`backend/src/routes/question-generation.routes.ts`**:
+   - Cập nhật quyền ghi từ `requireRole('teacher', 'admin')` sang `requireRole('user', 'admin')` (trong Personal Learning Platform, người dùng cá nhân tạo và quản lý bộ câu hỏi từ tài liệu của mình).
+4. **`backend/src/routes/ai.routes.ts`**:
+   - Cập nhật `/generate-quiz` và `/generate-mindmap` sử dụng `requirePremium` thay vì kiểm tra role `premium` lỗi thời.
+
+#### 2.2. Hoàn thiện luồng Auth & Refresh Token
+1. **Endpoint mới: `POST /api/auth/refresh`**:
+   - Đã cài đặt tại `backend/src/controllers/auth.controller.ts`, `backend/src/routes/auth.routes.ts` và `backend/src/services/auth.service.ts`.
+   - Cơ chế: Nhận token hiện tại qua Cookie hoặc header `Authorization: Bearer <token>`, giải mã và xác thực user trong DB, cấp mới token JWT 24h và set Cookie HttpOnly.
+   - Bổ sung hàm tiện ích `refreshToken()`, `getMe()`, `logout()` vào `frontend/src/services/auth.service.ts`.
+2. **Session (`GET /api/auth/me`)**:
+   - Trả về đầy đủ profile an toàn: `id`, `name`, `email`, `role`, `avatar_url`, `streak`, `privacy_setting`, `is_premium`, `premium_until`, `bio`, `headline`, `study_dates`.
+3. **Forgot & Reset Password**:
+   - Xác thực token đặt lại mật khẩu với thời hạn 30 phút, kiểm tra độ mạnh mật khẩu (tối thiểu 10 ký tự, có chữ và số/ký tự đặc biệt), hash mật khẩu bằng bcrypt.
+4. **Xử lý 401 Unauthorized & 403 Forbidden**:
+   - Không có token hoặc token sai/hết hạn -> HTTP 401.
+   - Người dùng thường cố truy cập route quản trị (`/api/admin/*`) -> HTTP 403 Forbidden rõ ràng.
+
+#### 2.3. User Profile, Bio, Headline & Settings
+1. **`backend/src/schemas/auth.schema.ts`**:
+   - Mở rộng `updateProfileSchema` hỗ trợ các trường `bio` (tối đa 500 ký tự) và `headline` (tối đa 255 ký tự).
+2. **`backend/src/controllers/auth.controller.ts`**:
+   - Trích xuất `bio` và `headline` trong `updateProfile` lưu trực tiếp vào cơ sở dữ liệu PostgreSQL.
+3. **`frontend/src/context/StudyContext.tsx`**:
+   - Mở rộng type `activeUser` và hàm `updateProfile` bao gồm `bio`, `headline`, `is_premium`, `premium_until`.
+4. **`frontend/src/app/settings/page.tsx`**:
+   - Đồng bộ hóa `bio` trực tiếp với database thông qua `updateProfile` thay vì chỉ lưu local storage tạm thời.
+5. **`frontend/src/app/profile/page.tsx`**:
+   - Bổ sung state và input chỉnh sửa `Tiêu đề (Headline)` và `Tiểu sử (Bio)`.
+   - Hiển thị Headline và Bio trang trọng ngay dưới tên người dùng trên trang hồ sơ cá nhân.
+
+#### 2.4. Thực thi bảo vệ dữ liệu riêng tư (Private Data Protection)
+1. **`backend/src/repositories/profile.repository.ts` & `backend/src/services/profile.service.ts`**:
+   - Bổ sung hàm `getPublicDocuments(userId)`: Khi một user khác (`viewerId !== targetUserId`) xem hồ sơ công khai, hệ thống **CHỈ** trả về tài liệu có `visibility = 'public' OR share_status = 'public'`. Tài liệu riêng tư tuyệt đối KHÔNG bao giờ bị lộ.
+   - Thông tin liên hệ nhạy cảm (`email`, `phone`, `address`) được loại bỏ khi người ngoài xem hồ sơ.
+   - Lịch sử học tập chi tiết theo từng ngày (`study_dates`) được bảo mật riêng cho chủ sở hữu, người ngoài chỉ thấy tổng chuỗi học tập (`streak`).
+   - Nếu `privacy_setting = 'private'`, hệ thống trả về trạng thái `isRestricted: true` và chỉ cung cấp thông tin công khai tối thiểu (tên, avatar).
+2. **Private Notes & Documents**:
+   - `study.routes.ts` & `study.service.ts` kiểm tra nghiêm ngặt `user_id = $2`, chặn truy cập trái phép với HTTP 403 Access denied.
+3. **AI Chat & Quiz Attempts**:
+   - Các truy vấn AI Chat và Quiz cấu hình đều scoped theo `req.user.id`.
+
+---
+
+### 3. Kết quả Gate Checks (Rule 0.1.3)
+1. 🟢 **Backend Build (`npm run build`)**: Pass 100% (0 errors).
+2. 🟢 **Frontend TypeScript Check (`npx tsc --noEmit`)**: Pass 100% (0 errors).
+3. 🟢 **Frontend ESLint (`npx eslint src`)**: Pass 100% (0 errors, 22 pre-existing warnings).
+4. 🟢 **Automated Integration Test Suite (8/8 tests passed)**:
+   - Test 1 (Unauthorized 401 check): PASS.
+   - Test 2 (Register with role 'user'): PASS (HTTP 201, `role: 'user'`).
+   - Test 3 (Session check `GET /api/auth/me`): PASS (HTTP 200).
+   - Test 4 (Token Refresh `POST /api/auth/refresh`): PASS (HTTP 200, fresh 24h JWT).
+   - Test 5 (Forbidden 403 check on `/api/admin/stats`): PASS (HTTP 403 Forbidden).
+   - Test 6 (Profile update with Bio and Headline): PASS (HTTP 200).
+   - Test 7 (Privacy Guard - Stranger viewing private profile): PASS (`isRestricted: true`).
+   - Test 8 (Logout): PASS (HTTP 200).
+
+---
+
+### 4. Trạng thái và bước tiếp theo
+- **Phase 3 đã hoàn tất trọn vẹn và đạt toàn bộ tiêu chuẩn acceptance criteria**.
+- Sẵn sàng chuyển sang **PHASE 4 — DOCUMENT LEARNING** (Upload -> Validate -> Store -> Process -> Parse -> Extract -> Index -> READY -> Viewer).
 
 

@@ -35,22 +35,44 @@ class ProfileService {
           id: targetUser.id,
           name: targetUser.name,
           avatar_url: targetUser.avatar_url,
-          privacy_setting: targetUser.privacy_setting
+          privacy_setting: targetUser.privacy_setting,
+          bio: targetUser.bio,
+          headline: targetUser.headline
         }
       };
     }
 
-    const studyDatesResult = await activityRepository.getStudyDates(targetUserId);
+    const isSelf = viewerId === targetUserId;
+
+    // Private data protection: only the owner can see their detailed study dates / learning history
+    const studyDatesResult = isSelf ? await activityRepository.getStudyDates(targetUserId) : [];
     const studyDates = studyDatesResult.map(row => getVietnamDateString(new Date(row.study_date)));
     
     const decks = await profileRepository.getPublicDecks(targetUserId);
-    const documents = await profileRepository.getDocuments(targetUserId);
+    // Private documents must NEVER be shown to other users
+    const documents = isSelf 
+      ? await profileRepository.getDocuments(targetUserId) 
+      : await profileRepository.getPublicDocuments(targetUserId);
     const friends = await profileRepository.getMutualFriends(targetUserId);
+
+    // Strip personal private contact details if viewing another user's profile
+    const safeProfile = isSelf ? targetUser : {
+      id: targetUser.id,
+      name: targetUser.name,
+      avatar_url: targetUser.avatar_url,
+      streak: targetUser.streak,
+      privacy_setting: targetUser.privacy_setting,
+      role: targetUser.role,
+      is_premium: targetUser.is_premium,
+      bio: targetUser.bio,
+      headline: targetUser.headline,
+      created_at: targetUser.created_at,
+    };
 
     return {
       isRestricted: false,
       user: {
-        ...targetUser,
+        ...safeProfile,
         study_dates: studyDates,
         friends,
         decks,

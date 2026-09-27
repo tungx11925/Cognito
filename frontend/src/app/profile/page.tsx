@@ -412,6 +412,8 @@ export default function UserProfile() {
   const [editPhone, setEditPhone] = useState("");
   const [editEducation, setEditEducation] = useState("");
   const [editAddress, setEditAddress] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [editHeadline, setEditHeadline] = useState("");
   const [selectedProvince, setSelectedProvince] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
   const [provinceQuery, setProvinceQuery] = useState("");
@@ -475,7 +477,9 @@ export default function UserProfile() {
         name: editName,
         phone: editPhone,
         education: editEducation,
-        address: finalAddress
+        address: finalAddress,
+        bio: editBio,
+        headline: editHeadline,
       });
       if (success) {
         setIsEditing(false);
@@ -607,6 +611,12 @@ export default function UserProfile() {
                           <Badge className="bg-amber-100 text-amber-700 text-xs px-2 py-0 border border-amber-200">Cấp {level}</Badge>
                         </div>
                         <p className="text-sm text-gray-400 mt-0.5">@{(activeUser as any)?.username || activeUser?.name?.toLowerCase().replace(/\s+/g, '') || "nguoidung"}</p>
+                        {activeUser?.headline && (
+                          <p className="text-xs text-[#2d5a3d] font-semibold mt-1">{activeUser.headline}</p>
+                        )}
+                        {activeUser?.bio && (
+                          <p className="text-xs text-gray-600 mt-1 max-w-sm italic border-l-2 border-[#2d5a3d]/50 pl-2">{activeUser.bio}</p>
+                        )}
 
                         {/* XP Progress Bar — dynamic */}
                         <div className="mt-3 max-w-xs">
@@ -676,6 +686,8 @@ export default function UserProfile() {
                     // Parse education
                     const savedEducation = activeUser?.education || "";
                     setEditEducation(savedEducation);
+                    setEditBio(activeUser?.bio || "");
+                    setEditHeadline(activeUser?.headline || "");
                     
                     setIsEditing(true);
                   }}
@@ -1035,6 +1047,8 @@ export default function UserProfile() {
                                 // Parse education
                                 const savedEducation = activeUser?.education || "";
                                 setEditEducation(savedEducation);
+                                setEditBio(activeUser?.bio || "");
+                                setEditHeadline(activeUser?.headline || "");
                                 
                                 setIsEditing(true);
                               }
@@ -1066,6 +1080,8 @@ export default function UserProfile() {
                     <CardContent className="pt-4 divide-y divide-gray-100/70">
                       {[
                         { label: "Họ và tên", value: activeUser?.name || "", icon: User },
+                        { label: "Tiêu đề", value: activeUser?.headline || "Chưa cập nhật", icon: Edit3 },
+                        { label: "Tiểu sử (Bio)", value: activeUser?.bio || "Chưa cập nhật", icon: MessageSquare },
                         { label: "Học vấn", value: activeUser?.education || "", icon: GraduationCap },
                         { label: "Địa chỉ", value: activeUser?.address || "", icon: MapPin },
                         { label: "Ngày tham gia", value: activeUser?.created_at ? new Date(activeUser.created_at).toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' }) : "Chưa rõ", icon: Calendar, readOnly: true },
@@ -1089,6 +1105,26 @@ export default function UserProfile() {
                                     value={editName}
                                     onChange={(e) => setEditName(e.target.value)}
                                     className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] focus:border-[#2d5a3d] w-full text-right"
+                                  />
+                                )}
+                                
+                                {item.label === "Tiêu đề" && (
+                                  <input 
+                                    type="text"
+                                    placeholder="Ví dụ: Sinh viên CNTT / Đam mê Khoa học máy tính"
+                                    value={editHeadline}
+                                    onChange={(e) => setEditHeadline(e.target.value)}
+                                    className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] focus:border-[#2d5a3d] w-full text-right"
+                                  />
+                                )}
+
+                                {item.label === "Tiểu sử (Bio)" && (
+                                  <textarea 
+                                    rows={2}
+                                    placeholder="Viết vài dòng giới thiệu về bản thân..."
+                                    value={editBio}
+                                    onChange={(e) => setEditBio(e.target.value)}
+                                    className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] focus:border-[#2d5a3d] w-full text-right resize-none"
                                   />
                                 )}
                                 

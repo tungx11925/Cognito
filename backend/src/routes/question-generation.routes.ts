@@ -26,13 +26,13 @@ const router = Router();
 
 router.use(authenticate);
 
-// ── Sinh câu hỏi (teacher/admin) ──
-router.post('/questions/generate', requireRole('teacher', 'admin'), validate(generateQuestionsSchema), generateQuestions);
+// ── Sinh câu hỏi (user/admin) ──
+router.post('/questions/generate', requireRole('user', 'admin'), validate(generateQuestionsSchema), generateQuestions);
 
-// ── Preview: sửa / xoá câu hỏi + duyệt bộ đề (teacher/admin) ──
-router.patch('/questions/:id', requireRole('teacher', 'admin'), validate(updateQuestionSchema), updateQuestion);
-router.delete('/questions/:id', requireRole('teacher', 'admin'), validate(questionIdParamsSchema), deleteQuestion);
-router.post('/test-sets/:id/approve', requireRole('teacher', 'admin'), validate(testSetIdParamsSchema), approveTestSet);
+// ── Preview: sửa / xoá câu hỏi + duyệt bộ đề (user/admin) ──
+router.patch('/questions/:id', requireRole('user', 'admin'), validate(updateQuestionSchema), updateQuestion);
+router.delete('/questions/:id', requireRole('user', 'admin'), validate(questionIdParamsSchema), deleteQuestion);
+router.post('/test-sets/:id/approve', requireRole('user', 'admin'), validate(testSetIdParamsSchema), approveTestSet);
 
 // ── Đọc dữ liệu (mọi user đã đăng nhập) ──
 router.get('/test-sets/:id', validate(testSetIdParamsSchema), getTestSet);

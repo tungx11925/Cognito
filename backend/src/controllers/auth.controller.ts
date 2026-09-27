@@ -207,6 +207,45 @@ export const logout = async (req: Request, res: Response) => {
   }
 };
 
+export const refresh = async (req: Request, res: Response) => {
+  try {
+    let token = req.cookies?.token;
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+      }
+    }
+
+    if (!token) {
+      return res.status(401).json({ error: 'Vui lòng đăng nhập để tiếp tục' });
+    }
+
+    const result = await authService.refreshToken(token);
+
+    res.cookie('token', result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+
+    return res.status(200).json({
+      message: 'Token làm mới thành công',
+      token: result.token,
+      user: result.user
+    });
+  } catch (error: any) {
+    if (error.message.includes('Token không hợp lệ') || error.message.includes('Thiếu token')) {
+      return res.status(401).json({ error: error.message });
+    }
+    if (error.message === 'Người dùng không tồn tại') {
+      return res.status(404).json({ error: error.message });
+    }
+    console.error('Refresh token error:', error);
+    res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+  }
+};
+
 export const checkAvailability = async (req: Request, res: Response) => {
   try {
     const { field, value } = req.body;
@@ -278,14 +317,16 @@ export const updateAvatar = async (req: any, res: Response) => {
 export const updateProfile = async (req: any, res: Response) => {
   try {
     const userId = req.user.id;
-    const { name, phone, education, address, privacy_setting } = req.body;
+    const { name, phone, education, address, privacy_setting, bio, headline } = req.body;
 
     const user = await authService.updateProfile(userId, {
       name: name,
       phone: phone,
       education: education || '',
       address: address || '',
-      privacy_setting: privacy_setting
+      privacy_setting: privacy_setting,
+      bio: bio !== undefined ? bio : null,
+      headline: headline !== undefined ? headline : null,
     });
 
     res.status(200).json({

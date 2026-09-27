@@ -15,7 +15,7 @@ class ProfileRepository {
 
   async getTargetUser(targetUserId: number) {
     const userResult = await db.query(
-      'SELECT id, name, email, phone, education, address, website, created_at, avatar_url, streak, privacy_setting FROM users WHERE id = $1',
+      'SELECT id, name, email, phone, education, address, website, created_at, avatar_url, streak, privacy_setting, role, is_premium, bio, headline FROM users WHERE id = $1',
       [targetUserId]
     );
     return userResult.rows[0];
@@ -42,6 +42,17 @@ class ProfileRepository {
   async getDocuments(userId: number) {
     const documentsResult = await db.query(
       'SELECT * FROM documents WHERE user_id = $1 ORDER BY created_at DESC',
+      [userId]
+    );
+    return documentsResult.rows;
+  }
+
+  async getPublicDocuments(userId: number) {
+    const documentsResult = await db.query(
+      `SELECT id, user_id, title, description, category, created_at, file_type, file_size, status
+       FROM documents 
+       WHERE user_id = $1 AND (visibility = 'public' OR share_status = 'public')
+       ORDER BY created_at DESC`,
       [userId]
     );
     return documentsResult.rows;

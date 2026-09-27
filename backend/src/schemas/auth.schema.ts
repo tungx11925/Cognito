@@ -66,6 +66,8 @@ export const updateProfileSchema = z.object({
     education: z.string().nullable().optional(),
     address: z.string().nullable().optional(),
     privacy_setting: z.enum(['public', 'private', 'friends']).default('public').optional(),
+    bio: z.string().max(500, 'Tiểu sử tối đa 500 ký tự').nullable().optional(),
+    headline: z.string().max(255, 'Tiêu đề tối đa 255 ký tự').nullable().optional(),
   }),
 });
 

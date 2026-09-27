@@ -13,7 +13,8 @@ import {
   changePassword,
   upgradePremium,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  refresh
 } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import multer from 'multer';
@@ -62,6 +63,7 @@ router.post('/register', validate(registerSchema), register);
 router.post('/login', authRateLimiter, validate(loginSchema), login);
 router.post('/google', authRateLimiter, validate(googleLoginSchema), googleLogin);
 router.post('/logout', logout);
+router.post('/refresh', refresh);
 router.post('/check-availability', validate(checkAvailabilitySchema), checkAvailability);
 router.get('/me', authenticate, getMe);
 router.post('/avatar', authenticate, upload.single('avatar'), updateAvatar);

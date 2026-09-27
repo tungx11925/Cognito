@@ -41,7 +41,8 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
 /**
  * Role check — LUÔN lấy role từ JWT đã decode (không bao giờ nhận từ body/query).
  * Token cũ (chưa có role) → tra DB 1 lần rồi cache vào req.user để các middleware sau dùng.
- * Dùng: router.post('/...', authenticate, requireRole('teacher', 'admin'), handler)
+ * Cognito chỉ có 2 role duy nhất: 'admin' và 'user'.
+ * Dùng: router.post('/...', authenticate, requireRole('admin'), handler)
  */
 export const requireRole = (...roles: string[]) => {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -53,20 +54,44 @@ export const requireRole = (...roles: string[]) => {
       if (!role) {
         // Token phát hành trước khi có role trong payload → tra DB (fallback an toàn)
         const result = await db.query('SELECT role FROM users WHERE id = $1', [req.user.id]);
-        role = result.rows[0]?.role || 'student';
+        role = result.rows[0]?.role || 'user';
         req.user.role = role;
       }
       if (role && roles.includes(role)) {
         return next();
       }
       return res.status(403).json({
-        error: `Chức năng này chỉ dành cho ${roles.join(' / ')}. Tài khoản hiện tại: ${role || 'student'}`,
+        error: `Chức năng này chỉ dành cho ${roles.join(' / ')}. Tài khoản hiện tại: ${role || 'user'}`,
       });
     } catch (error) {
       console.error('Role check error:', error);
       return res.status(500).json({ error: 'Lỗi kiểm tra quyền' });
     }
   };
+};
+
+/**
+ * Premium check — Kiểm tra trạng thái gói Premium của người dùng hoặc tài khoản Admin.
+ */
+export const requirePremium = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Vui lòng đăng nhập để tiếp tục' });
+    }
+    if (req.user.role === 'admin') {
+      return next();
+    }
+    const result = await db.query('SELECT is_premium, premium_until FROM users WHERE id = $1', [req.user.id]);
+    const user = result.rows[0];
+    const isPremium = user?.is_premium && (!user.premium_until || new Date(user.premium_until) > new Date());
+    if (isPremium) {
+      return next();
+    }
+    return res.status(403).json({ error: 'Chức năng này yêu cầu tài khoản Premium' });
+  } catch (error) {
+    console.error('Premium check error:', error);
+    return res.status(500).json({ error: 'Lỗi kiểm tra quyền Premium' });
+  }
 };
 
 export const optionalAuth = (req: AuthRequest, res: Response, next: NextFunction) => {

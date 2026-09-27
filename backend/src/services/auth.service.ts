@@ -49,7 +49,7 @@ export class AuthService {
     });
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'student' }, 
+      { id: user.id, email: user.email, role: user.role || 'user' }, 
       process.env.JWT_SECRET_KEY!, 
       { expiresIn: '24h' }
     );
@@ -125,7 +125,7 @@ export class AuthService {
     const studyDates = await this.getUserStudyDates(user.id);
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'student' }, 
+      { id: user.id, email: user.email, role: user.role || 'user' }, 
       process.env.JWT_SECRET_KEY!, 
       { expiresIn: '24h' }
     );
@@ -158,7 +158,7 @@ export class AuthService {
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'student' }, 
+      { id: user.id, email: user.email, role: user.role || 'user' }, 
       process.env.JWT_SECRET_KEY!, 
       { expiresIn: '24h' }
     );
@@ -180,6 +180,41 @@ export class AuthService {
     const studyDates = await this.getUserStudyDates(userId);
     const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = user;
     return { ...safeUser, study_dates: studyDates };
+  }
+
+  async refreshToken(oldToken: string) {
+    if (!oldToken) {
+      throw new Error('Thiếu token xác thực');
+    }
+    if (!process.env.JWT_SECRET_KEY) {
+      throw new Error('Missing JWT_SECRET_KEY in environment variables');
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(oldToken, process.env.JWT_SECRET_KEY);
+    } catch (err: any) {
+      throw new Error('Token không hợp lệ hoặc đã hết hạn');
+    }
+
+    if (!decoded || !decoded.id) {
+      throw new Error('Token không hợp lệ');
+    }
+
+    const user = await userRepository.findById(decoded.id);
+    if (!user) {
+      throw new Error('Người dùng không tồn tại');
+    }
+
+    const newToken = jwt.sign(
+      { id: user.id, email: user.email, role: user.role || 'user' },
+      process.env.JWT_SECRET_KEY,
+      { expiresIn: '24h' }
+    );
+
+    const studyDates = await this.getUserStudyDates(user.id);
+    const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = user;
+    return { token: newToken, user: { ...safeUser, study_dates: studyDates } };
   }
 
   async updateAvatar(userId: number, avatarUrl: string) {
