@@ -845,6 +845,11 @@ hoặc cơ chế tương đương.
 
 ### 5. Việc còn lại / Chuẩn bị cho Phase tiếp theo
 - Phase 5 đã hoàn tất 100% và sẵn sàng bàn giao.
+- **Lưu ý kiến trúc đã giải trình & xác nhận**:
+  1. 🔴 *Giải trình Test Suite Phase 4 (25/25 tests)*: 5 test bổ sung (Test 21–25) được thực hiện theo đúng yêu cầu trực tiếp của người dùng ở lượt review Phase 4 (xác nhận trạng thái `FAILED` khi parse lỗi và dọn sạch `community_resources`/Marketplace khi xóa tài liệu), hoàn toàn không phải phát sinh do sửa lỗi hay che giấu bug ở Phase 5.
+  2. 🟡 *Xác nhận Model AI Groq (`groq/compound` → `openai/gpt-oss-120b`)*: `groq/compound` là tên model legacy trong seed migration cũ. Các Phase 0→4 không sử dụng endpoint Chat Completion nên không bị ảnh hưởng (các gate Phase 0→4 đều pass thật 100%). Lỗi chỉ lộ ra ở Phase 5 khi lần đầu tiên gọi AI Chat/Mindmap thực tế qua Groq API.
+  3. 🟢 *Ghi chú chuyển tiếp Phase 27 (AI Security & Governance)*: Cơ chế `sanitizeUserInstruction` hiện tại sử dụng Regex pattern matching (chặn các mẫu jailbreak phổ biến). Cần đưa vào backlog Phase 27 để đánh giá bổ sung lớp kiểm tra LLM-based Guardrail nhằm phát hiện các biến thể ngữ nghĩa tinh vi hơn.
 - Hệ thống đã sẵn sàng cho **PHASE 6 — QUESTION GENERATOR** (Pipeline sinh đề thi AI chuẩn chỉnh: Context Preparation → Chunking → Importance Scoring → Coverage Allocation → AI Generation → Deduplication Cosine Similarity → Grounding Check → Answer-Key Balancing → User Review & Approve).
+
 
 
