@@ -164,3 +164,66 @@ export function jaccardSimilarity(strA: string, strB: string): number {
   return union === 0 ? 0 : intersection / union;
 }
 
+export interface SlideAllocation {
+  chunkId: number;
+  weight: number;
+  allocated: number;
+}
+
+/**
+ * Phân bổ số lượng câu hỏi đều theo các slide/chunk theo trọng số nội dung.
+ * Đảm bảo mọi chunk đều có ít nhất 1 câu hỏi khi số lượng câu >= số lượng chunk,
+ * và không chunk nào bị dồn quá maxPerSlide câu.
+ */
+export function calculateCoverageAllocation(
+  contentSlides: { id: number; content: string; keywords?: string[] }[],
+  finalFocusKeywords: string[],
+  quantity: number,
+  maxMultiplier = 2
+): SlideAllocation[] {
+  if (contentSlides.length === 0 || quantity <= 0) return [];
+
+  const slideAllocations: SlideAllocation[] = contentSlides.map(c => {
+    const matchCount = finalFocusKeywords.filter(kw => 
+      (c.keywords || []).includes(kw) || c.content.toLowerCase().includes(kw.toLowerCase())
+    ).length;
+    return { chunkId: c.id, weight: Math.max(matchCount, 0.1), allocated: 0 };
+  });
+
+  const totalWeight = slideAllocations.reduce((s, a) => s + a.weight, 0);
+  const maxPerSlide = Math.ceil(quantity / slideAllocations.length) * maxMultiplier;
+
+  let remaining = quantity;
+  if (quantity >= slideAllocations.length) {
+    // Mỗi slide được ít nhất 1 câu hỏi để đảm bảo độ bao phủ (coverage) toàn diện
+    for (const alloc of slideAllocations) {
+      alloc.allocated = 1;
+    }
+    remaining = quantity - slideAllocations.length;
+
+    for (const alloc of slideAllocations) {
+      if (remaining <= 0) break;
+      const proposedExtra = Math.floor((alloc.weight / totalWeight) * (quantity - slideAllocations.length));
+      const canAdd = Math.min(proposedExtra, maxPerSlide - alloc.allocated, remaining);
+      alloc.allocated += canAdd;
+      remaining -= canAdd;
+    }
+    for (let i = 0; remaining > 0; i++) {
+      const idx = i % slideAllocations.length;
+      if (slideAllocations[idx].allocated < maxPerSlide) {
+        slideAllocations[idx].allocated++;
+        remaining--;
+      }
+    }
+  } else {
+    // Số câu ít hơn số slide: ưu tiên các slide có trọng số cao nhất
+    const sorted = [...slideAllocations].sort((a, b) => b.weight - a.weight);
+    for (let i = 0; i < quantity; i++) {
+      sorted[i].allocated = 1;
+    }
+  }
+
+  return slideAllocations;
+}
+
+

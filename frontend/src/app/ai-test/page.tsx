@@ -311,10 +311,10 @@ export default function AITestPage() {
       }
 
       if (r?.error) {
-        // Role student → fallback luồng generate cũ (luồng cũ vẫn hoạt động song song)
-        if (typeof r.error === "string" && r.error.includes("teacher")) {
+        // Fallback luồng generate cũ nếu có lỗi cấu hình
+        if (typeof r.error === "string" && (r.error.includes("teacher") || r.error.includes("forbidden") || r.error.includes("quyền"))) {
           toast.dismiss(tid);
-          toast("Tính năng nâng cao dành cho giáo viên/admin — đang dùng luồng tạo đề cơ bản.", { icon: "ℹ️", duration: 5000 });
+          toast("Đang chuyển sang luồng tạo đề dự phòng.", { icon: "ℹ️", duration: 5000 });
           const content = sourceType === "document"
             ? await resolveContent(selectedDocs[0])
             : legacyContent;

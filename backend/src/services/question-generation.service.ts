@@ -11,7 +11,7 @@ import {
 } from '../schemas/question-generation.schema';
 import { AppError } from '../utils/AppError';
 import { MCQ_GENERATION_CONSTRAINTS } from '../utils/mcq-constraints';
-import { TfIdfCalculator, cosineSimilarity, asyncMapConcurrent, jaccardSimilarity } from '../utils/math.utils';
+import { TfIdfCalculator, cosineSimilarity, asyncMapConcurrent, jaccardSimilarity, calculateCoverageAllocation } from '../utils/math.utils';
 
 export const QUESTION_GEN_SYSTEM_PROMPT = `Bạn là AI Question Generator. Chỉ được dùng nội dung trong DOCUMENT_CONTEXT để tạo câu hỏi.
 Không bịa thêm kiến thức ngoài tài liệu. Mỗi câu hỏi phải khớp với đúng 1 giá trị trong FOCUS_KEYWORDS (nếu rỗng thì dùng toàn bộ context).
@@ -252,31 +252,19 @@ async generate(input: GenerateQuestionsInput): Promise<GenerateQuestionsResult> 
       if (finalFocusKeywords.length === 0) finalFocusKeywords = sortedKeywords.slice(0, 5);
     }
 
-    // ── STAGE 3: Coverage Allocation ──
-    const slideAllocations = contentSlides.map(c => {
-      const matchCount = finalFocusKeywords.filter(kw => 
-        (c.keywords || []).includes(kw) || c.content.toLowerCase().includes(kw.toLowerCase())
-      ).length;
-      return { chunk: c, weight: Math.max(matchCount, 0.1), allocated: 0 };
-    });
-
-    const totalWeight = slideAllocations.reduce((s, a) => s + a.weight, 0);
-    const maxPerSlide = Math.ceil(quantity / slideAllocations.length) * MCQ_GENERATION_CONSTRAINTS.MAX_QUESTIONS_PER_SLIDE_MULTIPLIER;
-    
-    let remaining = quantity;
-    for (const alloc of slideAllocations) {
-      if (remaining <= 0) break;
-      const proposed = Math.round((alloc.weight / totalWeight) * quantity);
-      alloc.allocated = Math.min(proposed, maxPerSlide, remaining);
-      remaining -= alloc.allocated;
-    }
-    for (let i = 0; remaining > 0; i++) {
-      const idx = i % slideAllocations.length;
-      if (slideAllocations[idx].allocated < maxPerSlide) {
-        slideAllocations[idx].allocated++;
-        remaining--;
-      }
-    }
+    // ── STAGE 3: Coverage Allocation (bảo đảm độ bao phủ toàn diện mọi slide) ──
+    const rawAllocations = calculateCoverageAllocation(
+      contentSlides,
+      finalFocusKeywords,
+      quantity,
+      MCQ_GENERATION_CONSTRAINTS.MAX_QUESTIONS_PER_SLIDE_MULTIPLIER
+    );
+    const slideAllocations = rawAllocations.map(a => ({
+      chunk: contentSlides.find(c => c.id === a.chunkId)!,
+      chunkId: a.chunkId,
+      weight: a.weight,
+      allocated: a.allocated,
+    }));
 
     const templatePrompt = resolveTemplatePrompt(input.templateId, audienceLevel);
     const audiencePrompt = resolveAudiencePrompt(audienceLevel);

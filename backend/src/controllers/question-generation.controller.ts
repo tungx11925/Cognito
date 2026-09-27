@@ -7,7 +7,7 @@ import { AppError } from '../utils/AppError';
 /**
  * Question Generation Controller — sinh câu hỏi từ bài học/slide, chọn model AI,
  * trọng tâm từ khoá, Preview (DRAFT) → Edit → Save (APPROVED).
- * Role check (teacher/admin) đã được enforce ở routes bằng requireRole middleware.
+ * Role check (user/admin) đã được enforce ở routes bằng requireRole middleware.
  */
 
 export const generateQuestions = async (req: AuthRequest, res: Response, next: NextFunction) => {

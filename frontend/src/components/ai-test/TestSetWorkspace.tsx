@@ -264,6 +264,11 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
                         <p className="text-sm font-semibold text-gray-900 leading-relaxed">
                           {fields[globalIdx].content || "(Chưa có nội dung)"}
                         </p>
+                        {fields[globalIdx].explanation?.includes('LOW_GROUNDING') && (
+                          <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200">
+                            ⚠️ Cần soát lại nội dung (AI cảnh báo: độ bám sát tài liệu thấp)
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-col items-end gap-2 flex-shrink-0 pt-1">
                         <span className="text-xs font-bold text-[#1a3a2a] bg-[#f0fdf4] border border-[#d1fae5] px-2.5 py-1 rounded-lg">

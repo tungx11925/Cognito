@@ -898,8 +898,9 @@ hoặc cơ chế tương đương.
   - `ai_models`: Cập nhật `openai/gpt-oss-120b` (id: 2) phân cấp sang tier `'balanced'` đảm bảo task yêu cầu balanced tier có provider hoạt động ngay cả khi GEMINI_API_KEY chưa cấu hình.
 - **Frontend Services**:
   - `frontend/src/services/ai-test.service.ts`: Đồng bộ `topic?: string` vào `GenerateQuestionsPayload`.
+  - `frontend/src/components/ai-test/TestSetWorkspace.tsx`: Bổ sung huy hiệu cảnh báo trực quan `⚠️ Cần soát lại nội dung (AI cảnh báo: độ bám sát tài liệu thấp)` khi câu hỏi bị gắn cờ `LOW_GROUNDING`.
 - **Automated Tests**:
-  - `backend/scripts/test-phase6.ts`: Bộ test tích hợp độc lập toàn diện cho Phase 6 gồm 13 test suites (23 assertions chi tiết).
+  - `backend/scripts/test-phase6.ts`: Bộ test tích hợp độc lập toàn diện cho Phase 6 gồm 14 test suites (30 assertions chi tiết).
 
 ### 3. Kết quả Integration Test Phase 6 (`backend/scripts/test-phase6.ts`) — 100% Passed
 - Test 1.1 & 1.2: Danh sách AI Models và AI Templates trả về đầy đủ.
@@ -914,7 +915,9 @@ hoặc cơ chế tương đương.
 - Test 10.1 - 10.2: Lấy chi tiết bộ đề đã duyệt (`GET /api/test-sets/:id`) trả về đầy đủ thông tin và danh sách câu hỏi.
 - Test 11: Trích xuất từ khóa tài liệu (`GET /api/documents/:id/keywords`) hoạt động chính xác.
 - Test 12.1 - 12.4: Kiểm chứng thuật toán Deduplication Cosine Similarity & Jaccard Lexical Similarity phát hiện chính xác câu hỏi trùng lặp.
-- Test 13: Toàn bộ dữ liệu kiểm thử được dọn dẹp sạch sẽ sau khi test hoàn tất.
+- Test 13.1 - 13.4: Kiểm chứng thuật toán Coverage Allocation (Unit Level): Phân bổ 10 câu cho 4 slide đảm bảo mọi slide đều có ít nhất 1 câu (allocated >= 1), không slide nào vượt quá trần `maxPerSlide` (chống dồn cục).
+- Test 13.5 - 13.7: Kiểm chứng Coverage Allocation đa chunk (Integration API Level): Sinh đề từ tài liệu 4 chương phân tán đều câu hỏi trên nhiều chunk khác nhau (3/4 chunk có câu hỏi, không dồn vào 1 chunk đơn lẻ).
+- Test 14: Toàn bộ dữ liệu kiểm thử được dọn dẹp sạch sẽ sau khi test hoàn tất.
 
 ### 4. Kết quả Gate Checks
 - **Backend Build (`npm run build`)**: 0 errors (Pass).
@@ -922,10 +925,15 @@ hoặc cơ chế tương đương.
 - **Frontend Linter (`npx eslint src`)**: 0 errors (Pass, 21 warnings pre-existing).
 - **Regression Tests (`test-phase4.ts`)**: 25/25 passed (Zero regression).
 - **Regression Tests (`test-phase5.ts`)**: 16/16 passed (Zero regression).
-- **Phase 6 Tests (`test-phase6.ts`)**: 100% passed.
+- **Phase 6 Tests (`test-phase6.ts`)**: 100% passed (14/14 suites).
 
 ### 5. Việc còn lại / Chuẩn bị cho Phase tiếp theo
 - Phase 6 đã hoàn tất 100% và sẵn sàng bàn giao.
+- **Xác nhận giải trình kỹ thuật bổ sung theo review**:
+  1. 🔴 *Coverage Allocation Test*: Đã bổ sung Suite 13 (gồm cả kiểm chứng thuật toán toán học chống dồn cục và test API trực tiếp trên tài liệu 4 chunks).
+  2. 🔴 *Chuẩn hóa phân quyền (Dọn sạch tàn dư Teacher)*: Toàn bộ route và controller Phase 6 từ trước đã được bảo vệ bằng `requireRole('user', 'admin')` (không có role teacher trong logic runtime). Đã dọn sạch 2 comment cũ ghi chép 'teacher' trong code và dọn sạch fallback condition ở `ai-test/page.tsx`.
+  3. 🟡 *Xác nhận Gemini API Key*: Dự án hiện tại chạy live 100% qua `GroqAdapter` (`openai/gpt-oss-120b`). Khung adapter Gemini đã được lập trình sẵn nhưng chưa từng được gọi với API key live thật do môi trường chưa cung cấp `GEMINI_API_KEY`.
+  4. 🟡 *Xác nhận cờ LOW_GROUNDING*: Đã xác nhận cờ lưu vào `questions.explanation` và bổ sung hiển thị trực quan badge cảnh báo màu vàng `⚠️ Cần soát lại nội dung (AI cảnh báo: độ bám sát tài liệu thấp)` trên từng card câu hỏi trong giao diện `TestSetWorkspace.tsx`.
 - Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu Phase 6 trước khi tiến hành **PHASE 7 — EXISTING EXAM IMPORT** (Import file Word .docx / PDF / Excel đề thi có sẵn, regex tách câu hỏi, options, answer key, preview và import vào ngân hàng đề).
 
 

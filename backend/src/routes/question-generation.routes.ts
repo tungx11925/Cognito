@@ -20,7 +20,7 @@ import {
 /**
  * Question Generator routes.
  * Mọi route GHI dữ liệu (generate/patch/delete/approve) bắt buộc qua
- * requireRole('teacher','admin') — role lấy từ JWT đã decode, KHÔNG nhận từ body/query.
+ * requireRole('user','admin') — role lấy từ JWT đã decode, KHÔNG nhận từ body/query.
  */
 const router = Router();
 
