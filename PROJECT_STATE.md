@@ -291,8 +291,37 @@ Status: DONE
 
 ### Gate Checks:
 - Backend Build (`npm run build`): PASSED (0 errors)
-- Frontend Build (`npx tsc --noEmit`): PASSED (0 errors)
+- Frontend TypeScript Check (`npx tsc --noEmit`): PASSED (0 errors)
+- Frontend Linter (`npx eslint src`): PASSED (0 errors, 29 warnings) — Đã sửa lỗi vi phạm Rules of Hooks trong `DocumentViewerWrapper.tsx`.
 - Migration Execution (`node-pg-migrate up`): PASSED (Migration `1790000000000_personal_platform_foundation` applied successfully)
+- Git Checkpoint trước Phase 2: Đã commit thành công tại SHA `cc6e425` ("checkpoint(phase1): decouple school FKs, normalize user roles, formalize core schema, fix lint").
+
+### Làm rõ 5 điểm trọng yếu trước khi bước sang Phase 2:
+1. **Xác nhận về `attempt_answers` và bảng `questions` core**:
+   - `attempt_answers` là bảng **School-only 100%** (chỉ lưu bài nộp của học sinh làm bài tập trường giao qua `assignment_attempts` -> `class_assignments`).
+   - Cột `question_id` trong `attempt_answers` tham chiếu tới chính bảng `questions` core (dùng chung câu hỏi từ `test_sets`).
+   - Ràng buộc cũ có `ON DELETE CASCADE`: nghĩa là nếu xóa câu hỏi ở bảng `questions` core thì bài nộp học sinh ở `attempt_answers` bị xóa theo, nhưng khi xóa `attempt_answers` thì câu hỏi ở `questions` KHÔNG bị xóa.
+   - Việc tháo gỡ FK `attempt_answers_question_id_fkey` ở Phase 1 nhằm đảm bảo khi Phase 2 xóa bảng `attempt_answers`, PostgreSQL không cần kiểm tra đối chiếu bảng `questions`, giúp bảng `questions` core của Question Generator được bảo vệ tuyệt đối và độc lập 100%. Bảng `questions` thuộc nhóm KEEP và không hề bị xóa hay suy suyển dữ liệu.
+2. **Xác nhận về `user.routes.ts` và `user.controller.ts` (Dead Code)**:
+   - Hai file này là **Dead Code / Stub 100%**, hoàn toàn không được import hay mount trong `backend/src/app.ts`.
+   - Toàn bộ API User thật đang hoạt động trong hệ thống nằm ở:
+     - `backend/src/routes/auth.routes.ts` & `auth.controller.ts`: phục vụ `/api/auth/me` (lấy session/thông tin user), `/api/auth/profile` (cập nhật hồ sơ), `/api/auth/avatar` (cập nhật avatar), `/api/auth/change-password`.
+     - `backend/src/routes/activity.routes.ts` & `activity.controller.ts`: phục vụ `/api/users/:targetUserId/profile` (xem hồ sơ công khai).
+     - `backend/src/routes/admin.routes.ts` & `admin.controller.ts`: phục vụ `/api/admin/users/*` (quản trị người dùng).
+   - Việc xóa `user.routes.ts` và `user.controller.ts` không làm ảnh hưởng đến bất kỳ API user nào đang chạy.
+3. **Xác nhận quyền sở hữu Document / TestSet do cựu Teacher tạo ra**:
+   - Bảng `documents` có cột sở hữu trực tiếp: `user_id INTEGER NOT NULL REFERENCES users(id)`.
+   - Bảng `test_sets` có cột sở hữu trực tiếp: `created_by INTEGER REFERENCES users(id)`.
+   - Bảng `class_assignments` chỉ là bảng liên kết trung gian (chứa `class_id`, `test_set_id`, `document_id`, `assigned_by`).
+   - Khi cựu teacher tạo tài liệu hoặc đề thi, dữ liệu được lưu thẳng vào `documents` và `test_sets` với `owner_id = user.id`. Khi giao bài tập, nó chỉ tạo thêm một bản ghi trỏ ID trong `class_assignments`.
+   - Ở Phase 1, ta đã tháo gỡ FK `class_assignments_test_set_id_fkey` và `class_assignments_document_id_fkey`. Khi Phase 2 xóa `class_assignments`, toàn bộ Documents và Test Sets do cựu teacher tạo ra **vẫn tồn tại nguyên vẹn 100% trong thư viện cá nhân của user đó**, với quyền sở hữu `user_id / created_by` trỏ chính xác về tài khoản của họ (hiện mang role `user`).
+4. **Kế hoạch thực hiện Phase 2 (Soft-remove trước, Hard-delete sau)**:
+   - Theo đúng Rule 0.1.4, Phase 2 KHÔNG DROP thẳng tay mà tuân thủ quy trình 2 bước:
+     - **Bước 1 (Soft-remove)**: Tạo migration đổi tên 12 bảng School thành `_deprecated_organizations`, `_deprecated_school_classes`, v.v.; deprecated các route/controller của School. Chạy toàn bộ vòng kiểm tra Build (`tsc`) + Lint (`eslint`) + Test.
+     - **Bước 2 (Hard-delete)**: Chỉ sau khi toàn bộ hệ thống pass 100% không còn bất kỳ dòng code nào phụ thuộc vào các bảng `_deprecated_*`, mới thực hiện lệnh DROP vĩnh viễn các bảng này.
+5. **Lưu ý về phạm vi các bảng mới tạo ở Phase 1**:
+   - Các bảng `community_*`, `conversations`, `messages`, `notifications`, `subscription_plans`, `subscriptions`, `payment_orders`, `user_usages`, `learning_goals`, `learning_activities` được tạo ở Phase 1 **mới chỉ là Schema Foundation (Nền móng cơ sở dữ liệu)**.
+   - Chưa hề có service nghiệp vụ, endpoint API hoàn chỉnh hay giao diện tương ứng (những phần này sẽ được triển khai đầy đủ và audit kỹ lưỡng ở đúng từng Phase tương ứng: Phase 7 Focus, Phase 10-11 Community, Phase 12-14 Messaging & Social, Phase 17 Notification, Phase 19 Payment).
 
 ### Tóm tắt thay đổi:
 1. **Tháo gỡ toàn bộ Foreign Key nguy hiểm trỏ từ School sang Core**:
@@ -340,8 +369,10 @@ Status: DONE
 
 ### Việc còn lại / rủi ro chuyển sang phase sau (PHASE 2):
 - **PHASE 2 — REMOVE SCHOOL / TEACHER SYSTEM**:
-  - Vì toàn bộ FK trỏ chéo đã được tháo gỡ an toàn ở Phase 1, Phase 2 có thể tiến hành tạo migration DROP 12 bảng School/LMS mà không gây lỗi khóa ngoại hoặc xóa lan.
-  - Xóa bỏ backend routes/controllers/services của School: `school.routes.ts`, `school.controller.ts`, `academic.*`, `assignment.*`, `organization.*`, `bulk-import.service.ts`.
-  - Xóa bỏ frontend pages của School/Teacher: `frontend/src/app/school/*`, `frontend/src/app/teacher/*`, `frontend/src/app/student/*`, `frontend/src/app/testhome`.
-  - Dọn dẹp logic chuyển hướng `/teacher` trong `home/page.tsx` và trường `school_code` trong `RegisterModal.tsx`.
+  - Áp dụng Checkpoint SHA `cc6e425`.
+  - Thực hiện Soft-remove: Rename 12 bảng School thành `_deprecated_*`.
+  - Dọn dẹp routes/controllers/services của School và pages/components School/Teacher trên Frontend.
+  - Chạy vòng kiểm tra Gate (Build + Lint + Typescript).
+  - Hard-delete các bảng `_deprecated_*` sau khi pass gate.
+
 
