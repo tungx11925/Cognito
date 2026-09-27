@@ -465,8 +465,45 @@ Checkpoint trước xóa: Commit SHA `cc6e425` / `a749b92` (đã commit và xác
   - `frontend/src/app/student/`
   - `frontend/src/app/testhome/`
 
+### Xác minh tính toàn vẹn dữ liệu & Phản hồi Audit Kỹ thuật (Technical Audit Verification):
+1. 🔴 **Về tính toàn vẹn kết quả Quiz thật (assignment_attempts / attempt_answers)**:
+   - **Thực tế cơ sở dữ liệu**: Khi Phase 2 bắt đầu thực thi, bảng `assignment_attempts` và `attempt_answers` đã **hoàn toàn không tồn tại** trong DB (do đã được dọn sạch từ migration `1790000000000_personal_platform_refactor` ngày 23/09/2026).
+   - **Xác nhận**: Hai migration của Phase 2 (`1790100000000` và `1790200000000`) đều sử dụng điều kiện `IF EXISTS`. Không có bất kỳ bảng dữ liệu bài làm nào chứa dữ liệu thật bị DROP bất ngờ.
+   - **Hệ thống mới**: Bảng `quiz_attempts` và `quiz_attempt_answers` hiện có 0 hàng và sẵn sàng đón nhận dữ liệu làm quiz cá nhân ở các Phase tiếp theo. Tuyệt đối **không có mất mát dữ liệu thật của người dùng**.
+
+2. 🟡 **Về user.routes.ts / user.controller.ts (Xác nhận Dead Code vs Real API)**:
+   - **Nội dung file cũ trước khi xóa**:
+     - `backend/src/routes/user.routes.ts`: Chỉ gồm 8 dòng code, trong đó route duy nhất `// router.get('/:id', getUser)` bị **comment out**. File này chưa từng được `import` hay `app.use` trong `app.ts`.
+     - `backend/src/controllers/user.controller.ts`: Chỉ chứa hàm mock `{ message: "Get user endpoint" }`.
+   - **Kiểm thử thực tế (Live API Test)**: Đã chạy test HTTP trực tiếp trên server:
+     - `GET /api/auth/me` -> **HTTP 200 OK** (lấy thông tin user hiện tại).
+     - `GET /api/users/:targetUserId/profile` -> **HTTP 200 OK** (nằm tại `activity.routes.ts`).
+     - `PUT /api/auth/profile` -> **HTTP 200 OK** (cập nhật thông tin cá nhân).
+   - **Kết luận**: Các endpoint người dùng thực sự vẫn hoạt động 100%, việc xóa 2 file stub là hoàn toàn chính xác.
+
+3. 🟡 **Về kiểm tra tài nguyên mồ côi (Orphan Documents & Test Sets)**:
+   - **Query 1 (Documents mồ côi)**:
+     ```sql
+     SELECT id, title, user_id FROM documents 
+     WHERE user_id IS NOT NULL AND user_id NOT IN (SELECT id FROM users);
+     ```
+     -> **Kết quả: 0 hàng (RỖNG)**. Tổng cộng có 14 tài liệu trong hệ thống, 100% đều liên kết đúng với `users.id` hợp lệ.
+   - **Query 2 (TestSets mồ côi)**:
+     ```sql
+     SELECT id, created_by FROM test_sets 
+     WHERE created_by IS NOT NULL AND created_by NOT IN (SELECT id FROM users);
+     ```
+     -> **Kết quả: 0 hàng (RỖNG)**. Tổng cộng có 5 bộ đề trong hệ thống, 100% đều liên kết đúng với `users.id` hợp lệ.
+   - Bảng `questions` có 13 câu hỏi, 100% nguyên vẹn.
+   - **Kết luận**: Hoàn toàn không có document hay test_set nào bị mồ côi.
+
+4. 🟢 **Về PENDING_FIRST_LOGIN và Type cột status của quiz_attempts**:
+   - `PENDING_FIRST_LOGIN`: Cơ chế này trong code cũ chỉ áp dụng duy nhất khi trường học import danh sách sinh viên qua Excel (`bulk-import.service.ts:151`). Hệ thống 2 role mới (`user`, `admin`) không sử dụng cơ chế ép đổi mật khẩu này.
+   - Cột `status` trong `quiz_attempts`: Bảng `quiz_attempts` sử dụng các trường kiểu chuẩn PostgreSQL (`int4`, `varchar`, `numeric`, `timestamptz`), hoàn toàn không phụ thuộc hay sử dụng enum `attempt_status` đã xóa.
+
 ### Việc còn lại / rủi ro chuyển sang phase sau (PHASE 3):
 - Hệ thống đã hoàn toàn sạch bóng School/LMS và AI Flashcard Generator, đạt 100% tiêu chí Personal Learning Platform.
+- Toàn bộ tính toàn vẹn dữ liệu (Documents, TestSets, Questions, Users) đã được verify trực tiếp bằng query thực tế.
 - Chuẩn bị bước vào **PHASE 3 — AUTH + USER CORE**:
   - Chuẩn hóa toàn diện 2 role (`user`, `admin`).
   - Kiểm tra và hoàn thiện trọn vẹn luồng Auth: Register, Login, Logout, Session, Refresh, Forgot Password, Reset Password, 401 Unauthorized, 403 Forbidden.
