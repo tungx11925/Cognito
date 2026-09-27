@@ -45,25 +45,31 @@ export class ParserService {
   /**
    * Fetch a document from a URL and parse it
    */
-  async parseFromUrl(url: string): Promise<string> {
+  async parseFromUrl(url: string, explicitMimetype?: string): Promise<string> {
     if (!url) return '';
     try {
-      const response = await axios.get(url, { responseType: 'arraybuffer' });
-      
-      // Attempt to determine type from extension
-      let mimetype = 'application/octet-stream';
-      if (url.endsWith('.pdf')) mimetype = 'application/pdf';
-      else if (url.endsWith('.docx')) mimetype = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      else if (url.endsWith('.txt')) mimetype = 'text/plain';
+      const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
+      const buffer = Buffer.from(response.data);
 
-      // If it's docx specifically which we handle well:
-      if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-         const data = await mammoth.extractRawText({ buffer: response.data });
-         return data.value;
+      let mimetype = explicitMimetype || 'application/octet-stream';
+      const cleanUrl = url.split('?')[0].toLowerCase();
+
+      if (mimetype === 'application/octet-stream') {
+        if (cleanUrl.endsWith('.pdf')) mimetype = 'application/pdf';
+        else if (cleanUrl.endsWith('.docx') || cleanUrl.endsWith('.doc')) mimetype = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        else if (cleanUrl.endsWith('.txt')) mimetype = 'text/plain';
+        else if (cleanUrl.endsWith('.xlsx') || cleanUrl.endsWith('.xls') || cleanUrl.endsWith('.csv')) mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
       }
-      
-      // Fallback
-      return await this.parseFromBuffer(response.data, mimetype);
+
+      // If docx specifically:
+      if (mimetype.includes('wordprocessingml') || mimetype.includes('msword') || cleanUrl.endsWith('.docx')) {
+        const data = await mammoth.extractRawText({ buffer });
+        if (data && data.value && data.value.trim().length > 0) {
+          return cleanVietnameseText(data.value);
+        }
+      }
+
+      return await this.parseFromBuffer(buffer, mimetype);
     } catch (error) {
       console.warn(`[ParserService] Failed to fetch and parse from URL: ${url}`, error);
       return '';

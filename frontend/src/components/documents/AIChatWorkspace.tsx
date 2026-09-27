@@ -12,6 +12,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import 'katex/dist/katex.min.css';
+import { preprocessMathContent } from '@/utils/math';
 
 interface Props {
   documentId: number;
@@ -35,11 +36,13 @@ interface Message {
 }
 
 const MarkdownRenderer = ({ content, isUser }: { content: string; isUser: boolean }) => {
+  const normalizedContent = preprocessMathContent(content);
+
   return (
     <div className={`text-[14px] leading-relaxed break-words overflow-hidden ${isUser ? 'text-white' : 'text-gray-800'}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex, rehypeRaw]}
+        rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }], rehypeRaw]}
         components={{
           h1: ({ node, ...props }) => (
             <h1 className={`text-xl font-bold mt-3 mb-2 pb-1 ${isUser ? 'text-white border-b border-white/20' : 'text-[#0D2B24] border-b border-gray-200'}`} {...props} />
@@ -109,7 +112,7 @@ const MarkdownRenderer = ({ content, isUser }: { content: string; isUser: boolea
           )
         }}
       >
-        {content}
+        {normalizedContent}
       </ReactMarkdown>
     </div>
   );

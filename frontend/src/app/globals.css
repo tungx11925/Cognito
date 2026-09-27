@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import 'katex/dist/katex.min.css';
 
 @tailwind base;
 @tailwind components;
@@ -142,7 +143,7 @@
   background: #94a3b8;
 }
 
-/* Grid Patterns for backgrounds */
+/* Grid & Dot Patterns for backgrounds */
 .grid-bg {
   background-size: 40px 40px;
   background-image: 
@@ -155,10 +156,37 @@
   background-size: 24px 24px;
 }
 
-/* DOCX Viewer Overrides */
+/* DOCX Viewer Styles */
 .docx-viewer { line-height: 1.7; color: #334155; }
 .docx-viewer p { margin-bottom: 1.25rem; }
-.docx-viewer h1 { font-size: 2rem; font-weight: 700; margin-bottom: 1.25rem; color: #0f172a; font-family: var(--font-outfit); }
-.docx-viewer h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem; color: #1e293b; font-family: var(--font-outfit); }
-.docx-wrapper { background-color: transparent !important; padding: 0 !important; }
-.docx-wrapper > section.docx { box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1) !important; border-radius: 12px; padding: 2rem !important; }
+.docx-viewer h1 { font-size: 2rem; font-weight: 700; margin-bottom: 1.25rem; color: #0f172a; font-family: 'Plus Jakarta Sans', var(--font-outfit), sans-serif; }
+.docx-viewer h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem; color: #1e293b; font-family: 'Plus Jakarta Sans', var(--font-outfit), sans-serif; }
+.docx-viewer h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.75rem; }
+.docx-viewer ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; }
+.docx-viewer ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 1rem; }
+.docx-viewer table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+.docx-viewer td, .docx-viewer th { border: 1px solid #e5e7eb; padding: 0.5rem; }
+.docx-viewer img { max-width: 100%; height: auto; }
+
+/* Docx Preview Container Override */
+.docx-wrapper { background-color: transparent !important; padding: 24px !important; }
+.docx-wrapper > section.docx { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1) !important; border-radius: 8px; }
+.docx-preview-custom { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Times New Roman', sans-serif !important; }
+
+/* KaTeX Global Font & Display Tweaks */
+.katex-display {
+  margin: 0.75em 0 !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 4px 0 !important;
+}
+.katex {
+  font-size: 1.05em;
+  text-rendering: auto;
+}
+
+/* Scrolling Marquee - GPU accelerated */
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}

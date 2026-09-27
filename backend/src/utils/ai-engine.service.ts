@@ -93,42 +93,85 @@ export async function generateQuestionsWithAI(
 }
 
 
-export async function generateMindmapWithAI(documentTitle: string, documentContent: string): Promise<string> {
-  const cleanContent = (documentContent || '').replace(/<[^>]*>?/gm, '').substring(0, 5000);
-  const prompt = `Bạn là một chuyên gia vẽ Sơ Đồ Tư Duy (Mindmap Expert). Hãy đọc tài liệu dưới đây và tổng hợp kiến thức thành một Sơ Đồ Tư Duy (Mindmap) theo cú pháp Mermaid.js CHUẨN TƯ DUY TỔNG HỢP.
+export async function generateMindmapWithAI(
+  documentTitle: string, 
+  documentContent: string,
+  meta?: { userId?: number; documentId?: number }
+): Promise<string> {
+  const cleanContent = (documentContent || '').replace(/<[^>]*>?/gm, '').substring(0, 8000);
+  const cleanTitle = (documentTitle || 'Tài Liệu')
+    .replace(/[()\[\]{}:"']/g, '')
+    .trim()
+    .substring(0, 50);
 
-TIÊU ĐỀ TÀI LIỆU: ${documentTitle}
+  const prompt = `Bạn là chuyên gia cố vấn học tập và kiến trúc sư tri thức. Hãy đọc kỹ tài liệu dưới đây và chuyển hóa toàn bộ kiến thức quan trọng thành một Sơ Đồ Tư Duy (Mindmap) chuẩn tư duy logic sâu sắc bằng cú pháp Mermaid.js.
+
+TIÊU ĐỀ TÀI LIỆU: ${cleanTitle}
 NỘI DUNG TÀI LIỆU:
 ${cleanContent}
 
-NGUYÊN TẮC THIẾT KẾ SƠ ĐỒ TƯ DUY (MINDMAP RULES):
-1. TUYỆT ĐỐI KHÔNG CHÉP NGUYÊN CÂU/ĐOẠN VĂN: Mỗi nút CHỈ DÙNG TỪ KHÓA SÚC TÍCH, THUẬT NGỮ, CÔNG THỨC KHÁI QUÁT (dưới 6 từ mỗi nút).
-2. CẤU TRÚC PHÂN NHÁNH ĐA CHỦ ĐỀ (BẮT BUỘC có 4 đến 6 nhánh chính Cấp 1 tỏa ra xung quanh):
-   - Nút gốc: root((${documentTitle.replace(/[()]/g, '')}))
-   - Nhánh Cấp 1: Các trụ cột kiến thức chính (Ví dụ: Định Nghĩa, Đồ Thị Parabol, Sự Biến Thiên, Phương Trình Bậc Hai, Dạng Bài Tập, Ứng Dụng Thực Tế...).
-   - Nhánh Cấp 2: Các khía cạnh cốt lõi / trường hợp / trục đối xứng / công thức.
-   - Nhánh Cấp 3: Từ khóa làm rõ, công thức chi tiết hoặc giá trị cụ thể.
-3. TỔNG HỢP KIẾN THỨC THÔNG MINH: Tự động hệ thống hóa và bổ sung các góc nhìn tư duy bài học đầy đủ, khoa học (Khái niệm, Đồ thị, Công thức, Các bước giải, Ứng dụng).
-4. QUY TẮC CÚ PHÁP MERMAID:
-   - Dòng đầu tiên: mindmap
-   - Dòng thứ hai: root((Tên chủ đề chính))
-   - Cấp 1 thụt lùi 2 khoảng trắng.
-   - Cấp 2 thụt lùi 4 khoảng trắng.
-   - Cấp 3 thụt lùi 6 khoảng trắng.
-   - TUYỆT ĐỐI KHÔNG dùng ký tự đặc biệt như ngoặc (), ngoặc vuông [], dấu kép "" trong tên các nút.
-   - CHỈ TRẢ VỀ DUY NHẤT MÃ MERMAID PURE (Không văn bản giải thích, KHÔNG bọc trong khối \`\`\`mermaid \`\`\`).`;
+NGUYÊN TẮC THIẾT KẾ SƠ ĐỒ TƯ DUY (MINDMAP):
+1. TRÍCH XUẤT ĐÚNG TRỌNG TÂM TÀI LIỆU:
+   - Nút gốc (root): Đặt tên theo chủ đề cốt lõi thực sự của tài liệu (ví dụ nếu tài liệu là dự án MOMI thì root((MOMI Chăm Sóc Mẹ và Bé)), nếu là bài toán thì root((Hàm Số Bậc Hai)). TUYỆT ĐỐI không dùng mã số ngẫu nhiên hoặc từ vô nghĩa.
+   - 4 đến 6 Nhánh Cấp 1: Phải là các trụ cột nội dung THỰC TẾ của tài liệu này (Ví dụ với đồ án/dự án: Bối Cảnh và Mục Tiêu, Đối Tượng Sử Dụng, Tính Năng Nổi Bật, Giải Pháp Công Nghệ, Giá Trị Mang Lại; với kiến thức bài học: Bản Chất Cốt Lõi, Cơ Chế Hoạt Động, Quy Trình Triển Khai, Tình Huống Thực Tế).
+   - Nhánh Cấp 2 & Cấp 3: Khắc họa chi tiết các thành phần, chức năng, luận điểm hoặc ví dụ thực tế được nêu trong tài liệu.
+2. TUYỆT ĐỐI CẤM (BỊ PHẠT NẾU VI PHẠM):
+   - KHÔNG dùng các từ nhãn sáo rỗng vô hồn như "Định Nghĩa", "Mô Hình", "Công Thức", "Bước 1", "Bước 2", "Lĩnh vực 1", "Lĩnh vực 2", "Đặc điểm", "Khái niệm". Mỗi nút bắt buộc phải chứa thông tin chuyên môn thực tế của tài liệu.
+   - Mỗi nút chỉ từ 2 đến 6 từ ngắn gọn, súc tích, mang tính từ khóa hoặc khái niệm rõ ràng.
+3. QUY TẮC CÚ PHÁP MERMAID BẮT BUỘC:
+   - Dòng 1: mindmap
+   - Dòng 2:   root((Tên Chủ Đề Chính))
+   - Cấp 1: thụt lề 4 khoảng trắng
+   - Cấp 2: thụt lề 6 khoảng trắng
+   - Cấp 3: thụt lề 8 khoảng trắng
+   - Tuyệt đối KHÔNG sử dụng các ký tự đặc biệt như: ngoặc đơn (), ngoặc vuông [], ngoặc nhọn {}, dấu hai chấm :, dấu kép ", dấu gạch chéo /, dấu & trong tên các nút nhánh con (vì sẽ làm sập cú pháp Mermaid).
+   - CHỈ TRẢ VỀ DUY NHẤT ĐOẠN MÃ MERMAID PURE (bắt đầu bằng từ khóa mindmap, không có bất kỳ lời mở đầu, giải thích hay markdown code fence).`;
 
   // Đi qua AIProviderAdapter (GroqAdapter → GeminiAdapter)
   const result = await aiProviderService.chat({
     messages: [{ role: 'user', content: prompt }],
-    temperature: 0.5,
+    temperature: 0.3,
     maxTokens: 2000,
     taskType: 'mindmap',
+    userId: meta?.userId,
+    documentId: meta?.documentId,
   });
   let raw = result.text;
   const idx = raw.indexOf('mindmap');
   if (idx !== -1) raw = raw.substring(idx);
-  return raw.replace(/```mermaid/gi, '').replace(/```/g, '').trim();
+  const stripped = raw.replace(/```mermaid/gi, '').replace(/```/g, '').trim();
+
+  // Normalize mindmap indentation and strip invalid syntax
+  const lines = stripped.split('\n');
+  const out: string[] = [];
+  let rootIndented = false;
+  let baseIndent = 0;
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+    if (trimmed.toLowerCase() === 'mindmap') {
+      out.push('mindmap');
+      continue;
+    }
+    if (!rootIndented && (trimmed.startsWith('root(') || trimmed.startsWith('root(('))) {
+      out.push('  ' + trimmed);
+      rootIndented = true;
+      baseIndent = rawLine.match(/^(\s*)/)?.[0].length || 0;
+      continue;
+    }
+
+    const curIndent = rawLine.match(/^(\s*)/)?.[0].length || 0;
+    let level = 1;
+    if (curIndent > baseIndent) {
+      level = 1 + Math.max(1, Math.round((curIndent - baseIndent) / 2));
+    }
+    let cleanText = trimmed.replace(/[()\[\]{}:\"']/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!cleanText) continue;
+    out.push(' '.repeat(2 + level * 2) + cleanText);
+  }
+
+  return out.length > 0 ? out.join('\n') : stripped;
 }
 
 export async function parseExamWithAI(documentContent: string, opts?: GenerateWithAIOptions): Promise<GeneratedQuestion[]> {

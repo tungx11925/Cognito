@@ -1,8 +1,15 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const DEFAULT_API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
 
-export const apiFetch = async (url: string, options?: RequestInit) => {
+export const apiFetch = async (endpoint: string, options?: RequestInit) => {
     try {
-        const res = await fetch(`${API_BASE_URL}${url}`, options);
+        const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+        const finalUrl = normalizedEndpoint.startsWith('/api/')
+            ? `${API_BASE_URL.replace(/\/api$/, '')}${normalizedEndpoint}`
+            : `${API_BASE_URL}${normalizedEndpoint}`;
+
+        console.log('>>> [apiFetch] calling:', finalUrl);
+        const res = await fetch(finalUrl, options);
         const contentType = res.headers.get("content-type");
         if (contentType && contentType.indexOf("application/json") !== -1) {
             return await res.json();

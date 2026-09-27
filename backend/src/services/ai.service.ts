@@ -9,7 +9,7 @@ export class AiService {
   /**
    * Chat with document (supports multi-image multimodal vision)
    */
-  async chatWithDocument(document: any, message: string, history: any[], images?: string[] | string) {
+  async chatWithDocument(document: any, message: string, history: any[], images?: string[] | string, userId?: number | null) {
     const docTitle = document ? document.title : 'Tài liệu học tập';
     const docDesc = document ? document.description : '';
     const docSolution = document ? document.solution_text : '';
@@ -66,7 +66,7 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
     if (imageParts.length > 0 && geminiApiKey && !geminiApiKey.includes('your_')) {
       try {
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+        const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
         const model = genAI.getGenerativeModel({ model: modelName });
         
         const promptText = `${systemPrompt}\n\nCâu hỏi/Yêu cầu của người dùng đối với các hình ảnh đính kèm: "${message || 'Hãy quan sát kỹ, phân tích, đối chiếu và giải đáp chi tiết tất cả các hình ảnh này.'}"`;
@@ -89,9 +89,11 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
       const result = await aiProviderService.chat({
         messages: apiMessages,
         temperature: 0.7,
-        maxTokens: 1024,
+        maxTokens: 4096,
         taskType: 'chat',
-        modelOverride: { groq: process.env.GROQ_CHAT_MODEL || 'groq/compound-mini' },
+        userId: userId ?? null,
+        documentId: document ? document.id : null,
+        modelOverride: { groq: process.env.GROQ_CHAT_MODEL || 'openai/gpt-oss-120b' },
       });
       reply = result.text;
       if (reply) return reply;
@@ -239,27 +241,58 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
     let docContent = content || '';
 
     if (documentId) {
-      const docResult = await db.query('SELECT title, description, solution_text, doc_url FROM documents WHERE id = $1', [documentId]);
+      const docResult = await db.query('SELECT title, description, solution_text, doc_url, file_type FROM documents WHERE id = $1', [documentId]);
       if (docResult.rows.length > 0) {
         const row = docResult.rows[0];
         docTitle = row.title || docTitle;
         docContent = row.solution_text || '';
 
-        // If solution_text is short or empty and doc_url exists, parse file from disk
-        if ((!docContent || docContent.length < 50) && row.doc_url) {
-          docContent = await parserService.parseFromLocalPath(row.doc_url);
+        // 1. If solution_text is short or empty, check document_chunks
+        if (!docContent || docContent.length < 50) {
+          try {
+            const chunksRes = await db.query(
+              'SELECT content FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index ASC LIMIT 25',
+              [documentId]
+            );
+            if (chunksRes.rows.length > 0) {
+              docContent = chunksRes.rows.map(r => r.content).join('\n\n');
+            }
+          } catch {}
         }
 
-        // Fallback to description if still empty
+        // 2. If still empty and doc_url exists, parse directly from Cloudinary URL or local file
+        if ((!docContent || docContent.length < 50) && row.doc_url) {
+          if (row.doc_url.startsWith('http://') || row.doc_url.startsWith('https://')) {
+            docContent = await parserService.parseFromUrl(row.doc_url, row.file_type);
+          } else {
+            docContent = await parserService.parseFromLocalPath(row.doc_url);
+          }
+        }
+
+        // 3. Fallback to description if still empty
         if (!docContent || docContent.trim().length === 0) {
           docContent = row.description || docTitle;
         }
 
-        // Derive title from first line if it's generic
-        if (docTitle.toLowerCase().includes('test') && docContent.trim().length > 0) {
-          const firstLine = docContent.split('\n')[0].replace(/^[#*\s\d.]+/g, '').trim();
-          if (firstLine && firstLine.length > 3 && firstLine.length < 50) {
-            docTitle = firstLine;
+        // 4. Cache extracted text into solution_text for fast re-use
+        if (docContent && docContent.length > 50 && (!row.solution_text || row.solution_text.length < 50)) {
+          db.query('UPDATE documents SET solution_text = $1 WHERE id = $2', [docContent.substring(0, 50000), documentId]).catch(() => {});
+        }
+
+        // 5. Derive smart title if generic or random filename
+        const isGenericTitle = 
+          docTitle.toLowerCase().includes('test') || 
+          /^[0-9a-z_]{10,}$/i.test(docTitle) || 
+          docTitle.startsWith('doc_');
+
+        if (isGenericTitle && docContent.trim().length > 0) {
+          const lines = docContent.split('\n').map(l => l.replace(/^[#*\s\d.-]+/g, '').trim()).filter(l => l.length > 3 && l.length < 80);
+          if (lines.length > 0) {
+            // Find first line that looks like a main title
+            const bestTitle = lines.find(l => !l.toLowerCase().includes('đề xuất') && !l.toLowerCase().includes('đồ án')) || lines[0];
+            if (bestTitle) {
+              docTitle = bestTitle;
+            }
           }
         }
       }

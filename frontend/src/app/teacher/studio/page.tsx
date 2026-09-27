@@ -181,12 +181,12 @@ export default function TeacherStudioPage() {
       if (title.trim()) formData.append("title", title.trim());
       if (subject.trim()) formData.append("subject", subject.trim());
 
-      toast.loading("AI đang phân tích tài liệu và tạo Slide Chapter...", { id: "upload_lecture_studio" });
+      toast.loading("Đang tải lên và chia tách các trang slide nguyên bản...", { id: "upload_lecture_studio" });
       const created = await uploadLecture(formData);
       toast.dismiss("upload_lecture_studio");
 
       if (created && created.id) {
-        toast.success("Đã tạo bộ Slide bài giảng thành công!");
+        toast.success("Đã tạo bộ Slide trình chiếu nguyên bản thành công!");
         setShowUploadModal(false);
         setFile(null);
         setTitle("");
@@ -628,9 +628,9 @@ export default function TeacherStudioPage() {
                   <Sparkles size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold">Tải lên Giáo trình / Slide</h3>
+                  <h3 className="text-base font-bold">Tải lên Giáo trình / Slide trình chiếu</h3>
                   <p className="text-xs" style={{ color: textSub }}>
-                    AI sẽ tự động tách các Chapter thành Slide trình chiếu chuẩn sư phạm
+                    Giữ nguyên bản 100% hình ảnh, bố cục và thiết kế gốc, tự động chia theo từng trang.
                   </p>
                 </div>
               </div>
@@ -692,7 +692,7 @@ export default function TeacherStudioPage() {
                   >
                     <input
                       type="file"
-                      accept=".pdf,.docx,.doc,.txt,.md"
+                      accept=".pdf,.pptx,.ppt,.docx,.doc,.txt,.png,.jpg,.jpeg"
                       onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
                       className="hidden"
                       disabled={uploading}
@@ -702,7 +702,7 @@ export default function TeacherStudioPage() {
                       {file ? file.name : "Bấm để chọn file hoặc kéo thả vào đây"}
                     </span>
                     <span className="text-[11px]" style={{ color: textSub }}>
-                      {file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : "Hỗ trợ PDF, Word (.docx) tối đa 25MB"}
+                      {file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : "Hỗ trợ PDF, PowerPoint (.pptx), Word (.docx), Ảnh tối đa 25MB"}
                     </span>
                   </label>
                 </div>
@@ -716,11 +716,11 @@ export default function TeacherStudioPage() {
                   >
                     {uploading ? (
                       <>
-                        <Loader2 size={16} className="animate-spin" /> AI đang bóc tách Slide & Chapter...
+                        <Loader2 size={16} className="animate-spin" /> Đang tải lên và tách từng trang slide...
                       </>
                     ) : (
                       <>
-                        <Sparkles size={16} /> Bắt đầu tạo Slide Trình chiếu
+                        <Sparkles size={16} /> Tải lên & Tạo Slide Trình chiếu Nguyên bản
                       </>
                     )}
                   </button>
