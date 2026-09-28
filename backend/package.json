@@ -5,6 +5,8 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "test:fast": "ts-node scripts/run-all-tests.ts --fast",
+    "test:live-ai": "ts-node scripts/run-all-tests.ts --live-ai",
     "test:all": "ts-node scripts/run-all-tests.ts",
     "migrate": "node-pg-migrate",
     "migrate:up": "node-pg-migrate up --no-check-order",

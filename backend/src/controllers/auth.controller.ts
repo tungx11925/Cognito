@@ -317,7 +317,7 @@ export const updateAvatar = async (req: any, res: Response) => {
 export const updateProfile = async (req: any, res: Response) => {
   try {
     const userId = req.user.id;
-    const { name, phone, education, address, privacy_setting, bio, headline } = req.body;
+    const { name, phone, education, address, privacy_setting, bio, headline, avatar_url } = req.body;
 
     const user = await authService.updateProfile(userId, {
       name: name,
@@ -327,6 +327,7 @@ export const updateProfile = async (req: any, res: Response) => {
       privacy_setting: privacy_setting,
       bio: bio !== undefined ? bio : null,
       headline: headline !== undefined ? headline : null,
+      avatar_url: avatar_url !== undefined ? avatar_url : null,
     });
 
     res.status(200).json({

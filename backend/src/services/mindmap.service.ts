@@ -7,6 +7,7 @@ export interface MindmapItem {
   document_id: number | null;
   title: string;
   mermaid_code: string;
+  source?: string;
   created_at: string | Date;
   updated_at: string | Date;
   document_title?: string | null;
@@ -38,8 +39,8 @@ export class MindmapService {
     }
 
     const result = await db.query(
-      `INSERT INTO mindmaps (user_id, document_id, title, mermaid_code, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `INSERT INTO mindmaps (user_id, document_id, title, mermaid_code, source, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'manual', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        RETURNING *`,
       [userId, document_id, title.trim() || 'Sơ đồ tư duy mới', mermaid_code.trim()]
     );

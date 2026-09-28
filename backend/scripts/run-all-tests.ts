@@ -5,26 +5,43 @@ interface PhaseTest {
   phase: string;
   name: string;
   script: string;
+  isLiveAi: boolean;
 }
 
-const TESTS: PhaseTest[] = [
-  { phase: 'Phase 4', name: 'Document Management & Processing Pipeline', script: 'scripts/test-phase4.ts' },
-  { phase: 'Phase 5', name: 'AI Chat with Documents & Mindmap Generation', script: 'scripts/test-phase5.ts' },
-  { phase: 'Phase 6', name: 'Question Generator & Bloom Taxonomy', script: 'scripts/test-phase6.ts' },
-  { phase: 'Phase 7', name: 'Exam & Question Bank Management', script: 'scripts/test-phase7.ts' },
-  { phase: 'Phase 8', name: 'Quiz / Test System & Anti-Cheat Grading', script: 'scripts/test-phase8.ts' },
-  { phase: 'Phase 9', name: 'Notes, Mindmaps & Flashcards Workspace', script: 'scripts/test-phase9.ts' },
+const ALL_TESTS: PhaseTest[] = [
+  { phase: 'Phase 3', name: 'Auth & User System (Profile, Avatar, Forgot/Reset)', script: 'scripts/test-phase3.ts', isLiveAi: false },
+  { phase: 'Phase 4', name: 'Document Management & Processing Pipeline', script: 'scripts/test-phase4.ts', isLiveAi: false },
+  { phase: 'Phase 5', name: 'AI Chat with Documents & Mindmap Generation', script: 'scripts/test-phase5.ts', isLiveAi: true },
+  { phase: 'Phase 6', name: 'Question Generator & Bloom Taxonomy', script: 'scripts/test-phase6.ts', isLiveAi: true },
+  { phase: 'Phase 7', name: 'Exam & Question Bank Management', script: 'scripts/test-phase7.ts', isLiveAi: false },
+  { phase: 'Phase 8', name: 'Quiz / Test System & Anti-Cheat Grading', script: 'scripts/test-phase8.ts', isLiveAi: false },
+  { phase: 'Phase 9', name: 'Notes, Mindmaps & Flashcards Workspace', script: 'scripts/test-phase9.ts', isLiveAi: false },
 ];
 
-async function runAllTests() {
+async function runRegression() {
+  const args = process.argv.slice(2);
+  const isFastMode = args.includes('--fast');
+  const isLiveAiMode = args.includes('--live-ai');
+
+  let selectedTests = ALL_TESTS;
+  let modeTitle = 'COMPREHENSIVE FULL REGRESSION (ALL PHASES)';
+
+  if (isFastMode) {
+    selectedTests = ALL_TESTS.filter(t => !t.isLiveAi);
+    modeTitle = 'FAST REGRESSION SUITE (NO LIVE AI — LOCAL & FAST)';
+  } else if (isLiveAiMode) {
+    selectedTests = ALL_TESTS.filter(t => t.isLiveAi);
+    modeTitle = 'LIVE AI SUITE (GEMINI / GROQ LLM MODULES)';
+  }
+
   console.log('========================================================================');
-  console.log('       COGNITO COMPREHENSIVE REGRESSION SUITE (ALL PHASES)              ');
+  console.log(`       COGNITO TEST RUNNER: ${modeTitle}`);
   console.log('========================================================================\n');
 
   const results: { phase: string; name: string; status: 'PASS' | 'FAIL'; durationMs: number; error?: string }[] = [];
   let allPassed = true;
 
-  for (const t of TESTS) {
+  for (const t of selectedTests) {
     console.log(`\n>>> [STARTING] ${t.phase}: ${t.name} (${t.script})...`);
     const startTime = Date.now();
 
@@ -49,12 +66,11 @@ async function runAllTests() {
         error: `Exited with code ${proc.status}`,
       });
       allPassed = false;
-      // Continue running subsequent tests to see the complete regression picture
     }
   }
 
   console.log('\n========================================================================');
-  console.log('                   FULL REGRESSION REPORT SUMMARY                       ');
+  console.log(`                   REGRESSION REPORT SUMMARY: ${isFastMode ? 'FAST' : isLiveAiMode ? 'LIVE-AI' : 'ALL'}`);
   console.log('========================================================================');
   console.log('Phase   | Status | Duration | Module Name');
   console.log('--------+--------+----------+-------------------------------------------');
@@ -67,12 +83,12 @@ async function runAllTests() {
   console.log('========================================================================');
 
   if (allPassed) {
-    console.log('\x1b[32m🎉 ALL SUITES PASSED! Zero regression across all implemented phases.\x1b[0m\n');
+    console.log(`\x1b[32m🎉 ALL SELECTED SUITES PASSED! Zero regression detected.\x1b[0m\n`);
     process.exit(0);
   } else {
-    console.error('\x1b[31m❌ REGRESSION DETECTED! Some test suites failed.\x1b[0m\n');
+    console.error(`\x1b[31m❌ REGRESSION DETECTED! Some test suites failed.\x1b[0m\n`);
     process.exit(1);
   }
 }
 
-runAllTests();
+runRegression();

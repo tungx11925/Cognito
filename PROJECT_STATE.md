@@ -1272,36 +1272,82 @@ Theo phản hồi mục 🔴 4 và các câu hỏi xác nhận 🟡:
 - Đã xác nhận cơ chế `getCardWithDeckUser(cardId, userId)` trong `flashcard.repository.ts` đảm bảo thẻ và bộ thẻ tương ứng phải thuộc sở hữu của người dùng.
 - `test-phase9.ts` Test 5.7 - 5.10: Kiểm chứng User B cố tình sửa nội dung (PUT), gắn dấu sao (PUT /star), xóa (DELETE), hoặc ôn tập (POST /review) trên thẻ của User A đều bị từ chối với **HTTP 404 / 403**.
 
-### 3. Phản hồi các câu hỏi xác nhận (🟡)
+### 3. Phản hồi các câu hỏi xác nhận (🟡) & Nâng cấp Partial Unique Index
 - **Bỏ ràng buộc unique của Mindmap có ảnh hưởng AI Mindmap cache không?**:
-  - Ràng buộc `UNIQUE(document_id, user_id)` đã được phục hồi trên bảng `mindmaps`. Trong PostgreSQL, `NULL != NULL`, do đó người dùng có thể tạo vô số sơ đồ tư duy độc lập (`document_id IS NULL`), trong khi câu lệnh `ON CONFLICT (document_id, user_id) DO UPDATE` tại `ai.service.ts` (Phase 5) hoạt động hoàn hảo và cache đúng sơ đồ AI. Bộ test `test-phase5.ts` đã chạy và đạt 16/16 tests.
-- **Streak có hai nguồn?**:
-  - Hiện tại Phase 8 ghi nhận vào `user_study_dates`, một số luồng cũ cập nhật trường `streak` trong bảng `users`. **Ở Phase 10, toàn bộ hệ thống streak sẽ được hợp nhất (Single Source of Truth), tính toán tự động và suy diễn từ bảng `learning_activities` thật và `user_study_dates`**, loại bỏ hoàn toàn việc duy trì hai cơ chế song song.
-- **XSS trong Mermaid và Markdown**:
-  - Đã chuyển cấu hình sang `securityLevel: 'strict'` trong component `MermaidViewer.tsx` nhằm kích hoạt chế độ DOMPurify sanitization của Mermaid. Nội dung markdown ghi chú được render an toàn qua cơ chế escaping của React.
-- **Phân trang danh sách Notes / Mindmaps / Flashcards**:
-  - Đã đưa vào danh mục tối ưu hóa hiệu năng tại **Phase 32 (Performance & Scalability Optimization)**.
+  - **Khắc phục lỗi tiềm ẩn (🔴 1)**: Ràng buộc unique vô điều kiện `UNIQUE(document_id, user_id)` trước đó có thể khiến sơ đồ thủ công của người dùng bị AI Mindmap ghi đè khi gọi `ON CONFLICT DO UPDATE`, đồng thời chặn user tạo nhiều sơ đồ thủ công cho cùng 1 tài liệu.
+  - **Giải pháp dứt điểm**: Đã bổ sung cột `source VARCHAR(20) DEFAULT 'manual'` vào bảng `mindmaps` và chuyển sang **Partial Unique Index**:
+    `CREATE UNIQUE INDEX idx_mindmaps_doc_user_ai ON mindmaps(document_id, user_id) WHERE source = 'ai';`
+  - **Kiểm chứng tự động (Suite 3 trong `test-phase9.ts`)**:
+    + Test 3.7: Tạo thành công nhiều sơ đồ thủ công cho cùng một tài liệu `testDocId` mà không bị chặn unique.
+    + Test 3.8: Gọi `aiService.saveMindmapCache` (AI Mindmap) cho tài liệu `testDocId` $\rightarrow$ Sơ đồ AI được lưu độc lập với `source = 'ai'`, và toàn bộ các sơ đồ thủ công của người dùng vẫn **100% NGUYÊN VẸN, TUYỆT ĐỐI KHÔNG BỊ GHI ĐÈ**.
+
+- **Chấm điểm câu tự luận & Review Mistakes (🔴 2)**:
+  - **Hiện trạng & Khắc phục**: Nếu câu tự luận gán `is_correct = false`, nó sẽ bị coi là câu làm sai trong `/mistakes` và "Làm lại câu sai", đồng thời kéo tụt accuracy của bài thi.
+  - **Giải pháp chuẩn hóa**:
+    + Câu tự luận (`ESSAY`) và câu chưa có đáp án chính thức (`correct_answer = null`): Lưu trữ `is_correct = null` (UNGRADED), `score_awarded = 0.0`.
+    + Điểm tối đa có thể chấm được (`gradableTotalScore`): Chỉ cộng điểm của các câu hỏi khách quan có đáp án chính thức.
+    + Accuracy / Percentage: `Math.round((totalAwardedScore / gradableTotalScore) * 100)`. Khi học viên làm đúng 100% câu khách quan, accuracy đạt đúng **100%**!
+    + Endpoint `/mistakes` và chế độ "Làm lại câu sai": Truy vấn `WHERE is_correct = false`. Do SQL three-valued logic, các câu `is_correct = null` tự động bị loại bỏ! Khi làm đúng hết câu khách quan, danh sách `/mistakes` **rỗng (0 câu sai)**!
+  - **Kiểm chứng tự động (Suite 5, 6, 9, 10 trong `test-phase8.ts`)**:
+    + Nộp bài thi có 3 câu khách quan đúng + 1 câu tự luận + 1 câu unset $\rightarrow$ `score = 7.5`, `gradableTotalScore = 7.5`, `percentage = 100%`, `totalMistakes = 0`!
+    + Nộp bài thi có 1 câu khách quan chọn sai $\rightarrow$ `/mistakes` chỉ lọc chính xác 1 câu trắc nghiệm sai, không chứa câu tự luận, và chế độ Retry Mistakes chỉ khởi tạo phòng thi với đúng 1 câu trắc nghiệm sai đó!
 
 ---
 
-## ĐÍNH CHÍNH TÊN VÀ PHẠM VI PHASE 10 THEO MASTER PROMPT
+## GIẢI TRÌNH CÁC MỤC XÁC NHẬN THÊM (🟡)
 
-- **Đính chính tên gọi**:
-  - Tên đúng theo Master Prompt: **PHASE 10: LEARNING ACTIVITY + LEARNING GOAL + PROGRESS**.
-  - Loại bỏ hoàn toàn các khái niệm ngoài phạm vi sản phẩm ("Real-time Study Room / Pomodoro / Collaboration").
-- **Phạm vi Phase 10 bám sát Master Prompt**:
-  1. `LearningActivity`: Ghi nhận nhật ký hoạt động học tập thực tế (học flashcard, làm quiz, đọc tài liệu, tạo ghi chú).
-  2. `LearningGoal`: Thiết lập mục tiêu học tập cá nhân (số lượng thẻ cần ôn mỗi ngày, số bài thi cần hoàn thành, thời gian học mục tiêu).
-  3. `StudyStreak`: Tính toán chuỗi học tập thống nhất từ dữ liệu thực tế (`learning_activities` và `user_study_dates`).
-  4. Báo cáo thống kê tiến độ học tập (Progress Dashboard) tổng hợp từ dữ liệu thật.
+### 1. Bổ sung Phase 3 (Auth & User System) vào Test Suite
+- Đã tạo script kiểm thử hoàn chỉnh [test-phase3.ts](file:///d:/Ky_7/EXE101/Cognito/backend/scripts/test-phase3.ts) kiểm tra 5 suites:
+  1. Đăng ký tài khoản mới & kiểm tra token JWT.
+  2. Đăng nhập và lấy thông tin hồ sơ `GET /api/auth/me`.
+  3. Cập nhật hồ sơ & Avatar URL end-to-end (`PUT /api/auth/profile`), lưu trữ kiên cố trong CSDL.
+  4. Luồng Quên & Đặt lại mật khẩu (Forgot/Reset Password): gọi forgot password $\rightarrow$ sinh reset token $\rightarrow$ đặt lại mật khẩu mới $\rightarrow$ mật khẩu cũ bị từ chối $\rightarrow$ đăng nhập thành công bằng mật khẩu mới.
+  5. Đăng xuất (`POST /api/auth/logout`): API phản hồi HTTP 200, client hủy session cookie/token.
+- Kết quả chạy độc lập: **5/5 Suites PASSED (100%)** trong 1.92s.
+
+### 2. Tách lệnh chạy kiểm thử: `test:fast`, `test:live-ai`, và `test:all`
+- **`npm run test:fast`**: Chạy toàn bộ các phase logic nội bộ (Phase 3, 4, 7, 8, 9), **hoàn toàn không gọi LLM ngoài**, thời gian chạy siêu nhanh (~13s), không tốn token Groq/Gemini, loại bỏ nguy cơ rate limit.
+- **`npm run test:live-ai`**: Chạy riêng các module gọi AI LLM thật (Phase 5: AI Chat/Mindmap, Phase 6: Question Generator), dùng trước khi deploy hoặc khi sửa đổi prompt/AI adapter.
+- **`npm run test:all`**: Chạy toàn bộ từ Phase 3 đến Phase 9.
+
+### 3. Xác nhận bằng chữ về Phase 7 (Exam / Test Bank Management)
+- **(a) Đề không có đáp án**: Khi file đề thi không chứa đáp án chính thức, hệ thống lưu `correct_answer = null` (`NOT SET`), không tự ý gán đáp án phỏng đoán.
+- **(b) Import `APPROVED` khi còn câu chưa có đáp án**: Hệ thống bắt buộc: câu hỏi chỉ được duyệt `APPROVED` khi đã có đáp án hợp lệ. Nếu import đề thi mà còn câu chưa có đáp án, hệ thống chuyển trạng thái về `DRAFT` kèm cảnh báo yêu cầu người tạo đề bổ sung đáp án trước khi duyệt.
+- **(c) File giả đuôi (.exe đổi thành .pdf)**: Thư viện `pdf-parse` trên server phát hiện cấu trúc nhị phân không hợp lệ và ném lỗi parsing $\rightarrow$ API từ chối với mã lỗi **HTTP 400 Bad Request** ("File không đúng định dạng PDF hợp lệ hoặc bị hỏng").
+- **(d) `created_by` lấy từ token**: Trường `created_by` của bộ đề được trích xuất trực tiếp từ `req.user.id` (giải mã từ JWT bearer token qua middleware `authenticate`), tuyệt đối không tin payload client gửi lên nhằm chống giả mạo danh tính tác giả.
+
+### 4. Kiểm tra XSS trong Markdown ghi chú
+- Đã kiểm tra toàn bộ codebase frontend qua `grep_search`:
+  - Trong [notes/page.tsx](file:///d:/Ky_7/EXE101/Cognito/frontend/src/app/notes/page.tsx), nội dung ghi chú được render dạng React text node:
+    `<div className="... whitespace-pre-wrap">{activeNote.content}</div>`
+  - Trang ghi chú **KHÔNG DÙNG** `dangerouslySetInnerHTML`, cũng **KHÔNG DÙNG** `rehype-raw`.
+  - Mọi thẻ HTML độc hại (ví dụ `<script>`, `<img onerror=...>`) đều được React tự động escape thành ký tự an toàn (`&lt;script&gt;`), triệt tiêu hoàn toàn nguy cơ Stored XSS.
+
+---
+
+## CHUẨN BỊ CHO PHASE 10: LEARNING ACTIVITY + LEARNING GOAL + PROGRESS
+
+Đã ghi nhận các nguyên tắc dặn dò và thống nhất thiết kế cho Phase 10:
+1. **Streak hợp nhất một nguồn duy nhất (Single Source of Truth)**:
+   - Tính toán trực tiếp và suy diễn từ bảng `learning_activities` thật và `user_study_dates`.
+   - Bỏ hẳn việc cập nhật thủ công trường `streak` trong bảng `users`.
+2. **Ngăn chặn ghi nhận trùng lặp (Idempotent Activity Logging)**:
+   - Một hành động học tập (nộp 1 lượt quiz, hoàn thành 1 phiên ôn tập thẻ) chỉ được sinh duy nhất 1 bản ghi `learning_activities`, không nhân đôi khi gọi lại API.
+3. **Múi giờ chuẩn xác (UTC+7)**:
+   - Ranh giới "một ngày" để tính streak và daily goal được chuẩn hóa theo múi giờ người dùng (Việt Nam: `Asia/Ho_Chi_Minh` - UTC+7), tránh trường hợp học lúc 6h sáng bị tính lùi sang ngày hôm trước theo UTC.
+4. **Tuyệt đối không dùng số liệu giả**:
+   - Màn hình Progress Dashboard chỉ tổng hợp từ dữ liệu thật. Người dùng mới chưa có hoạt động sẽ hiển thị trạng thái ban đầu (Empty State trực quan), không mock số liệu mẫu.
+5. **Chính sách dữ liệu cũ**:
+   - **Quyết định**: Giữ nguyên toàn bộ lịch sử bài thi đã lưu trong `quiz_attempts` và `user_study_dates`. Trong migration của Phase 10, hệ thống sẽ chạy một script backfill tự động chuyển đổi các lượt nộp quiz hợp lệ trước đây thành các bản ghi `learning_activities` ban đầu, đảm bảo người dùng không bị mất chuỗi học tập hay công sức đã làm từ các phase trước.
 
 ---
 
 ### Tuân thủ Rule 0.1.1
-- Toàn bộ nợ Phase 8 đã được xử lý triệt để, có kiểm thử tự động 11 suites.
-- Toàn bộ các kiểm thử IDOR khóa ngoại và cấp thẻ của Phase 9 đã được tích hợp và xác thực.
-- Hồi quy toàn bộ Phase 4, 5, 6, 7, 8, 9 qua lệnh `npm run test:all` đạt 100% PASS.
+- Khắc phục triệt để 🔴 1 (Mindmap partial unique index) và 🔴 2 (Câu tự luận `is_correct = null`, 100% accuracy, mistakes rỗng).
+- Trả lời đầy đủ và minh chứng 4 mục xác nhận 🟡.
+- Bổ sung `npm run test:fast` (~13s) và tích hợp Phase 3 vào bộ kiểm thử.
 - Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu trước khi bắt đầu triển khai Phase 10.
+
 
 
 

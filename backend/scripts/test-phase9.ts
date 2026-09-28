@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { db } from '../src/db';
+import { aiService } from '../src/services/ai.service';
 
 const API_BASE = 'http://127.0.0.1:5000/api';
 
@@ -338,7 +339,52 @@ async function runPhase9Tests() {
     const delMm = await axios.delete(`${API_BASE}/mindmaps/${standaloneMindmapId}`, { headers: headersA });
     assert(delMm.status === 200, '3.6 Xóa sơ đồ tư duy thành công (HTTP 200)');
     const checkMmDel = await db.query('SELECT * FROM mindmaps WHERE id = $1', [standaloneMindmapId]);
-    assert(checkMmDel.rows.length === 0, '3.6 Sơ đồ tư duy đã thực sự được xóa khỏi CSDL\n');
+    assert(checkMmDel.rows.length === 0, '3.6 Sơ đồ tư duy đã thực sự được xóa khỏi CSDL');
+
+    // 3.7 Cho phép tạo nhiều sơ đồ thủ công cho cùng một tài liệu (Tính năng Phase 9)
+    const createMm3 = await axios.post(
+      `${API_BASE}/mindmaps`,
+      {
+        title: 'Sơ đồ phân nhánh Giải tích 1 (Bản chi tiết 2)',
+        mermaid_code: `mindmap\n  root((Giải tích 1 V2))\n    Tích phân suy rộng\n    Chuỗi số`,
+        document_id: testDocId,
+      },
+      { headers: headersA }
+    );
+    assert(createMm3.status === 201, '3.7 Tạo sơ đồ thủ công thứ 2 cho cùng một tài liệu thành công (không bị chặn unique)');
+    const manualMm2Id = createMm3.data.mindmap.id;
+
+    // 3.8 Gọi AI Mindmap cache cho cùng tài liệu và xác nhận KHÔNG GHI ĐÈ sơ đồ thủ công
+    await aiService.saveMindmapCache(
+      testDocId!,
+      testUserAId!,
+      'mindmap\n  root((AI Sơ đồ tự động))\n    MachineLearning'
+    );
+
+    // Kiểm tra DB: Sơ đồ thủ công 1 (attachedMindmapId) và sơ đồ thủ công 2 (manualMm2Id) vẫn nguyên vẹn
+    const manual1Check = await db.query('SELECT * FROM mindmaps WHERE id = $1', [attachedMindmapId]);
+    assert(manual1Check.rows.length === 1 && manual1Check.rows[0].source === 'manual', '3.8 Sơ đồ thủ công 1 vẫn tồn tại nguyên vẹn sau khi gọi AI Mindmap');
+    assert(manual1Check.rows[0].title.includes('Giải tích 1'), '3.8 Tiêu đề sơ đồ thủ công 1 không bị thay đổi');
+
+    const manual2Check = await db.query('SELECT * FROM mindmaps WHERE id = $1', [manualMm2Id]);
+    assert(manual2Check.rows.length === 1 && manual2Check.rows[0].source === 'manual', '3.8 Sơ đồ thủ công 2 vẫn tồn tại nguyên vẹn');
+
+    // Kiểm tra sơ đồ AI được lưu với source = 'ai'
+    const aiMindmapCheck = await aiService.getMindmapCache(testDocId!, testUserAId!);
+    assert(aiMindmapCheck && aiMindmapCheck.source === 'ai', '3.8 Sơ đồ AI được lưu riêng biệt với source = "ai"');
+    assert(aiMindmapCheck.mermaid_code.includes('MachineLearning'), '3.8 Nội dung sơ đồ AI chính xác');
+
+    // Gọi lại AI Mindmap lần 2 với code mới -> Chỉ cập nhật bản ghi AI, không ảnh hưởng sơ đồ thủ công
+    await aiService.saveMindmapCache(
+      testDocId!,
+      testUserAId!,
+      'mindmap\n  root((AI Sơ đồ cập nhật))\n    DeepLearning'
+    );
+    const aiMindmapUpdateCheck = await aiService.getMindmapCache(testDocId!, testUserAId!);
+    assert(aiMindmapUpdateCheck.mermaid_code.includes('DeepLearning'), '3.8 Cập nhật AI cache thành công qua ON CONFLICT partial index');
+
+    const manual1PostCheck = await db.query('SELECT * FROM mindmaps WHERE id = $1', [attachedMindmapId]);
+    assert(manual1PostCheck.rows[0].mermaid_code.includes('Đạo hàm'), '3.8 Sơ đồ thủ công 1 TUYỆT ĐỐI KHÔNG bị ghi đè sau khi cập nhật AI cache\n');
 
     // ─────────────────────────────────────────────────────────────
     // SUITE 4: Mindmap Access Control & Anti-IDOR Security

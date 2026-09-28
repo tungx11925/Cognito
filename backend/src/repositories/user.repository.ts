@@ -64,8 +64,28 @@ export class UserRepository {
   async updateProfile(id: number, data: any, client?: PoolClient) {
     const q = client || db;
     const result = await q.query(
-      'UPDATE users SET name = $1, phone = $2, education = $3, address = $4, privacy_setting = $5, bio = COALESCE($7, bio), headline = COALESCE($8, headline) WHERE id = $6 RETURNING id, email, name, phone, education, address, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role, is_premium, premium_until, bio, headline',
-      [data.name, data.phone, data.education, data.address, data.privacy_setting, id, data.bio || null, data.headline || null]
+      `UPDATE users 
+       SET name = $1, 
+           phone = $2, 
+           education = $3, 
+           address = $4, 
+           privacy_setting = $5, 
+           bio = COALESCE($7, bio), 
+           headline = COALESCE($8, headline),
+           avatar_url = COALESCE($9, avatar_url)
+       WHERE id = $6 
+       RETURNING id, email, name, phone, education, address, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role, is_premium, premium_until, bio, headline`,
+      [
+        data.name, 
+        data.phone, 
+        data.education, 
+        data.address, 
+        data.privacy_setting, 
+        id, 
+        data.bio !== undefined ? data.bio : null, 
+        data.headline !== undefined ? data.headline : null,
+        data.avatar_url !== undefined ? data.avatar_url : null
+      ]
     );
     return result.rows[0];
   }

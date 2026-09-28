@@ -367,14 +367,14 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
   }
 
   /**
-   * Save mindmap cache
+   * Save mindmap cache (uses source = 'ai' and partial unique index)
    */
   async saveMindmapCache(documentId: number, userId: number, mermaidCode: string) {
     if (documentId) {
       await db.query(
-        `INSERT INTO mindmaps (document_id, user_id, mermaid_code)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (document_id, user_id)
+        `INSERT INTO mindmaps (document_id, user_id, mermaid_code, source, title)
+         VALUES ($1, $2, $3, 'ai', 'Sơ đồ tư duy AI')
+         ON CONFLICT (document_id, user_id) WHERE source = 'ai'
          DO UPDATE SET mermaid_code = EXCLUDED.mermaid_code, updated_at = CURRENT_TIMESTAMP`,
         [documentId, userId, mermaidCode]
       );
@@ -386,7 +386,7 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
    */
   async getMindmapCache(documentId: number, userId: number) {
     const cached = await db.query(
-      'SELECT * FROM mindmaps WHERE document_id = $1 AND user_id = $2',
+      "SELECT * FROM mindmaps WHERE document_id = $1 AND user_id = $2 AND source = 'ai'",
       [documentId, userId]
     );
     return cached.rows.length > 0 ? cached.rows[0] : null;

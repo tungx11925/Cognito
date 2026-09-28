@@ -190,13 +190,14 @@ export class QuizService {
 
       let totalAwardedScore = 0;
       let correctCount = 0;
+      let gradableTotalScore = 0;
       const detailedAnswers: any[] = [];
 
       // 3. Duyệt và chấm điểm từng câu hỏi
       for (const [qId, q] of questionMap.entries()) {
         const uAns = answerMap.get(qId);
         const qScore = Number(q.score) || 1.0;
-        let isCorrect = false;
+        let isCorrect: boolean | null = false;
 
         // Trích xuất đáp án chuẩn
         let targetAns: any = q.correct_answer;
@@ -208,12 +209,21 @@ export class QuizService {
           }
         }
 
-        if (uAns !== undefined && uAns !== null && uAns !== '') {
-          if (!targetAns) {
-            // Câu hỏi không có đáp án chính thức (Phase 7 NOT SET)
-            // Không tính đúng/sai và không cộng điểm
-            isCorrect = false;
-          } else if (q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') {
+        const isGradable = Boolean(targetAns && q.type !== 'ESSAY');
+        if (isGradable) {
+          gradableTotalScore += qScore;
+        }
+
+        if (!targetAns) {
+          // Câu hỏi không có đáp án chính thức (Phase 7 NOT SET)
+          // Đánh dấu is_correct = null (UNGRADED), không tính đúng/sai và không cộng điểm
+          isCorrect = null;
+        } else if (q.type === 'ESSAY') {
+          // Câu tự luận (ESSAY): Tuyệt đối KHÔNG tự động chấm điểm qua độ dài chuỗi (tránh điểm ảo cho nội dung vô nghĩa)
+          // Đánh dấu is_correct = null (UNGRADED), điểm awarded = 0. Cung cấp câu trả lời của người dùng và đáp án mẫu để tự đối chiếu
+          isCorrect = null;
+        } else if (uAns !== undefined && uAns !== null && uAns !== '') {
+          if (q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') {
             const cleanUser = String(uAns).trim().toUpperCase();
             const cleanTarget = String(targetAns).trim().toUpperCase();
             // Chuẩn hóa Đúng/Sai
@@ -227,20 +237,19 @@ export class QuizService {
             } else {
               isCorrect = String(targetAns).trim().toLowerCase() === cleanUser;
             }
-          } else if (q.type === 'ESSAY') {
-            // Câu tự luận (ESSAY): Tuyệt đối KHÔNG tự động chấm điểm qua độ dài chuỗi (tránh điểm ảo cho nội dung vô nghĩa)
-            // Điểm awarded = 0, is_correct = false. Cung cấp câu trả lời của người dùng và đáp án mẫu để tự đối chiếu
-            isCorrect = false;
           }
+        } else {
+          // Bỏ trống câu hỏi khách quan
+          isCorrect = false;
         }
 
-        const scoreAwarded = isCorrect ? qScore : 0;
-        if (isCorrect) {
+        const scoreAwarded = isCorrect === true ? qScore : 0;
+        if (isCorrect === true) {
           correctCount++;
           totalAwardedScore += scoreAwarded;
         }
 
-        // Lưu câu trả lời vào quiz_attempt_answers
+        // Lưu câu trả lời vào quiz_attempt_answers (is_correct có thể là null với câu UNGRADED)
         const ansInsert = await client.query(
           `INSERT INTO quiz_attempt_answers (attempt_id, question_id, user_answer, is_correct, score_awarded, explanation)
            VALUES ($1, $2, $3, $4, $5, $6)
@@ -310,7 +319,8 @@ export class QuizService {
 
       await client.query('COMMIT');
 
-      const maxPossibleScore = Number(finalAttempt.total_score) || 1;
+      // Mẫu số chuẩn để tính tỷ lệ chính xác (percentage): Chỉ tính trên tổng điểm các câu hỏi khách quan có thể chấm được
+      const maxPossibleScore = gradableTotalScore > 0 ? gradableTotalScore : (Number(finalAttempt.total_score) || 1);
       const percentage = Math.round((totalAwardedScore / maxPossibleScore) * 100);
 
       return {
@@ -320,6 +330,7 @@ export class QuizService {
           testSetName: attempt.test_set_name,
           score: Number(finalAttempt.score),
           totalScore: Number(finalAttempt.total_score),
+          gradableTotalScore,
           percentage,
           correctCount: finalAttempt.correct_count,
           totalQuestions: finalAttempt.total_questions,
@@ -376,7 +387,13 @@ export class QuizService {
       [attemptId]
     );
 
-    const maxScore = Number(attempt.total_score) || 1;
+    let gradableScore = 0;
+    for (const ans of ansRes.rows) {
+      if (ans.question_type !== 'ESSAY' && ans.question_correct_answer) {
+        gradableScore += Number(ans.question_max_score) || 0;
+      }
+    }
+    const maxScore = gradableScore > 0 ? gradableScore : (Number(attempt.total_score) || 1);
     const percentage = Math.round((Number(attempt.score) / maxScore) * 100);
 
     return {
@@ -386,6 +403,7 @@ export class QuizService {
         testSetName: attempt.test_set_name,
         score: Number(attempt.score),
         totalScore: Number(attempt.total_score),
+        gradableTotalScore: gradableScore,
         percentage,
         correctCount: attempt.correct_count,
         totalQuestions: attempt.total_questions,

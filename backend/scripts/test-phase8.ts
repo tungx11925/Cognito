@@ -327,13 +327,15 @@ async function runPhase8Tests() {
 
     assert(submitRes1.status === 200, 'POST /submit trả về HTTP 200 OK');
 
-    // KIỂM TRA ĐẶC TẢ: Tự luận vô nghĩa dài TUYỆT ĐỐI KHÔNG được cộng điểm
+    // KIỂM TRA ĐẶC TẢ: Tự luận vô nghĩa dài TUYỆT ĐỐI KHÔNG được cộng điểm và có is_correct = null (UNGRADED)
     const essayAns = submitRes1.data.answers.find((a: any) => a.question_id === q4Id);
-    assert(essayAns && essayAns.is_correct === false, 'Câu tự luận vô nghĩa KHÔNG được tính là đúng (is_correct = false)');
-    assert(essayAns && Number(essayAns.score_awarded) === 0, 'Câu tự luận vô nghĩa được chấm 0.0 điểm (score_awarded = 0)');
+    assert(essayAns && essayAns.is_correct === null, 'Câu tự luận có is_correct = null (UNGRADED, không gắn cờ sai)');
+    assert(essayAns && Number(essayAns.score_awarded) === 0, 'Câu tự luận được chấm 0.0 điểm tự động (score_awarded = 0)');
 
-    // Tổng điểm tự động awarded đúng bằng 7.5 (chỉ 3 câu trắc nghiệm/khách quan được cộng)
-    assert(Number(submitRes1.data.attempt.score) === 7.5, 'Tổng điểm đạt 7.5/12.5 (3 câu khách quan đúng x 2.5đ, câu tự luận 0đ)');
+    // Tổng điểm tự động awarded đúng bằng 7.5 / 7.5 gradable (100% accuracy phần khách quan!)
+    assert(Number(submitRes1.data.attempt.score) === 7.5, 'Tổng điểm đạt 7.5 (3 câu khách quan đúng x 2.5đ, câu tự luận 0đ)');
+    assert(Number(submitRes1.data.attempt.gradableTotalScore) === 7.5, 'gradableTotalScore tính đúng 7.5 điểm (loại trừ câu tự luận và unset)');
+    assert(submitRes1.data.attempt.percentage === 100, 'Tỷ lệ chính xác khách quan đạt 100% (7.5/7.5), không bị kéo tụt bởi câu tự luận!');
     assert(submitRes1.data.attempt.correctCount === 3, 'Số câu đúng chính xác là 3 câu khách quan');
     assert(submitRes1.data.attempt.status === 'SUBMITTED', 'Trạng thái attempt chuyển sang SUBMITTED\n');
 
@@ -342,7 +344,7 @@ async function runPhase8Tests() {
     // ─────────────────────────────────────────────────────────────
     console.log('--- SUITE 6: Unset Correct Answer Handling (correct_answer = null) ---');
     const unsetAns = submitRes1.data.answers.find((a: any) => a.question_id === q5Id);
-    assert(unsetAns && unsetAns.is_correct === false, 'Câu hỏi chưa có đáp án chính thức KHÔNG được tính điểm (is_correct = false)');
+    assert(unsetAns && unsetAns.is_correct === null, 'Câu hỏi chưa có đáp án có is_correct = null (UNGRADED)');
     assert(unsetAns && Number(unsetAns.score_awarded) === 0, 'Điểm câu hỏi chưa có đáp án là 0.0 (không cộng điểm ảo)');
     console.log('[Suite 6] Verified no ghost score awarded for unset answer questions\n');
 
@@ -385,13 +387,51 @@ async function runPhase8Tests() {
     assert(Number(resultRes.data.attempt.score) === 7.5, 'Attempt score khớp với lượt nộp (7.5)');
     assert(resultRes.data.answers.length === 5, 'Đầy đủ 5 câu hỏi kèm đáp án đối chiếu');
 
-    const mistakesRes = await axios.get(
+    // Test 9.1: Khi làm đúng 100% câu khách quan, danh sách mistakes rỗng (totalMistakes = 0)
+    const mistakesRes1 = await axios.get(
       `${API_BASE}/quizzes/attempts/${attempt1Id}/mistakes`,
       { headers: headersA }
     );
-    assert(mistakesRes.status === 200, 'GET /attempts/:id/mistakes trả về HTTP 200');
-    assert(mistakesRes.data.totalMistakes === 2, 'Lọc chính xác 2 câu chưa đạt điểm (câu tự luận + câu chưa có đáp án)');
-    assert(mistakesRes.data.mistakes.every((m: any) => m.is_correct === false), 'Mọi câu trong danh sách mistakes đều có is_correct = false\n');
+    assert(mistakesRes1.status === 200, 'GET /attempts/:id/mistakes trả về HTTP 200');
+    assert(
+      mistakesRes1.data.totalMistakes === 0,
+      'Khi làm đúng hết câu khách quan, danh sách /mistakes rỗng (câu tự luận KHÔNG bị coi là sai!)'
+    );
+
+    // Test 9.2: Tạo Attempt 2 có 1 câu khách quan chọn sai để kiểm chứng danh sách mistakes
+    const startRes2 = await axios.post(
+      `${API_BASE}/quizzes/start`,
+      { testSetId },
+      { headers: headersA }
+    );
+    const attempt2Id = startRes2.data.attempt.id;
+
+    // Q1 chọn 'A' (Sai), Q2 'A' (Đúng), Q3 'peptidil transferaza' (Đúng), Q4 và Q5 tự luận/unset
+    const submitPayload2 = {
+      answers: [
+        { questionId: q1Id, answer: 'A' }, // Sai
+        { questionId: q2Id, answer: 'A' }, // Đúng
+        { questionId: q3Id, answer: 'peptidil transferaza' }, // Đúng
+        { questionId: q4Id, answer: 'Tự luận attempt 2' },
+      ],
+      durationSeconds: 15,
+    };
+    const submitRes2 = await axios.post(
+      `${API_BASE}/quizzes/attempts/${attempt2Id}/submit`,
+      submitPayload2,
+      { headers: headersA }
+    );
+    assert(submitRes2.status === 200, 'Nộp attempt 2 thành công');
+    assert(Number(submitRes2.data.attempt.score) === 5.0, 'Attempt 2 đạt 5.0/7.5 điểm');
+    assert(submitRes2.data.attempt.percentage === 67, 'Attempt 2 percentage đạt 67% (5.0/7.5)');
+
+    const mistakesRes2 = await axios.get(
+      `${API_BASE}/quizzes/attempts/${attempt2Id}/mistakes`,
+      { headers: headersA }
+    );
+    assert(mistakesRes2.data.totalMistakes === 1, 'Lọc chính xác 1 câu duy nhất bị sai (câu trắc nghiệm q1)');
+    assert(mistakesRes2.data.mistakes[0].question_id === q1Id, 'Chính xác là câu q1');
+    assert(mistakesRes2.data.mistakes.every((m: any) => m.is_correct === false), 'Mọi câu trong mistakes đều có is_correct = false\n');
 
     // ─────────────────────────────────────────────────────────────
     // SUITE 10: Chế độ 1-click làm lại các câu sai (Retry Mistakes)
@@ -402,16 +442,16 @@ async function runPhase8Tests() {
       {
         testSetId,
         isRetryMistakes: true,
-        previousAttemptId: attempt1Id,
+        previousAttemptId: attempt2Id,
       },
       { headers: headersA }
     );
 
     assert(retryRes.status === 201, 'Khởi tạo phòng thi ôn tập câu sai thành công');
     assert(retryRes.data.isRetryMistakes === true, 'isRetryMistakes = true');
-    assert(retryRes.data.attempt.totalQuestions === 2, 'Tổng số câu thi mới chỉ bao gồm 2 câu chưa đạt điểm');
-    assert(retryRes.data.questions.length === 2, 'Danh sách câu hỏi chỉ gồm 2 câu cần ôn tập');
-    console.log('[Suite 10] Retry mistakes room initialized with exact missed questions\n');
+    assert(retryRes.data.attempt.totalQuestions === 1, 'Tổng số câu thi mới chỉ bao gồm 1 câu khách quan bị sai');
+    assert(retryRes.data.questions.length === 1, 'Danh sách câu hỏi chỉ gồm câu q1 cần làm lại');
+    assert(retryRes.data.questions[0].id === q1Id, 'Câu cần làm lại chính xác là q1 (không có câu tự luận!)\n');
 
     // ─────────────────────────────────────────────────────────────
     // SUITE 11: Lịch sử làm bài, Learning Activities & Ghi nhận Study Dates
