@@ -86,7 +86,7 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
     setTestSetStatus("APPROVED");
     const updated = (getValues().questions || []).map(q => ({ ...q, status: "APPROVED" as const }));
     reset({ questions: updated });
-    toast.success("Đã duyệt & lưu! Bộ đề đã sẵn sàng cho học sinh.");
+    toast.success("Đã duyệt & lưu! Bộ đề đã sẵn sàng để luyện tập.");
   };
 
   const handleSaveSingleQuestion = async (idx: number) => {
@@ -179,7 +179,7 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
               <BookOpen size={18} className="text-[#1a3a2a]" /> Workspace Bộ đề
               {testSetStatus === "DRAFT" ? (
                 <span className="text-[10px] font-black text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
-                  <FileEdit size={10} /> NHÁP — chưa hiện cho học sinh
+                  <FileEdit size={10} /> NHÁP — chưa công khai
                 </span>
               ) : (
                 <span className="text-[10px] font-black text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
@@ -367,7 +367,7 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
                                   {...register(`questions.${globalIdx}.explanation` as any)}
                                   rows={2}
                                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all resize-none"
-                                  placeholder="Giải thích dễ hiểu cho học sinh — quan trọng với đối tượng Học yếu"
+                                  placeholder="Giải thích chi tiết phương án và kiến thức trọng tâm..."
                                 />
                               </div>
                               <div>

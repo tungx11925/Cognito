@@ -28,6 +28,7 @@ exports.up = async pgm => {
     ALTER TABLE quiz_attempts ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
     ALTER TABLE quiz_attempts ALTER COLUMN title DROP NOT NULL;
     ALTER TABLE quiz_attempts ALTER COLUMN title SET DEFAULT '';
+    ALTER TABLE test_sets ADD COLUMN IF NOT EXISTS visibility VARCHAR(50) DEFAULT 'private';
 
     CREATE TABLE IF NOT EXISTS quiz_attempt_answers (
       id SERIAL PRIMARY KEY,

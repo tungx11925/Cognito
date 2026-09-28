@@ -19,7 +19,7 @@ export class QuizService {
   async startQuiz(userId: number, testSetId: number, options: StartQuizOptions = {}) {
     // 1. Kiểm tra bộ đề tồn tại và trạng thái
     const tsRes = await db.query(
-      `SELECT id, name, total_questions, total_score, is_active, created_by, status
+      `SELECT id, name, total_questions, total_score, is_active, created_by, status, visibility
        FROM test_sets
        WHERE id = $1`,
       [testSetId]
@@ -31,9 +31,17 @@ export class QuizService {
 
     const testSet = tsRes.rows[0];
 
-    // Người dùng được làm bài nếu là chủ sở hữu hoặc bộ đề đã APPROVED / active
-    if (testSet.created_by !== userId && !testSet.is_active && testSet.status !== 'APPROVED') {
+    // Người dùng chỉ được làm bài nếu là chủ sở hữu HOẶC bộ đề ở chế độ công khai (visibility === 'public')
+    const isOwner = testSet.created_by === userId;
+    const isPublic = testSet.visibility === 'public';
+
+    if (!isOwner && !isPublic) {
       throw new AppError('Bạn không có quyền truy cập bộ đề thi này', 403);
+    }
+
+    // Nếu là người ngoài truy cập đề public thì đề PHẢI là APPROVED và active
+    if (!isOwner && (testSet.status !== 'APPROVED' || !testSet.is_active)) {
+      throw new AppError('Bộ đề thi chưa sẵn sàng để làm bài', 403);
     }
 
     let questions: any[] = [];
@@ -130,14 +138,14 @@ export class QuizService {
     try {
       await client.query('BEGIN');
 
-      // 1. Kiểm tra Attempt
+      // 1. Kiểm tra Attempt tồn tại và quyền sở hữu
       const attRes = await client.query(
         `SELECT qa.*, ts.name as test_set_name
          FROM quiz_attempts qa
          JOIN test_sets ts ON ts.id = qa.test_set_id
-         WHERE qa.id = $1 AND qa.user_id = $2
+         WHERE qa.id = $1
          FOR UPDATE`,
-        [attemptId, userId]
+        [attemptId]
       );
 
       if (attRes.rows.length === 0) {
@@ -145,9 +153,17 @@ export class QuizService {
       }
 
       const attempt = attRes.rows[0];
+      if (attempt.user_id !== userId) {
+        throw new AppError('Bạn không có quyền nộp bài thi cho lượt làm bài này', 403);
+      }
+
       if (attempt.status === 'SUBMITTED') {
         throw new AppError('Bài thi này đã được nộp trước đó, không thể nộp lại.', 400);
       }
+
+      // Tính thời gian làm bài chính xác từ server (từ lúc started_at đến nay)
+      const startedAtMs = new Date(attempt.started_at).getTime();
+      const serverDurationSeconds = Math.max(0, Math.round((Date.now() - startedAtMs) / 1000));
 
       // 2. Lấy toàn bộ câu hỏi gốc kèm đáp án đúng từ Database
       const qRes = await client.query(
@@ -193,7 +209,11 @@ export class QuizService {
         }
 
         if (uAns !== undefined && uAns !== null && uAns !== '') {
-          if (q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') {
+          if (!targetAns) {
+            // Câu hỏi không có đáp án chính thức (Phase 7 NOT SET)
+            // Không tính đúng/sai và không cộng điểm
+            isCorrect = false;
+          } else if (q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') {
             const cleanUser = String(uAns).trim().toUpperCase();
             const cleanTarget = String(targetAns).trim().toUpperCase();
             // Chuẩn hóa Đúng/Sai
@@ -208,8 +228,9 @@ export class QuizService {
               isCorrect = String(targetAns).trim().toLowerCase() === cleanUser;
             }
           } else if (q.type === 'ESSAY') {
-            // Tự luận: Học sinh có viết câu trả lời (> 5 ký tự)
-            isCorrect = String(uAns).trim().length >= 5;
+            // Câu tự luận (ESSAY): Tuyệt đối KHÔNG tự động chấm điểm qua độ dài chuỗi (tránh điểm ảo cho nội dung vô nghĩa)
+            // Điểm awarded = 0, is_correct = false. Cung cấp câu trả lời của người dùng và đáp án mẫu để tự đối chiếu
+            isCorrect = false;
           }
         }
 
@@ -254,7 +275,7 @@ export class QuizService {
              completed_at = CURRENT_TIMESTAMP
          WHERE id = $4
          RETURNING *`,
-        [totalAwardedScore, correctCount, Math.max(0, durationSeconds), attemptId]
+        [totalAwardedScore, correctCount, serverDurationSeconds, attemptId]
       );
 
       const finalAttempt = updatedAttemptRes.rows[0];
@@ -325,8 +346,8 @@ export class QuizService {
       `SELECT qa.*, ts.name as test_set_name
        FROM quiz_attempts qa
        JOIN test_sets ts ON ts.id = qa.test_set_id
-       WHERE qa.id = $1 AND qa.user_id = $2`,
-      [attemptId, userId]
+       WHERE qa.id = $1`,
+      [attemptId]
     );
 
     if (attRes.rows.length === 0) {
@@ -334,6 +355,15 @@ export class QuizService {
     }
 
     const attempt = attRes.rows[0];
+
+    if (attempt.user_id !== userId) {
+      throw new AppError('Bạn không có quyền xem kết quả bài thi này', 403);
+    }
+
+    // BẢO MẬT ANTI-CHEAT: Nếu lượt làm bài vẫn còn IN_PROGRESS, TUYỆT ĐỐI KHÔNG trả về đáp án và giải thích
+    if (attempt.status === 'IN_PROGRESS') {
+      throw new AppError('Bài thi đang diễn ra và chưa được nộp. Không thể xem đáp án và giải thích.', 400);
+    }
 
     const ansRes = await db.query(
       `SELECT qaa.*, q.content as question_content, q.options as question_options,
@@ -376,12 +406,22 @@ export class QuizService {
       `SELECT qa.*, ts.name as test_set_name
        FROM quiz_attempts qa
        JOIN test_sets ts ON ts.id = qa.test_set_id
-       WHERE qa.id = $1 AND qa.user_id = $2`,
-      [attemptId, userId]
+       WHERE qa.id = $1`,
+      [attemptId]
     );
 
     if (attRes.rows.length === 0) {
       throw new AppError('Không tìm thấy lượt làm bài thi', 404);
+    }
+
+    const attempt = attRes.rows[0];
+
+    if (attempt.user_id !== userId) {
+      throw new AppError('Bạn không có quyền xem danh sách câu sai của bài thi này', 403);
+    }
+
+    if (attempt.status === 'IN_PROGRESS') {
+      throw new AppError('Bài thi đang diễn ra và chưa được nộp.', 400);
     }
 
     const mistakesRes = await db.query(

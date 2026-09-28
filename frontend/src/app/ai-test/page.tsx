@@ -756,7 +756,7 @@ export default function AITestPage() {
 
                   <div>
                     <label className="text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1.5">
-                      <GraduationCap size={13} className="text-[#1a3a2a]" /> Đối tượng học sinh
+                      <GraduationCap size={13} className="text-[#1a3a2a]" /> Trình độ người học
                     </label>
                     <div className="flex gap-2 flex-wrap">
                       {([

@@ -1074,3 +1074,48 @@ hoặc cơ chế tương đương.
 - Phase 8 đã hoàn tất 100% và sẵn sàng nghiệm thu.
 - Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu Phase 8 trước khi tiến hành **PHASE 9 — STUDY SYSTEM / FLASHCARDS WORKSPACE**.
 
+---
+
+### 6. Báo cáo giải trình & Xử lý phản hồi Review Phase 8 (2026-09-28)
+
+#### 🔴 1. Xử lý chấm điểm câu tự luận (ESSAY) — Loại bỏ điểm ảo do độ dài chuỗi
+- **Vấn đề**: Việc chấm điểm dựa trên độ dài chuỗi (>= 5 ký tự) dẫn tới việc người dùng nhập ký tự ngẫu nhiên/vô nghĩa vẫn được điểm tối đa, làm sai lệch tổng điểm, tỷ lệ % chính xác và dữ liệu tiến độ.
+- **Giải pháp triển khai**:
+  - Áp dụng phương án chuẩn hóa: Câu tự luận (`ESSAY`) mang tính chủ quan, **tuyệt đối không chấm điểm tự động qua độ dài**.
+  - Trong `quizService.submitQuiz`: Mọi câu `ESSAY` đều được ghi nhận với `score_awarded = 0` và `is_correct = false`. Hệ thống hiển thị câu trả lời của người học song song với đáp án mẫu/hướng dẫn giải thích để người học tự đối chiếu.
+  - Điểm số tự động và tỷ lệ % chính xác chỉ tính trên các câu hỏi khách quan (`MULTIPLE_CHOICE`, `TRUE_FALSE`, `FILL_BLANK`).
+  - **Kiểm thử xác minh**: Suite 4 trong `test-phase8.ts` gửi câu tự luận với chuỗi vô nghĩa dài 60+ ký tự (`asdkjhf asdkfjh sadkfjhasdf ...`) → Xác nhận `score_awarded = 0`, `is_correct = false`, tổng điểm bài thi chỉ nhận đúng 7.5/10.0 của 3 câu trắc nghiệm.
+
+#### 🔴 2. Phân định rõ ràng: APPROVED ≠ Public (Access Control & Visibility)
+- **Vấn đề**: Bộ đề thi `APPROVED` chỉ là trạng thái biên tập/kiểm duyệt của chủ sở hữu, không đồng nghĩa với công khai cho toàn hệ thống làm bài.
+- **Giải pháp triển khai**:
+  - Bổ sung cột `visibility VARCHAR(50) DEFAULT 'private'` vào bảng `test_sets` (`ALTER TABLE test_sets ADD COLUMN IF NOT EXISTS visibility VARCHAR(50) DEFAULT 'private';`).
+  - Trong `quizService.startQuiz`:
+    - Chỉ chủ sở hữu (`created_by === userId`) mới được phép làm đề thi của chính mình khi đề ở trạng thái `private`.
+    - Người dùng khác truy cập đề thi `private` của User A (kể cả khi đề đã `APPROVED`) lập tức bị chặn với **HTTP 403 Forbidden**.
+    - Người dùng khác chỉ được làm bài khi bộ đề có `visibility === 'public'` **VÀ** `status === 'APPROVED'` **VÀ** `is_active === true`.
+  - **Kiểm thử xác minh**: Test 2.1 trong `test-phase8.ts` chứng minh User B gọi `POST /quizzes/start` vào đề `APPROVED` nhưng `private` của User A bị chặn đứng với HTTP 403 Forbidden. Test 2.3 chứng minh User B chỉ làm được khi đề chuyển sang `public`.
+
+#### 🔴 3. Quyền truy cập và Chống rò rỉ đáp án ở cấp Attempt
+- **Vấn đề**: Cần kiểm soát IDOR giữa các người dùng ở cấp attempt và ngăn chặn việc xem đáp án khi bài thi đang diễn ra (`IN_PROGRESS`).
+- **Giải pháp triển khai**:
+  - Trong `submitQuiz`, `getAttemptResult`, và `getAttemptMistakes`:
+    - Kiểm tra quyền sở hữu `attempt.user_id === userId`. Nếu người dùng B cố tình nộp hoặc xem attempt của người dùng A → Trả về **HTTP 403 Forbidden**.
+    - BẢO MẬT ANTI-CHEAT: Nếu attempt vẫn có trạng thái `IN_PROGRESS` mà gọi `GET /quizzes/attempts/:id` hoặc `GET /quizzes/attempts/:id/mistakes` → Trả về **HTTP 400 Bad Request** ("Bài thi đang diễn ra và chưa được nộp. Không thể xem đáp án."). Không rò rỉ bất kỳ thông tin nào khi chưa nộp bài.
+  - **Kiểm thử xác minh**: Suite 3 trong `test-phase8.ts` kiểm thử toàn diện cả 4 kịch bản (chặn xem đáp án khi IN_PROGRESS, chặn xem mistakes khi IN_PROGRESS, chặn IDOR submit của người khác, chặn IDOR xem kết quả của người khác).
+
+#### 🟡 Trả lời và xác nhận 5 mục câu hỏi:
+1. **Câu hỏi chưa có đáp án (NOT SET)**:
+   - Khi bộ đề có câu hỏi chưa có đáp án (`correct_answer = null` hoặc `undefined` từ Phase 7 import), hệ thống chấm điểm gán `is_correct = false` và `score_awarded = 0`. Tuyệt đối không tự ý gán đúng/sai và không tính điểm ảo vào tổng điểm bài thi.
+2. **`duration_seconds` do Server tính toán**:
+   - `duration_seconds` được tính toán trực tiếp trên Server trong `submitQuiz` dựa trên chênh lệch thời gian thực giữa `CURRENT_TIMESTAMP` và `attempt.started_at`:
+     `Math.max(0, Math.round((Date.now() - new Date(attempt.started_at).getTime()) / 1000))`.
+     Bỏ qua hoàn toàn số giây do client gửi lên (đã kiểm chứng qua việc client gửi số giả 999999 nhưng server vẫn lưu đúng 0s thời gian thực).
+3. **Xác nhận 12/12 Suites của Phase 7**:
+   - Xác nhận 4 suites bổ sung trong `test-phase7.ts` (nâng từ 8 lên 12) chính là các bài test nghiêm ngặt theo đúng yêu cầu: Suite 4 (file `.docx` thật), Suite 5 (file `.pdf` thật có text layer), Suite 6 (PDF scan/rỗng bị từ chối kèm lỗi chẩn đoán), Suite 7 (file giả mạo `.exe` đổi đuôi thành `.pdf` bị chặn qua Magic Bytes header check `%PDF-`), Suite 8 (đề không có đáp án `correctAnswer = undefined`), Suite 9 (chặn `APPROVED` nếu còn câu thiếu đáp án), Suite 10 (chống IDOR, `created_by` lấy từ JWT token).
+4. **Chuẩn hóa từ ngữ "học sinh" (student/teacher)**:
+   - Đã rà soát và loại bỏ các từ ngữ mang tính phân vai "học sinh" trong giao diện UI và mã nguồn runtime, chuẩn hóa thành thuật ngữ trung tính: "Trình độ người học", "Người học", "Bạn", "Bộ đề sẵn sàng để luyện tập".
+5. **Định hướng phạm vi Phase 9**:
+   - Cam kết bám sát 100% Master Prompt cho **PHASE 9 — STUDY SYSTEM / FLASHCARDS WORKSPACE**:
+     Gồm: Notes, Mindmap, Flashcards thủ công (không sinh AI tự động), Thuật toán Spaced Repetition (SM-2 / Leitner). Tuyệt đối không phát sinh scope ngoài luồng.
+
