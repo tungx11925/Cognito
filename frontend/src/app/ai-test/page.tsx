@@ -2,7 +2,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Loader2, Plus, Trash2, Edit3, ToggleLeft, ToggleRight, FileText, BookOpen, Upload, ChevronDown, Settings2, Save, X, Cpu, Target, GraduationCap } from "lucide-react";
+import Link from "next/link";
+import { Sparkles, Loader2, Plus, Trash2, Edit3, ToggleLeft, ToggleRight, FileText, BookOpen, Upload, ChevronDown, Settings2, Save, X, Cpu, Target, GraduationCap, Play } from "lucide-react";
 import toast from "react-hot-toast";
 import { MainLayout } from "@/components/layout/MainLayout";
 import TestSetWorkspace from "@/components/ai-test/TestSetWorkspace";
@@ -880,12 +881,22 @@ export default function AITestPage() {
                     </div>
                   )}
                   <div className="flex gap-2">
+                    <Link
+                      href={`/quiz/${ts.id}`}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-white bg-[#1a3a2a] rounded-xl hover:bg-[#25523b] transition-colors shadow-sm"
+                    >
+                      <Play size={12} fill="white" /> Làm bài
+                    </Link>
                     <button onClick={() => setEditTarget(ts)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-[#1a3a2a] bg-[#f0fdf4] border border-[#d1fae5] rounded-xl hover:bg-[#dcfce7] transition-colors">
-                      <Edit3 size={12} /> Xem / Sửa
+                      className="px-3 py-2 flex items-center justify-center gap-1.5 text-xs font-bold text-[#1a3a2a] bg-[#f0fdf4] border border-[#d1fae5] rounded-xl hover:bg-[#dcfce7] transition-colors"
+                      title="Xem và chỉnh sửa câu hỏi"
+                    >
+                      <Edit3 size={12} /> Sửa
                     </button>
                     <button onClick={() => handleDelete(ts)}
-                      className="px-3 py-2 text-xs font-bold text-red-500 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 transition-colors">
+                      className="px-3 py-2 text-xs font-bold text-red-500 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 transition-colors"
+                      title="Xóa bộ đề"
+                    >
                       <Trash2 size={12} />
                     </button>
                   </div>

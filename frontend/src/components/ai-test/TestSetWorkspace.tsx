@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { Panel, Group, Separator } from "react-resizable-panels";
+import Link from "next/link";
 import { X, Save, CheckCircle2, Clock, Sparkles, Send, Loader2, Play, BookOpen, Trash2, BadgeCheck, FileEdit } from "lucide-react";
 import toast from "react-hot-toast";
 import { getQuestions, bulkUpdateQuestions, approveTestSet, deleteQuestion, getTestSetDetail, updateQuestion } from "@/services/ai-test.service";
@@ -205,6 +206,12 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
               {approving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Duyệt &amp; Lưu
             </button>
           )}
+          <Link
+            href={`/quiz/${testSetId}`}
+            className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 rounded-xl hover:bg-emerald-100 transition-colors shadow-sm"
+          >
+            <Play size={16} className="fill-emerald-800" /> Làm bài thi
+          </Link>
         </div>
       </div>
 

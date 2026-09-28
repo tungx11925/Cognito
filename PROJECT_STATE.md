@@ -1010,3 +1010,67 @@ hoặc cơ chế tương đương.
   5. 🟡 *Backlog Phase 20 / Phase 27*: Ghi nhận đưa tính năng Exam Parsing và AI Fallback đi qua Middleware kiểm soát hạn mức Quota / Entitlement của gói cước người dùng.
 - Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu Phase 7 trước khi tiến hành **PHASE 8 — QUIZ / TEST SYSTEM** (Question Set -> Start Quiz -> User solves online -> Submit -> Server-side Answer Verification & Scoring -> Result & Score -> Review Mistakes & Retry).
 
+---
+
+## PHASE 8 — QUIZ / TEST SYSTEM (COMPLETED)
+**Thời gian hoàn thành**: 2026-09-28
+**Trạng thái**: Hoàn tất 100% — Toàn bộ Gate Checks & Test Suites Passed
+
+### 1. Phạm vi & Yêu cầu Master Prompt Phase 8 đã hoàn thành
+- [x] **Luồng hoàn chỉnh theo Master Prompt**:
+  `Question Set -> Preview -> Edit -> Save -> Start Quiz -> Answer -> Submit -> Server-Side Result -> Review Mistakes -> Retry`
+- [x] **Bảo mật tuyệt đối (Anti-Cheat Payload Sanitization)**:
+  Khi học sinh bấm "Bắt đầu làm bài" (`POST /api/quizzes/start`), backend bóc bỏ 100% các trường `correct_answer` và `explanation` khỏi payload trả về cho client. Học sinh mở DevTools Network tab cũng không thể xem trước đáp án.
+- [x] **Chấm điểm Server-Side (Zero Trust on Client Calculation)**:
+  Toàn bộ kết quả và số điểm được chấm trực tiếp trên backend (`quizService.submitQuiz`) đối chiếu với dữ liệu chuẩn trong cơ sở dữ liệu. Client tuyệt đối không tự tính điểm hay gửi điểm lên server.
+- [x] **Chống nộp bài trùng lặp (Anti-Double Submission)**:
+  Khóa bài thi sau khi nộp (trạng thái `SUBMITTED`). Cố tình nộp lại cùng 1 attempt bị chặn với HTTP 400 Bad Request.
+- [x] **Kiểm soát quyền truy cập (Access Control & Authorization)**:
+  Học sinh chỉ được làm bài thi thuộc sở hữu của mình hoặc các bộ đề đã được phê duyệt công khai (`APPROVED`). Không thể truy cập trái phép bộ đề `DRAFT` riêng tư của người khác (HTTP 403 Forbidden).
+- [x] **Xem lại lỗi sai (Review Mistakes) & Làm lại 1-click (Retry Mistakes)**:
+  Endpoint `GET /api/quizzes/attempts/:attemptId/mistakes` lọc nhanh toàn bộ câu trả lời sai. Nút 1-click "Làm lại chỉ những câu sai" tạo một lượt thi tập trung chỉ chứa đúng các câu đã làm sai để củng cố kiến thức.
+- [x] **Lịch sử làm bài thi (Quiz History)**:
+  Endpoint `GET /api/quizzes/history` lưu vết đầy đủ điểm số, tỷ lệ chính xác, thời gian làm bài, ngày thi cho từng người dùng.
+- [x] **Giao diện phòng thi trực quan, tập trung (Distraction-Free Quiz Player)**:
+  Trang `/quiz/[testSetId]` được xây dựng tối ưu cho trải nghiệm làm bài: đồng hồ bấm giờ trực tiếp, thanh điều hướng câu hỏi đánh dấu (Đang làm, Đã trả lời, Đánh dấu xem lại, Chưa làm), hỗ trợ phím tắt bàn phím (A, B, C, D, Mũi tên trái/phải), modal xác nhận nộp bài hiển thị thống kê câu chưa làm, màn hình kết quả trực quan kèm hiệu ứng pháo hoa chúc mừng (confetti), lọc đáp án Đúng/Sai và giải thích chi tiết.
+
+### 2. Các tệp tin triển khai chính
+- **Cơ sở dữ liệu**:
+  - `backend/migrations/1790400000000_quiz_system_schema.js`: Mở rộng bảng `quiz_attempts` và `quiz_attempt_answers` với đầy đủ ràng buộc điểm số, thời gian, trạng thái và indexes tối ưu truy vấn.
+- **Backend Service, Controller & Routes**:
+  - `backend/src/services/quiz.service.ts`: Nghiệp vụ `startQuiz`, `submitQuiz` (DB transaction & grading), `getAttemptResult`, `getAttemptMistakes`, `listUserHistory`, ghi nhận tự động streak học tập `user_study_dates` và hoạt động `learning_activities`.
+  - `backend/src/controllers/quiz.controller.ts`: Tiếp nhận và xác thực input request an toàn.
+  - `backend/src/routes/quiz.routes.ts`: Đăng ký các endpoints `/quizzes/start`, `/quizzes/attempts/:attemptId/submit`, `/quizzes/attempts/:attemptId`, `/quizzes/attempts/:attemptId/mistakes`, `/quizzes/history`.
+  - `backend/src/app.ts`: Mount `quizRoutes` vào ứng dụng backend.
+- **Frontend Service & Components**:
+  - `frontend/src/services/quiz.service.ts`: API client kết nối an toàn kèm JWT authentication.
+  - `frontend/src/app/quiz/[testSetId]/page.tsx`: Giao diện làm bài thi trực tuyến, nộp bài và màn hình xem lại kết quả/giải thích chi tiết.
+  - `frontend/src/app/ai-test/page.tsx`: Bổ sung nút "Làm bài" trực tiếp trên từng thẻ bộ đề.
+  - `frontend/src/components/ai-test/TestSetWorkspace.tsx`: Bổ sung nút "Làm bài thi" trên thanh công cụ xem/sửa đề thi.
+- **Kiểm thử tích hợp**:
+  - `backend/scripts/test-phase8.ts`: Bộ test toàn diện kiểm thử đầy đủ 8 suites kiểm tra an ninh, tính điểm, bảo mật payload, anti-double submit, retry mistakes và lịch sử làm bài.
+
+### 3. Kết quả Integration Test Phase 8 (`backend/scripts/test-phase8.ts`) — 100% Passed
+- **Suite 1: Start Quiz & Anti-Cheat Payload Sanitization**: Khởi tạo attempt thành công (HTTP 201). Kiểm tra từng câu hỏi trong danh sách: 100% không rò rỉ `correct_answer` hay `explanation`.
+- **Suite 2: Access Control & Authorization Checks**: Chặn đứng học sinh truy cập đề thi nháp riêng tư của người khác (HTTP 403 Forbidden). Trả về HTTP 404 cho đề không tồn tại.
+- **Suite 3: Submit Quiz (100% Correct - Full Score 10.0)**: Chấm điểm server-side đạt 10.0/10.0 điểm, tỷ lệ 100%, ghi nhận đúng 125s thời gian làm bài, tự động cập nhật streak trong `user_study_dates` và log vào `learning_activities`.
+- **Suite 4: Anti-Double Submission Protection**: Chặn đứng mọi nỗ lực nộp lại bài thi đã `SUBMITTED` (HTTP 400).
+- **Suite 5: Partial Score Grading & Mistakes Detection**: Nộp bài có câu sai: tính điểm chính xác 5.0/10.0 điểm (2 câu đúng x 2.5đ), đánh dấu đúng câu làm sai và câu làm đúng, trả về giải thích chi tiết sau khi nộp.
+- **Suite 6: Result Breakdown & Review Mistakes Endpoints**: Lọc chính xác 2 câu làm sai qua endpoint `/mistakes`.
+- **Suite 7: One-Click Retry Mistakes Mode**: Khởi tạo lượt thi ôn lại chỉ chứa đúng 2 câu đã làm sai ở lượt trước, không lặp lại câu đã làm đúng, chấm điểm đạt tối đa 5.0 điểm.
+- **Suite 8: User Quiz History**: Trả về danh sách lịch sử làm bài có phân trang, thống kê điểm số và tỷ lệ chính xác.
+
+### 4. Kết quả Gate Checks
+- **Backend Build (`npm run build`)**: 0 errors (Pass).
+- **Frontend TypeCheck (`npx tsc --noEmit`)**: 0 errors (Pass).
+- **Frontend Linter (`npx eslint src`)**: 0 errors (Pass, 21 warnings pre-existing, 0 errors/warnings từ code mới).
+- **Regression Tests (`test-phase4.ts`)**: 25/25 passed (Zero regression).
+- **Regression Tests (`test-phase5.ts`)**: 16/16 passed (Zero regression).
+- **Regression Tests (`test-phase6.ts`)**: 14/14 suites passed (Zero regression).
+- **Regression Tests (`test-phase7.ts`)**: 12/12 suites passed (Zero regression).
+- **Phase 8 Tests (`test-phase8.ts`)**: 8/8 suites passed (100% Success).
+
+### 5. Chuẩn bị cho Phase tiếp theo
+- Phase 8 đã hoàn tất 100% và sẵn sàng nghiệm thu.
+- Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu Phase 8 trước khi tiến hành **PHASE 9 — STUDY SYSTEM / FLASHCARDS WORKSPACE**.
+
