@@ -46,6 +46,6 @@ export const matchLeaderboardSchema = z.object({
 
 export const reviewFlashcardSchema = z.object({
   body: z.object({
-    difficulty: z.enum(['easy', 'good', 'hard'], { message: 'Độ khó phải là easy, good hoặc hard' })
+    difficulty: z.enum(['easy', 'good', 'hard', 'again'], { message: 'Độ khó phải là easy, good, hard hoặc again' })
   })
 });

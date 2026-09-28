@@ -16,6 +16,10 @@ export const getDeckById = async (req: Request, res: Response, next: any) => {
   try {
     const deckId = parseInt(req.params.id, 10);
     const deck = await flashcardService.getDeckById(deckId);
+    const userId = (req as AuthRequest).user?.id;
+    if (deck.user_id !== userId && !deck.is_public && deck.visibility !== 'public') {
+      return res.status(403).json({ error: 'Bạn không có quyền truy cập bộ thẻ này' });
+    }
     res.status(200).json(deck);
   } catch (error) {
     next(error);

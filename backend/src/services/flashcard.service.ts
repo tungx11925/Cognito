@@ -132,7 +132,7 @@ class FlashcardService {
     return await flashcardRepository.addLeaderboardEntry(deckId, userId, timeMs);
   }
 
-  async reviewFlashcard(cardId: number, userId: number, difficulty: 'easy' | 'good' | 'hard') {
+  async reviewFlashcard(cardId: number, userId: number, difficulty: 'easy' | 'good' | 'hard' | 'again') {
     const card = await flashcardRepository.getCardWithDeckUser(cardId, userId);
     if (!card) {
       throw new AppError('Flashcard not found or access denied', 404);
@@ -140,7 +140,7 @@ class FlashcardService {
 
     let { ease_factor, repetitions, interval_days } = card;
 
-    if (difficulty === 'hard') {
+    if (difficulty === 'hard' || difficulty === 'again') {
       repetitions = 0;
       interval_days = 1;
       ease_factor = Math.max(1.3, ease_factor - 0.2);

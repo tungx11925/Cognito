@@ -1119,3 +1119,94 @@ hoặc cơ chế tương đương.
    - Cam kết bám sát 100% Master Prompt cho **PHASE 9 — STUDY SYSTEM / FLASHCARDS WORKSPACE**:
      Gồm: Notes, Mindmap, Flashcards thủ công (không sinh AI tự động), Thuật toán Spaced Repetition (SM-2 / Leitner). Tuyệt đối không phát sinh scope ngoài luồng.
 
+---
+
+## 🚀 PHASE 9 — STUDY SYSTEM / FLASHCARDS WORKSPACE (HOÀN THÀNH 100%)
+
+### 1. Mục tiêu & Phạm vi Phase 9
+- Xây dựng hoàn chỉnh hệ sinh thái hỗ trợ học tập cá nhân hóa:
+  1. **Notes System**: Tạo mới, chỉnh sửa, xóa, tìm kiếm theo từ khóa (`?q=`), lọc theo tài liệu (`?document_id=`), gắn/hủy gắn vào tài liệu học tập (`documents`), chống IDOR bảo mật dữ liệu riêng tư.
+  2. **Mindmap System**: Tạo sơ đồ tư duy bằng cú pháp Mermaid, chỉnh sửa, lưu trữ CSDL, xem trực quan tương tác, tìm kiếm và gắn vào tài liệu học tập, chống IDOR bảo mật dữ liệu.
+  3. **Flashcards Workspace (Thủ công - Tuyệt đối không sinh AI)**: Quản lý bộ thẻ (Deck CRUD), tạo thẻ thủ công (mặt trước / mặt sau), chỉnh sửa, đánh dấu sao, xóa thẻ.
+  4. **Thuật toán Spaced Repetition (SM-2 / Leitner)**: Tính toán chu kỳ ôn tập ngắt quãng (`repetitions`, `interval_days`, `ease_factor`, `next_review_at`) dựa trên đánh giá độ khó (`again` / `hard` / `good` / `easy`), duy trì giới hạn dưới an toàn (`ease_factor >= 1.3`), tự động cập nhật chuỗi học tập `streak` và nhiệm vụ.
+  5. **Giao diện người dùng**: Trang Hub học tập (`/study-sessions`), Sổ tay ghi chú (`/notes`), Không gian sơ đồ tư duy tương tác (`/mindmap`), Bộ thẻ ghi nhớ (`/flashcards`).
+
+### 2. Các thành phần đã triển khai
+
+#### CSDL & Migration (`backend/migrations/1790500000000_study_system_notes_mindmaps.js`)
+- `notes`: Cho phép `document_id` nullable (hỗ trợ ghi chú độc lập hoặc gắn tài liệu), bổ sung `updated_at`, đánh index trên `(user_id, document_id)` và `(user_id, created_at DESC)`.
+- `mindmaps`: Cho phép `document_id` nullable, bổ sung cột `title VARCHAR(255)`, gỡ bỏ ràng buộc unique cứng 1 sơ đồ/tài liệu để người học tự do tạo nhiều sơ đồ, đánh index trên `(user_id, document_id)` và `(user_id, created_at DESC)`.
+- `flashcards`: Bổ sung cột `updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP` phục vụ đồng bộ cập nhật thẻ.
+
+#### Backend (Services, Controllers, Routes, Schemas)
+- `backend/src/schemas/note.schema.ts` & `mindmap.schema.ts`: Validation chặt chẽ cho tạo, sửa và truy vấn tìm kiếm ghi chú và sơ đồ tư duy (hỗ trợ `document_id: null | number`).
+- `backend/src/schemas/flashcard.schema.ts`: Mở rộng đánh giá độ khó hỗ trợ đầy đủ `easy`, `good`, `hard`, `again`.
+- `backend/src/services/note.service.ts`: Toàn bộ nghiệp vụ Notes CRUD, tìm kiếm ILIKE trên tiêu đề/nội dung, lọc theo tài liệu, kiểm tra quyền sở hữu IDOR.
+- `backend/src/services/mindmap.service.ts`: Toàn bộ nghiệp vụ Mindmap CRUD, tìm kiếm ILIKE trên tiêu đề và mã Mermaid, lọc theo tài liệu, kiểm tra quyền sở hữu IDOR.
+- `backend/src/services/flashcard.service.ts`: Thuật toán SM-2 chuẩn xác, hỗ trợ độ khó `again`/`hard` (reset reps về 0, interval 1 ngày, giảm ease factor 0.2), `good` (tăng reps, nhân interval theo ease factor), `easy` (tăng reps, cộng ease factor 0.15), khống chế giới hạn dưới `ease_factor >= 1.3`.
+- `backend/src/controllers/note.controller.ts` & `mindmap.controller.ts`: Tiếp nhận HTTP requests, xử lý lỗi an toàn.
+- `backend/src/controllers/flashcard.controller.ts`: Bổ sung kiểm tra IDOR cho `getDeckById` (chặn người dùng khác xem metadata bộ thẻ riêng tư).
+- `backend/src/routes/note.routes.ts` & `mindmap.routes.ts`: Đăng ký endpoints bảo mật bằng JWT authentication.
+- `backend/src/app.ts`: Mount `/api/notes` và `/api/mindmaps`.
+
+#### Frontend (Services & UI Workspaces)
+- `frontend/src/services/note.service.ts`: API client đầy đủ các hàm CRUD `getNotes`, `getNoteById`, `createNote`, `updateNote`, `deleteNote`, `getNotesByDocument`.
+- `frontend/src/services/mindmap.service.ts`: API client cho `getMindmaps`, `getMindmapById`, `createMindmap`, `updateMindmap`, `deleteMindmap`, `getMindmapsByDocument`.
+- `frontend/src/app/notes/page.tsx`: Giao diện Sổ tay ghi chú chuyên nghiệp: tìm kiếm từ khóa tức thì, bộ lọc theo tài liệu hoặc ghi chú độc lập, soạn thảo markdown, chỉnh sửa, xóa và mở trực tiếp tài liệu gốc.
+- `frontend/src/app/mindmap/page.tsx`: Giao diện Sơ đồ tư duy: soạn mã Mermaid với mẫu template nhanh, xem trước trực quan (MermaidViewer), gắn tài liệu, lưu trữ và xóa sơ đồ.
+- `frontend/src/app/study-sessions/page.tsx`: Hub trung tâm kết nối Flashcards, Notes, Mindmap, Document Library và Quiz Test.
+
+### 3. Kết quả Integration Test Phase 9 (`backend/scripts/test-phase9.ts`) — 100% Passed (35/35 Assertions)
+- **Suite 1: Notes System (CRUD, Search, Document Attachment)**:
+  - Tạo ghi chú độc lập (`document_id = null`) thành công (HTTP 201).
+  - Tạo ghi chú gắn tài liệu thành công, trả về `document_title` (HTTP 201).
+  - Validation: Chặn nội dung rỗng (HTTP 400), chặn gắn tài liệu không tồn tại (HTTP 404).
+  - Tìm kiếm ghi chú theo từ khóa `?q=` và lọc theo `?document_id=` trả về kết quả chuẩn xác.
+  - Endpoint tương thích ngược `/notes/document/:docId` hoạt động trơn tru.
+  - Cập nhật ghi chú (sửa tiêu đề, nội dung, chuyển đổi tài liệu gắn kết) thành công.
+  - Xóa ghi chú thành công và xác nhận xóa sạch khỏi CSDL.
+- **Suite 2: Notes Access Control & Anti-IDOR Security**:
+  - Chặn đứng User B xem ghi chú riêng tư của User A (HTTP 403 Forbidden).
+  - Chặn đứng User B sửa ghi chú của User A (HTTP 403 Forbidden).
+  - Chặn đứng User B xóa ghi chú của User A (HTTP 403 Forbidden).
+  - Trả về HTTP 404 khi truy cập ghi chú không tồn tại.
+- **Suite 3: Mindmap System (CRUD, Document Attachment, Search)**:
+  - Tạo sơ đồ tư duy độc lập thành công (HTTP 201).
+  - Tạo sơ đồ tư duy gắn tài liệu thành công (HTTP 201).
+  - Chặn mã Mermaid rỗng (HTTP 400).
+  - Tìm kiếm sơ đồ tư duy theo từ khóa `?q=` (bao quát cả tiêu đề và mã Mermaid) và lọc `?document_id=` chuẩn xác.
+  - Cập nhật và xóa sơ đồ tư duy thành công.
+- **Suite 4: Mindmap Access Control & Anti-IDOR Security**:
+  - Chặn User B xem sơ đồ tư duy của User A (HTTP 403 Forbidden).
+  - Chặn User B sửa sơ đồ tư duy của User A (HTTP 403 Forbidden).
+  - Chặn User B xóa sơ đồ tư duy của User A (HTTP 403 Forbidden).
+  - Trả về HTTP 404 cho sơ đồ không tồn tại.
+- **Suite 5: Flashcard System (Manual Creation, Deck CRUD, NO AI)**:
+  - Tạo bộ thẻ Flashcard thành công (HTTP 201).
+  - Tạo thẻ Flashcard thủ công hoàn toàn (front, back, document_id), không dùng AI.
+  - Giá trị ban đầu chuẩn SM-2: `ease_factor = 2.5`, `repetitions = 0`, `interval_days = 0`.
+  - Sửa nội dung thẻ và gắn dấu sao (`is_starred = true`) thành công.
+  - Chặn User B xem thẻ hoặc xóa bộ thẻ riêng tư của User A (HTTP 403 Forbidden).
+- **Suite 6: Spaced Repetition (SM-2 Algorithm Deep Verification)**:
+  - Đánh giá Hard: `repetitions` reset về 0, `interval_days` chuyển về 1 ngày, `ease_factor` giảm 0.2 còn 2.3.
+  - Đánh giá Good lần 1: `repetitions = 1`, `interval_days = 1`.
+  - Đánh giá Good lần 2: `repetitions = 2`, `interval_days = 6`.
+  - Đánh giá Good lần 3: `repetitions = 3`, `interval_days = 14` (Math.round(6 * 2.3)).
+  - Đánh giá Easy: `ease_factor` tăng 0.15 lên 2.45.
+  - Kiểm tra chặn đáy (Floor constraint): Đánh giá Hard liên tiếp 10 lần, xác nhận `ease_factor` không bao giờ tụt dưới ngưỡng sàn 1.3.
+  - Tự động cập nhật chuỗi học tập `streak` và nhiệm vụ học tập.
+
+### 4. Kết quả Gate Checks
+- **Backend Build (`npm run build`)**: 0 errors (Pass).
+- **Frontend TypeCheck (`npx tsc --noEmit`)**: 0 errors (Pass).
+- **Frontend Linter (`npx eslint src`)**: 0 errors (Pass, 21 warnings pre-existing, 0 errors/warnings từ code mới).
+- **Regression Tests (`test-phase4.ts`)**: 25/25 passed (Zero regression).
+- **Regression Tests (`test-phase7.ts`)**: 12/12 suites passed (Zero regression).
+- **Regression Tests (`test-phase8.ts`)**: 8/8 suites passed (Zero regression).
+- **Phase 9 Tests (`test-phase9.ts`)**: 6/6 suites (35/35 assertions) passed (100% Success).
+
+### 5. Tuân thủ Rule 0.1.1
+- Phase 9 đã hoàn thành 100%, kiểm thử đạt 100%, 3 Gate Checks đều pass.
+- Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu Phase 9 trước khi tiến hành **PHASE 10 — REAL-TIME STUDY ROOM / POMODORO / COLLABORATION**.
+
+
