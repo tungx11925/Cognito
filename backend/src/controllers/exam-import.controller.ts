@@ -86,6 +86,21 @@ export class ExamImportController {
     });
 
     const targetStatus = status === 'APPROVED' ? 'APPROVED' : 'DRAFT';
+
+    // RÀNG BUỘC NGHIỆP VỤ BẮT BUỘC: Không thể duyệt (APPROVED) bộ đề khi còn câu hỏi chưa có đáp án đúng
+    if (targetStatus === 'APPROVED') {
+      const missingAnsQuestions = validatedQuestions.filter(
+        q => q.correctAnswer === undefined || q.correctAnswer === null || String(q.correctAnswer).trim() === ''
+      );
+      if (missingAnsQuestions.length > 0) {
+        const missingIndices = missingAnsQuestions.map(q => q.index).join(', ');
+        throw new AppError(
+          `Không thể duyệt (APPROVED) bộ đề khi còn ${missingAnsQuestions.length} câu hỏi chưa có đáp án đúng (Câu: ${missingIndices}). Vui lòng bổ sung đáp án hoặc lưu dưới dạng Bản nháp (DRAFT).`,
+          400
+        );
+      }
+    }
+
     const examName = typeof name === 'string' && name.trim().length > 0
       ? name.trim()
       : `Đề thi nhập vào (${validatedQuestions.length} câu)`;

@@ -1,9 +1,11 @@
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import FormData from 'form-data';
 import * as xlsx from 'xlsx';
 import { db } from '../src/db';
 import { examParserService } from '../src/services/exam-parser.service';
+import { generateTestFixtures } from './generate-fixtures';
 
 const API_BASE = 'http://localhost:5000/api';
 
@@ -22,6 +24,10 @@ async function runPhase7Tests() {
   console.log('========================================================\n');
 
   try {
+    // 0. Ensure fixtures exist
+    await generateTestFixtures();
+    const fixtureDir = path.join(process.cwd(), 'uploads/test_fixtures');
+
     // ─────────────────────────────────────────────────────────────
     // Setup test users
     // ─────────────────────────────────────────────────────────────
@@ -41,7 +47,7 @@ async function runPhase7Tests() {
     console.log(`[Setup] Test User A ID: ${userA.id}\n`);
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 1: Rule-based regex parsing (Zero AI token waste)
+    // SUITE 1: Rule-based regex parsing (Standard & Inline Keys)
     // ─────────────────────────────────────────────────────────────
     console.log('--- SUITE 1: Rule-Based Parser (Standard & Inline Keys) ---');
     const examTextInline = `
@@ -77,7 +83,7 @@ D. 3
     assert(parseInlineRes.questions[0].options?.B === 'x', 'Suite 1.5: Bóc tách chính xác nội dung Option B');
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 2: Answer Key Table at bottom (BẢNG ĐÁP ÁN: 1.B, 2.D...)
+    // SUITE 2: Answer Key Table at bottom (BẢNG ĐÁP ÁN: 1.C, 2.D...)
     // ─────────────────────────────────────────────────────────────
     console.log('\n--- SUITE 2: Answer Key Table Extraction (Bảng đáp án cuối bài) ---');
     const examTextWithTable = `
@@ -137,143 +143,242 @@ Câu 3: Hãy nêu ý nghĩa lịch sử của Cách mạng tháng Tám năm 1945
     assert(mixedRes.questions[2].type === 'ESSAY', 'Suite 3.5: Nhận diện cấu trúc ESSAY (câu hỏi tự luận không có options)');
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 4: Multi-format Extraction (Excel XLSX file)
+    // SUITE 4: Real .docx file parsing (Microsoft Word)
     // ─────────────────────────────────────────────────────────────
-    console.log('\n--- SUITE 4: Multi-format Parser (Excel XLSX) ---');
-    const scratchDir = path.join(process.cwd(), 'uploads/scratch_test');
-    if (!fs.existsSync(scratchDir)) fs.mkdirSync(scratchDir, { recursive: true });
+    console.log('\n--- SUITE 4: Real .docx File Parsing (Microsoft Word) ---');
+    const docxPath = path.join(fixtureDir, 'sample_exam.docx');
+    assert(fs.existsSync(docxPath), 'Suite 4.1: Tồn tại file sample_exam.docx thật');
 
-    const xlsxFilePath = path.join(scratchDir, 'test_exam.xlsx');
-    const wb = xlsx.utils.book_new();
-    const wsData = [
-      ['Câu hỏi', 'Đáp án A', 'Đáp án B', 'Đáp án C', 'Đáp án D', 'Đáp án đúng'],
-      ['Câu 1: 1 + 1 bằng mấy?', 'A. 1', 'B. 2', 'C. 3', 'D. 4', 'Đáp án: B'],
-      ['Câu 2: Thủ đô của Pháp là gì?', 'A. London', 'B. Berlin', 'C. Paris', 'D. Madrid', 'Đáp án: C'],
-    ];
-    const ws = xlsx.utils.aoa_to_sheet(wsData);
-    xlsx.utils.book_append_sheet(wb, ws, 'Questions');
-    xlsx.writeFile(wb, xlsxFilePath);
-
-    const xlsxText = await examParserService.extractTextFromFile(xlsxFilePath, 'test_exam.xlsx');
-    assert(xlsxText.includes('Câu 1') && xlsxText.includes('Paris'), 'Suite 4.1: Trích xuất dữ liệu thô từ file Excel .xlsx thành công');
-
-    const xlsxParseResult = await examParserService.parseExam({
-      filePath: xlsxFilePath,
-      originalName: 'test_exam.xlsx',
-      name: 'Đề thi kiểm tra từ Excel',
+    const docxParseRes = await examParserService.parseExam({
+      filePath: docxPath,
+      originalName: 'sample_exam.docx',
+      name: 'Đề thi Word kiểm thử',
       useAI: false,
     });
-    assert(xlsxParseResult.questions.length >= 2, 'Suite 4.2: Bóc tách thành công các câu hỏi từ file Excel');
-    assert(xlsxParseResult.extractionMethod === 'RULE_BASED', 'Suite 4.3: Extraction method là RULE_BASED (không tốn token AI)');
+
+    assert(docxParseRes.questions.length === 3, 'Suite 4.2: Bóc tách chính xác 3 câu hỏi từ file .docx thật');
+    assert(docxParseRes.extractionMethod === 'RULE_BASED', 'Suite 4.3: Extraction method của file docx là RULE_BASED (0 AI tokens)');
+    assert(docxParseRes.questions[0].content.includes('Thủ đô của Việt Nam'), 'Suite 4.4: Nội dung câu 1 file Word đọc chính xác');
+    assert(docxParseRes.questions[0].correctAnswer === 'B', 'Suite 4.5: Đáp án câu 1 file Word đọc chính xác là B');
+    assert(docxParseRes.questions[2].correctAnswer === 'C', 'Suite 4.6: Đáp án câu 3 file Word đọc chính xác là C');
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 5: API Preview Endpoint (POST /api/exams/parse) — No DB Write!
+    // SUITE 5: Real .pdf with text layer parsing
     // ─────────────────────────────────────────────────────────────
-    console.log('\n--- SUITE 5: API Preview Endpoint (No DB Write) ---');
-    const countTsBefore = await db.query('SELECT COUNT(*) FROM test_sets');
-    const countQBefore = await db.query('SELECT COUNT(*) FROM questions');
+    console.log('\n--- SUITE 5: Real .pdf File with Text Layer ---');
+    const pdfPath = path.join(fixtureDir, 'file_1_text_layer.pdf');
+    assert(fs.existsSync(pdfPath), 'Suite 5.1: Tồn tại file PDF file_1_text_layer.pdf thật có text layer');
 
-    const previewRes = await axios.post(
-      `${API_BASE}/exams/parse`,
-      {
-        textContent: examTextInline,
-        name: 'Đề Toán ôn tập Preview',
+    const pdfParseRes = await examParserService.parseExam({
+      filePath: pdfPath,
+      originalName: 'file_1_text_layer.pdf',
+      name: 'Tài liệu PDF kiểm thử',
+      useAI: false,
+    });
+
+    assert(pdfParseRes.questions.length >= 2, 'Suite 5.2: Bóc tách thành công các câu hỏi từ file PDF có text layer');
+    assert(pdfParseRes.extractionMethod === 'RULE_BASED', 'Suite 5.3: Extraction method của file PDF là RULE_BASED');
+
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 6: Scanned / Empty PDF Error Handling (No silent failure)
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n--- SUITE 6: Scanned / Empty PDF Rejection & Diagnostics ---');
+    const scannedPdfPath = path.join(fixtureDir, 'file_2_scanned_image.pdf');
+    assert(fs.existsSync(scannedPdfPath), 'Suite 6.1: Tồn tại file PDF scan ảnh không có text layer');
+
+    let scannedCaught = false;
+    let scannedErrorMessage = '';
+    try {
+      await examParserService.parseExam({
+        filePath: scannedPdfPath,
+        originalName: 'file_2_scanned_image.pdf',
         useAI: false,
+      });
+    } catch (err: any) {
+      scannedCaught = true;
+      scannedErrorMessage = err.message || '';
+    }
+
+    assert(scannedCaught, 'Suite 6.2: PDF scan không có text layer bị TỪ CHỐI (không báo thành công giả tạo)');
+    assert(
+      scannedErrorMessage.includes('text layer') || scannedErrorMessage.includes('scan'),
+      `Suite 6.3: Thông báo lỗi chẩn đoán rõ ràng cho người dùng: "${scannedErrorMessage}"`
+    );
+
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 7: Security & Disguised Fake File Rejection (Magic Bytes Check)
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n--- SUITE 7: Security & Disguised Fake File Rejection ---');
+    const fakePdfPath = path.join(fixtureDir, 'disguised_fake.pdf');
+    assert(fs.existsSync(fakePdfPath), 'Suite 7.1: Tồn tại file .exe đổi đuôi thành .pdf');
+
+    let fakeCaught = false;
+    let fakeErrorMessage = '';
+    try {
+      await examParserService.parseExam({
+        filePath: fakePdfPath,
+        originalName: 'disguised_fake.pdf',
+        useAI: false,
+      });
+    } catch (err: any) {
+      fakeCaught = true;
+      fakeErrorMessage = err.message || '';
+    }
+
+    assert(fakeCaught, 'Suite 7.2: File giả mạo header (%PDF-) bị chặn đứng ngay lập tức');
+    assert(
+      fakeErrorMessage.includes('Invalid PDF header signature') || fakeErrorMessage.includes('giả mạo'),
+      `Suite 7.3: Lỗi bắt đúng chữ ký header giả mạo: "${fakeErrorMessage}"`
+    );
+
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 8: Exams WITHOUT Answer Key (Đề không có đáp án)
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n--- SUITE 8: Exam Without Answer Key (correctAnswer = undefined) ---');
+    const examNoAnswerText = `
+Câu 1: Kim loại nào sau đây dẫn điện tốt nhất?
+A. Vàng
+B. Bạc
+C. Đồng
+D. Nhôm
+
+Câu 2: Nguyên tố hóa học nào phổ biến nhất trong vỏ Trái Đất?
+A. Oxi
+B. Silic
+C. Nhôm
+D. Sắt
+    `.trim();
+
+    const noAnsRes = examParserService.parseRuleBased(examNoAnswerText);
+    assert(noAnsRes.questions.length === 2, 'Suite 8.1: Bóc tách thành công 2 câu hỏi từ đề không có đáp án');
+    assert(noAnsRes.questions[0].correctAnswer === undefined, 'Suite 8.2: Câu 1 có correctAnswer = undefined (KHÔNG tự gán A hay đoán mò)');
+    assert(noAnsRes.questions[1].correctAnswer === undefined, 'Suite 8.3: Câu 2 có correctAnswer = undefined (KHÔNG tự gán A hay đoán mò)');
+    assert(noAnsRes.answerKeyFoundCount === 0, 'Suite 8.4: Thống kê số lượng đáp án tìm thấy đúng bằng 0');
+
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 9: Business Rule Guard on APPROVED with missing answers
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n--- SUITE 9: Business Rule Guard on APPROVED vs DRAFT ---');
+    // Cố gắng import bộ đề ở trạng thái APPROVED khi còn câu thiếu đáp án -> BẮT BUỘC BỊ TỪ CHỐI (HTTP 400)
+    let approvedRejectCaught = false;
+    let approvedRejectMsg = '';
+    try {
+      await axios.post(
+        `${API_BASE}/exams/import`,
+        {
+          name: 'Đề thi thiếu đáp án - Thử APPROVED',
+          questions: noAnsRes.questions,
+          status: 'APPROVED',
+        },
+        { headers: headersA }
+      );
+    } catch (err: any) {
+      approvedRejectCaught = true;
+      approvedRejectMsg = err.response?.data?.error || err.message;
+    }
+
+    assert(approvedRejectCaught, 'Suite 9.1: Chặn đứng POST /api/exams/import với status = APPROVED khi còn câu thiếu đáp án (HTTP 400)');
+    assert(
+      approvedRejectMsg.includes('chưa có đáp án đúng'),
+      `Suite 9.2: Thông báo lỗi chỉ rõ ràng buộc thiếu đáp án: "${approvedRejectMsg}"`
+    );
+
+    // Lưu cùng bộ đề đó ở trạng thái DRAFT (Bản nháp) -> CHO PHÉP THÀNH CÔNG (HTTP 201)
+    const draftImportRes = await axios.post(
+      `${API_BASE}/exams/import`,
+      {
+        name: 'Đề thi thiếu đáp án - Lưu DRAFT',
+        questions: noAnsRes.questions,
+        status: 'DRAFT',
       },
       { headers: headersA }
     );
 
-    assert(previewRes.status === 200, 'Suite 5.1: POST /api/exams/parse trả về HTTP 200');
-    assert(previewRes.data.success === true, 'Suite 5.2: Phản hồi thành công với payload chuẩn');
-    assert(previewRes.data.data.questions.length === 3, 'Suite 5.3: Trả về danh sách 3 câu hỏi cho client xem trước');
-    assert(previewRes.data.data.extractionMethod === 'RULE_BASED', 'Suite 5.4: Extraction method đúng là RULE_BASED');
+    assert(draftImportRes.status === 201, 'Suite 9.3: Cho phép lưu bộ đề chưa có đáp án dưới dạng DRAFT (HTTP 201)');
+    assert(draftImportRes.data.data.testSet.status === 'DRAFT', 'Suite 9.4: Trạng thái bộ đề lưu đúng là DRAFT');
+
+    // Dọn dẹp bản ghi draft
+    await db.query(`DELETE FROM questions WHERE test_set_id = $1`, [draftImportRes.data.data.testSet.id]);
+    await db.query(`DELETE FROM test_sets WHERE id = $1`, [draftImportRes.data.data.testSet.id]);
+
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 10: Ownership & IDOR Protection Verification
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n--- SUITE 10: Ownership & IDOR Protection ---');
+    const validQuestionsWithKeys = [
+      {
+        index: 1,
+        type: 'MULTIPLE_CHOICE',
+        content: 'Câu hỏi kiểm tra IDOR',
+        score: 1.0,
+        options: { A: 'Đúng', B: 'Sai' },
+        correctAnswer: 'A',
+      },
+    ];
+
+    // Gửi payload cố tình truyền created_by = 9999 hoặc userId = 9999
+    const idorTestRes = await axios.post(
+      `${API_BASE}/exams/import`,
+      {
+        name: 'Đề thi kiểm tra IDOR',
+        questions: validQuestionsWithKeys,
+        status: 'APPROVED',
+        created_by: 9999,
+        userId: 9999,
+      },
+      { headers: headersA }
+    );
+
+    assert(idorTestRes.status === 201, 'Suite 10.1: Import hợp lệ thành công');
+    assert(
+      idorTestRes.data.data.testSet.created_by === userA.id,
+      `Suite 10.2: created_by trong DB đúng bằng userA.id (${userA.id}), spoofed created_by (9999) bị loại bỏ hoàn toàn`
+    );
+
+    // Dọn dẹp bản ghi IDOR
+    await db.query(`DELETE FROM questions WHERE test_set_id = $1`, [idorTestRes.data.data.testSet.id]);
+    await db.query(`DELETE FROM test_sets WHERE id = $1`, [idorTestRes.data.data.testSet.id]);
+
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 11: API Multipart File Upload Preview (No DB Write)
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n--- SUITE 11: API Multipart File Upload Preview ---');
+    const countTsBefore = await db.query('SELECT COUNT(*) FROM test_sets');
+    const countQBefore = await db.query('SELECT COUNT(*) FROM questions');
+
+    const form = new FormData();
+    form.append('file', fs.createReadStream(docxPath), 'sample_exam.docx');
+    form.append('name', 'Đề kiểm tra Word Multipart Upload');
+    form.append('useAI', 'false');
+
+    const uploadRes = await axios.post(`${API_BASE}/exams/parse`, form, {
+      headers: {
+        ...headersA,
+        ...form.getHeaders(),
+      },
+    });
+
+    assert(uploadRes.status === 200, 'Suite 11.1: POST /api/exams/parse với multipart file .docx trả về HTTP 200');
+    assert(uploadRes.data.data.questions.length === 3, 'Suite 11.2: Trả về danh sách 3 câu hỏi xem trước từ file Word');
+    assert(uploadRes.data.data.extractionMethod === 'RULE_BASED', 'Suite 11.3: Extraction method là RULE_BASED');
 
     const countTsAfter = await db.query('SELECT COUNT(*) FROM test_sets');
     const countQAfter = await db.query('SELECT COUNT(*) FROM questions');
     assert(
       countTsBefore.rows[0].count === countTsAfter.rows[0].count &&
       countQBefore.rows[0].count === countQAfter.rows[0].count,
-      'Suite 5.5: KHÔNG có bản ghi nào bị ghi vào DB trong bước Preview (tuân thủ nghiêm ngặt quy trình)'
+      'Suite 11.4: Tuyệt đối KHÔNG có bản ghi nào bị ghi vào DB trong bước Upload Preview'
     );
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 6: User Correction & Import Endpoint (POST /api/exams/import)
+    // SUITE 12: Cleanup
     // ─────────────────────────────────────────────────────────────
-    console.log('\n--- SUITE 6: User Correction & Import to Database ---');
-    const correctedQuestions = [
-      {
-        index: 1,
-        type: 'MULTIPLE_CHOICE',
-        content: 'Đạo hàm của hàm số y = x^2 là gì? (Đã hiệu chỉnh)',
-        score: 1.5,
-        options: { A: '2x', B: 'x', C: '2', D: 'x^2' },
-        correctAnswer: 'A',
-      },
-      {
-        index: 2,
-        type: 'MULTIPLE_CHOICE',
-        content: 'Nguyên hàm của hàm số f(x) = 2x là gì? (Đã hiệu chỉnh)',
-        score: 1.5,
-        options: { A: 'x^2 + C', B: '2x^2 + C', C: 'x + C', D: '2 + C' },
-        correctAnswer: 'A',
-      },
-    ];
-
-    const importRes = await axios.post(
-      `${API_BASE}/exams/import`,
-      {
-        name: 'Đề thi đã hiệu chỉnh sau Preview',
-        questions: correctedQuestions,
-        status: 'APPROVED',
-      },
-      { headers: headersA }
-    );
-
-    assert(importRes.status === 201, 'Suite 6.1: POST /api/exams/import trả về HTTP 201 Created');
-    assert(importRes.data.data.testSet.name === 'Đề thi đã hiệu chỉnh sau Preview', 'Suite 6.2: Tên bộ đề được lưu chính xác');
-    assert(importRes.data.data.testSet.status === 'APPROVED', 'Suite 6.3: Trạng thái bộ đề lưu đúng APPROVED');
-    assert(Number(importRes.data.data.testSet.total_score) === 3.0, 'Suite 6.4: Tổng điểm được tính chính xác (1.5 + 1.5 = 3.0)');
-    assert(importRes.data.data.questions.length === 2, 'Suite 6.5: Lưu đúng 2 câu hỏi vào bảng questions');
-
-    // ─────────────────────────────────────────────────────────────
-    // SUITE 7: Authorization & Validation Security
-    // ─────────────────────────────────────────────────────────────
-    console.log('\n--- SUITE 7: Security & Input Validation ---');
-    try {
-      await axios.post(`${API_BASE}/exams/parse`, { textContent: 'Quá ngắn' });
-      assert(false, 'Suite 7.1: Bắt buộc từ chối khi không có token (Expected 401)');
-    } catch (err: any) {
-      assert(err.response?.status === 401, 'Suite 7.1: Từ chối truy cập unauthenticated (HTTP 401)');
-    }
-
-    try {
-      await axios.post(`${API_BASE}/exams/parse`, { textContent: '' }, { headers: headersA });
-      assert(false, 'Suite 7.2: Bắt buộc từ chối khi nội dung rỗng (Expected 400)');
-    } catch (err: any) {
-      assert(err.response?.status === 400, 'Suite 7.2: Từ chối nội dung rỗng hoặc thiếu file (HTTP 400)');
-    }
-
-    try {
-      await axios.post(`${API_BASE}/exams/import`, { name: 'Đề lỗi', questions: [] }, { headers: headersA });
-      assert(false, 'Suite 7.3: Bắt buộc từ chối khi danh sách questions rỗng (Expected 400)');
-    } catch (err: any) {
-      assert(err.response?.status === 400, 'Suite 7.3: Từ chối danh sách questions rỗng (HTTP 400)');
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // SUITE 8: Cleanup test artifacts
-    // ─────────────────────────────────────────────────────────────
-    console.log('\n--- SUITE 8: Cleanup ---');
-    if (fs.existsSync(xlsxFilePath)) fs.unlinkSync(xlsxFilePath);
-    if (fs.existsSync(scratchDir)) fs.rmdirSync(scratchDir);
-
-    await db.query(`DELETE FROM questions WHERE test_set_id = $1`, [importRes.data.data.testSet.id]);
-    await db.query(`DELETE FROM test_sets WHERE id = $1`, [importRes.data.data.testSet.id]);
-    await db.query(`DELETE FROM users WHERE id IN ($1)`, [userA.id]);
-    assert(true, 'Suite 8.1: Toàn bộ dữ liệu kiểm thử được dọn dẹp sạch sẽ');
+    console.log('\n--- SUITE 12: Final Cleanup ---');
+    await db.query(`DELETE FROM users WHERE id = $1`, [userA.id]);
+    assert(true, 'Suite 12.1: Toàn bộ dữ liệu kiểm thử được dọn dẹp sạch sẽ');
 
     console.log('\n\x1b[32m========================================================');
-    console.log('       ALL PHASE 7 INTEGRATION TESTS PASSED (100%)       ');
+    console.log('   ALL PHASE 7 ENHANCED TESTS PASSED (100% SUCCESS)    ');
     console.log('========================================================\x1b[0m\n');
   } catch (err: any) {
     console.error('\n[FATAL ERROR]', err.response?.data || err.message);

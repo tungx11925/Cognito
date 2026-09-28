@@ -974,17 +974,22 @@ hoặc cơ chế tương đương.
   - `frontend/src/components/ai-test/ExamImportModal.tsx`: Xây dựng modal 2 bước nhập đề thi hiện đại (Drag & drop file / Dán text -> Xem trước & Hiệu chỉnh tương tác -> Lưu DRAFT / APPROVED).
   - `frontend/src/app/ai-test/page.tsx`: Tích hợp nút `Nhập đề có sẵn (Word/PDF/Excel)` và kết nối modal `ExamImportModal`.
 - **Automated Tests**:
-  - `backend/scripts/test-phase7.ts`: Bộ test tích hợp tự động cho Phase 7 gồm 8 suites (19 assertions chi tiết).
+  - `backend/scripts/generate-fixtures.ts`: Sinh fixture kiểm thử chuẩn gồm file Word .docx, PDF có text layer, PDF scan, và file giả mạo header.
+  - `backend/scripts/test-phase7.ts`: Bộ test tích hợp tự động toàn diện cho Phase 7 gồm 12 suites (32 assertions chi tiết).
 
 ### 3. Kết quả Integration Test Phase 7 (`backend/scripts/test-phase7.ts`) — 100% Passed
 - Suite 1 (1.1 - 1.5): Bóc tách Rule-Based thành công câu hỏi và đáp án nội tuyến (Inline keys A, B, C, D).
 - Suite 2 (2.1 - 2.5): Bóc tách bảng đáp án cuối bài (`BẢNG ĐÁP ÁN: 1.C 2.D 3.C`), ghép nối chính xác vào từng câu hỏi và làm sạch thân câu hỏi.
 - Suite 3 (3.1 - 3.5): Nhận diện chính xác 4 cấu trúc câu hỏi: `MULTIPLE_CHOICE`, `TRUE_FALSE`, `FILL_BLANK`, `ESSAY`.
-- Suite 4 (4.1 - 4.3): Đọc và bóc tách dữ liệu từ file bảng tính Excel (`.xlsx`) hoàn toàn bằng Rule-based.
-- Suite 5 (5.1 - 5.5): Endpoint Preview `POST /api/exams/parse` trả về kết quả chính xác và chứng minh **0 bản ghi** bị ghi vào DB ở bước preview.
-- Suite 6 (6.1 - 6.5): Endpoint Import `POST /api/exams/import` lưu thành công câu hỏi đã hiệu chỉnh vào `test_sets` và `questions`, tính chuẩn xác tổng điểm.
-- Suite 7 (7.1 - 7.3): Kiểm tra bảo mật và validation — từ chối request unauthenticated (HTTP 401), từ chối file rỗng và danh sách câu hỏi rỗng (HTTP 400).
-- Suite 8 (8.1): Dọn dẹp sạch sẽ toàn bộ bản ghi và file tạm kiểm thử.
+- Suite 4 (4.1 - 4.6): Bóc tách file Microsoft Word (`.docx`) thật — đọc chính xác 3 câu hỏi, options và đáp án đúng hoàn toàn bằng Rule-based (0 AI tokens).
+- Suite 5 (5.1 - 5.3): Bóc tách file PDF (`.pdf`) thật có text layer (`file_1_text_layer.pdf`) — trích xuất đầy đủ câu hỏi bằng Rule-based.
+- Suite 6 (6.1 - 6.3): Xử lý PDF scan hoặc rỗng (`file_2_scanned_image.pdf`) — TỪ CHỐI dứt khoát với thông báo chẩn đoán rõ ràng, tuyệt đối không báo thành công giả tạo với 0 câu hỏi.
+- Suite 7 (7.1 - 7.3): Kiểm tra bảo mật Magic Bytes — phát hiện và chặn đứng file `.exe` đổi đuôi thành `.pdf` (`disguised_fake.pdf`) với lỗi `Invalid PDF header signature` (HTTP 400).
+- Suite 8 (8.1 - 8.4): Đề thi không có đáp án — câu hỏi sinh ra với `correctAnswer = undefined`, tuyệt đối không tự ý gán mặc định 'A' hay đoán mò.
+- Suite 9 (9.1 - 9.4): Ràng buộc nghiệp vụ bắt buộc — Chặn đứng `POST /api/exams/import` với `status = APPROVED` khi còn câu thiếu đáp án (HTTP 400); cho phép lưu dưới dạng `DRAFT` (HTTP 201).
+- Suite 10 (10.1 - 10.2): Chống tấn công IDOR — `created_by` trong database luôn lấy từ JWT token của user đăng nhập (`req.user.id`), hoàn toàn loại bỏ `created_by` hoặc `userId` giả mạo từ request body.
+- Suite 11 (11.1 - 11.4): Endpoint Preview `POST /api/exams/parse` qua multipart upload file Word `.docx` — trả về dữ liệu xem trước và chứng minh **0 bản ghi** bị ghi vào DB ở bước preview.
+- Suite 12 (12.1): Dọn dẹp sạch sẽ toàn bộ bản ghi và file tạm kiểm thử.
 
 ### 4. Kết quả Gate Checks
 - **Backend Build (`npm run build`)**: 0 errors (Pass).
@@ -993,8 +998,15 @@ hoặc cơ chế tương đương.
 - **Regression Tests (`test-phase4.ts`)**: 25/25 passed (Zero regression).
 - **Regression Tests (`test-phase5.ts`)**: 16/16 passed (Zero regression).
 - **Regression Tests (`test-phase6.ts`)**: 14/14 suites passed (Zero regression).
-- **Phase 7 Tests (`test-phase7.ts`)**: 8/8 suites passed (100%).
+- **Phase 7 Tests (`test-phase7.ts`)**: 12/12 suites passed (100%).
 
 ### 5. Việc còn lại / Chuẩn bị cho Phase tiếp theo
 - Phase 7 đã hoàn tất 100% và sẵn sàng bàn giao.
+- **Xác nhận giải trình kỹ thuật bổ sung theo review**:
+  1. 🔴 *Xử lý file Word/PDF thật và PDF Scan*: Đã tạo fixtures thật và bổ sung Suite 4, 5, 6, 7 vào `test-phase7.ts`. PDF scan không có text layer bị reject dứt khoát với thông báo lỗi tường minh; file đổi đuôi giả mạo bị chặn qua kiểm tra Magic Bytes header (`%PDF-`, `PK\x03\x04`).
+  2. 🔴 *Quy tắc đề không có đáp án*: Câu hỏi trích xuất giữ nguyên `correctAnswer: undefined`. Nếu lưu với `status: 'APPROVED'` khi còn câu thiếu đáp án thì bị chặn (HTTP 400); chỉ cho phép lưu dưới dạng `DRAFT`. Khi AI Normalization được gọi, mọi đáp án do AI gợi ý đều được gắn nhãn `[Đáp án gợi ý bởi AI - chưa xác nhận]`.
+  3. 🟡 *Bảo mật IDOR*: `created_by` được xác lập duy nhất từ `req.user.id` (JWT), đã được kiểm chứng qua Suite 10 (bỏ qua giá trị giả mạo 9999).
+  4. 🟡 *Kiểm tra kích thước file*: Giới hạn 25MB được kiểm soát chặt qua Multer file size limits.
+  5. 🟡 *Backlog Phase 20 / Phase 27*: Ghi nhận đưa tính năng Exam Parsing và AI Fallback đi qua Middleware kiểm soát hạn mức Quota / Entitlement của gói cước người dùng.
 - Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu Phase 7 trước khi tiến hành **PHASE 8 — QUIZ / TEST SYSTEM** (Question Set -> Start Quiz -> User solves online -> Submit -> Server-side Answer Verification & Scoring -> Result & Score -> Review Mistakes & Retry).
+

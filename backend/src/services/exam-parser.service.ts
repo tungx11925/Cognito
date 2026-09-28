@@ -42,16 +42,31 @@ export class ExamParserService {
 
     if (ext === '.pdf') {
       const dataBuffer = fs.readFileSync(filePath);
-      const data = await pdfParse(dataBuffer);
-      return data.text || '';
+      if (dataBuffer.length < 4 || dataBuffer.toString('binary', 0, 4) !== '%PDF') {
+        throw new AppError('Tệp PDF không đúng định dạng hoặc bị giả mạo (Invalid PDF header signature).', 400);
+      }
+      try {
+        const data = await pdfParse(dataBuffer);
+        return data.text || '';
+      } catch (err: any) {
+        throw new AppError(`Không thể đọc cấu trúc tệp PDF: ${err.message}`, 400);
+      }
     }
 
     if (ext === '.docx' || ext === '.doc') {
+      const dataBuffer = fs.readFileSync(filePath);
+      if (ext === '.docx' && (dataBuffer.length < 4 || dataBuffer[0] !== 0x50 || dataBuffer[1] !== 0x4B)) {
+        throw new AppError('Tệp DOCX không đúng định dạng nén OpenXML hoặc bị giả mạo (Invalid ZIP signature).', 400);
+      }
       const result = await mammoth.extractRawText({ path: filePath });
       return result.value || '';
     }
 
     if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
+      const dataBuffer = fs.readFileSync(filePath);
+      if (ext === '.xlsx' && (dataBuffer.length < 4 || dataBuffer[0] !== 0x50 || dataBuffer[1] !== 0x4B)) {
+        throw new AppError('Tệp XLSX không đúng định dạng nén OpenXML hoặc bị giả mạo (Invalid ZIP signature).', 400);
+      }
       const workbook = xlsx.readFile(filePath);
       const sheetName = workbook.SheetNames[0];
       if (!sheetName) return '';
@@ -308,7 +323,9 @@ ${sampleText}`;
         score: Number(q.score) || 1.0,
         options: q.options || undefined,
         correctAnswer: q.correctAnswer || undefined,
-        explanation: q.explanation || undefined,
+        explanation: q.correctAnswer
+          ? (q.explanation ? `${q.explanation} [Đáp án gợi ý bởi AI - chưa xác nhận]` : '[Đáp án gợi ý bởi AI - chưa xác nhận]')
+          : (q.explanation || undefined),
       }));
     } catch {
       return [];
@@ -338,7 +355,10 @@ ${sampleText}`;
       throw new AppError('Cần cung cấp file hoặc nội dung văn bản đề thi', 400);
     }
 
-    if (rawText.length < 20) {
+    if (rawText.trim().length < 20) {
+      if (options.originalName?.toLowerCase().endsWith('.pdf')) {
+        throw new AppError('Tệp PDF không chứa lớp văn bản kỹ thuật số (text layer) hoặc là file ảnh scan chưa qua OCR. Vui lòng tải lên file PDF có văn bản hoặc chuyển đổi OCR trước.', 400);
+      }
       throw new AppError('Nội dung đề thi quá ngắn hoặc file rỗng', 400);
     }
 
