@@ -385,8 +385,9 @@ router.put('/questions/bulk-update', authenticate, async (req: AuthRequest, res:
   }
 });
 
-import { parseExamWithAI } from '../utils/ai-engine.service';
+import { examParserService } from '../services/exam-parser.service';
 import multer from 'multer';
+import fs from 'fs';
 
 const upload = multer({ dest: 'uploads/exams/' });
 
@@ -395,65 +396,39 @@ router.post('/test-sets/upload-exam', authenticate, upload.single('file'), async
     return res.status(400).json({ error: 'Không tìm thấy file tải lên' });
   }
 
-  const fs = require('fs');
-  const path = require('path');
-  const pdfParse = require('pdf-parse');
-  const mammoth = require('mammoth');
-
   try {
-    const ext = path.extname(req.file.originalname).toLowerCase();
-    let textContent = '';
+    const parseResult = await examParserService.parseExam({
+      filePath: req.file.path,
+      originalName: req.file.originalname,
+      name: req.body.name,
+      useAI: true,
+      userId: req.user!.id,
+    });
 
-    if (ext === '.pdf') {
-      const dataBuffer = fs.readFileSync(req.file.path);
-      const data = await pdfParse(dataBuffer);
-      textContent = data.text;
-    } else if (ext === '.docx') {
-      const result = await mammoth.extractRawText({ path: req.file.path });
-      textContent = result.value;
-    } else {
-      return res.status(400).json({ error: 'Định dạng file không được hỗ trợ (chỉ nhận .pdf, .docx)' });
-    }
-
-    if (!textContent || textContent.trim().length < 50) {
-      return res.status(400).json({ error: 'Không thể trích xuất nội dung hoặc file quá ngắn' });
-    }
-
-    // Gửi qua AI để phân tách thành JSON
-    const questions = await parseExamWithAI(textContent, { userId: req.user!.id });
-
-    // Tạo Test Set tạm thời (DRAFT)
-    const totalScore = questions.reduce((s, q) => s + Number(q.score), 0);
-    const testName = req.body.name || `Đề thi trích xuất từ ${req.file.originalname}`;
-
-    const testSetResult = await db.query(
-      `INSERT INTO test_sets (name, total_questions, total_score, is_active, created_by, status)
-       VALUES ($1, $2, $3, true, $4, 'DRAFT') RETURNING *`,
-      [testName, questions.length, totalScore, req.user!.id]
-    );
-    const testSet = testSetResult.rows[0];
-
-    // Lưu các câu hỏi
-    const insertedQuestions: any[] = [];
-    for (const q of questions) {
-      const r = await db.query(
-        `INSERT INTO questions (test_set_id, type, content, score, status, options, correct_answer)
-         VALUES ($1, $2, $3, $4, 'DRAFT', $5, $6) RETURNING *`,
-        [testSet.id, q.type, q.content, q.score, q.options ? JSON.stringify(q.options) : null, JSON.stringify(q.correctAnswer)]
-      );
-      insertedQuestions.push(r.rows[0]);
-    }
-
-    // Clean up
-    fs.unlinkSync(req.file.path);
+    const testName = req.body.name || parseResult.title || `Đề thi trích xuất từ ${req.file.originalname}`;
+    const saved = await examParserService.saveToQuestionSet({
+      userId: req.user!.id,
+      name: testName,
+      questions: parseResult.questions,
+      status: 'DRAFT',
+    });
 
     return res.status(201).json({
-      testSet,
-      questions: insertedQuestions
+      testSet: saved.testSet,
+      questions: saved.questions,
+      stats: parseResult.stats,
+      extractionMethod: parseResult.extractionMethod,
     });
   } catch (err: any) {
-    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    return res.status(500).json({ error: err.message });
+    return res.status(err.statusCode || 500).json({ error: err.message });
+  } finally {
+    if (req.file && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch {
+        // Ignore unlink error
+      }
+    }
   }
 });
 

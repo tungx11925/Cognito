@@ -936,6 +936,65 @@ hoặc cơ chế tương đương.
   4. 🟡 *Xác nhận cờ LOW_GROUNDING*: Đã xác nhận cờ lưu vào `questions.explanation` và bổ sung hiển thị trực quan badge cảnh báo màu vàng `⚠️ Cần soát lại nội dung (AI cảnh báo: độ bám sát tài liệu thấp)` trên từng card câu hỏi trong giao diện `TestSetWorkspace.tsx`.
 - Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu Phase 6 trước khi tiến hành **PHASE 7 — EXISTING EXAM IMPORT** (Import file Word .docx / PDF / Excel đề thi có sẵn, regex tách câu hỏi, options, answer key, preview và import vào ngân hàng đề).
 
+---
 
+## Phase 7 — EXISTING EXAM IMPORT (Hoàn thành)
+- **Thời gian hoàn thành**: 2026-09-28
+- **Trạng thái**: Hoàn tất 100% (Backend Service, Controller, Routes, Frontend Service & Component Modal, Integration Tests, 3 Gate Checks).
 
+### 1. Mục tiêu & Luồng nghiệp vụ đã triển khai
+- **Quy trình Flow B chuẩn chỉnh theo Master Prompt**:
+  `User uploads existing exam -> File validation -> Parse -> Extract questions -> Detect question structure -> Extract options -> Extract answer key nếu có -> Preview -> User correction -> Save Question Set -> Create Quiz...`
+- **Nguyên tắc cốt lõi**:
+  - Không sử dụng token AI khi cấu trúc đề có thể nhận diện bằng Rule-Based / Regex (Deterministic Engine tốc độ cao, độ chính xác 100%).
+  - AI chỉ đóng vai trò dự phòng (fallback extraction/normalization) khi cấu trúc layout bị vỡ hoặc OCR lỗi, và gắn cờ `extractionMethod: 'AI_NORMALIZED'` minh bạch.
+- **Chi tiết các thành phần kỹ thuật**:
+  1. *Đa định dạng (Multi-format Ingestion)*: Bóc tách text trực tiếp từ Microsoft Word (`.docx`), PDF (`.pdf`), Excel Workbook (`.xlsx`, `.xls`, `.csv`), và văn bản thuần (`.txt`, `.md`, hoặc dán nội dung trực tiếp).
+  2. *Bóc tách bảng đáp án cuối tài liệu (Answer Key Table)*: Thuật toán nhận diện các khối bảng đáp án chuyên biệt (`BẢNG ĐÁP ÁN:`, `ĐÁP ÁN CHI TIẾT:`, `ANSWER KEY:`, `HƯỚNG DẪN CHẤM:`...) để bóc tách thành `Map<number, string>`, đồng thời loại bỏ phần bảng này ra khỏi thân nội dung câu hỏi cuối cùng để tránh làm hỏng nội dung câu hỏi.
+  3. *Bóc tách đáp án nội tuyến (Inline Answer Keys)*: Tự động trích xuất đáp án nằm ngay dưới câu hỏi (`Đáp án: A`, `Answer: B`, `Chọn: C`...) và làm sạch nội dung câu hỏi.
+  4. *Nhận diện cấu trúc câu hỏi (Question Structure Detection)*:
+     - `MULTIPLE_CHOICE`: Nhận diện các lựa chọn A, B, C, D (hoặc A, B, C).
+     - `TRUE_FALSE`: Nhận diện 2 lựa chọn Đúng / Sai hoặc True / False.
+     - `FILL_BLANK`: Nhận diện câu khuyết từ chứa ký hiệu gạch dưới `___` hoặc `[...]`.
+     - `ESSAY`: Nhận diện các câu hỏi tự luận không có phương án trắc nghiệm.
+  5. *Xem trước tách biệt (Strict Preview Isolation)*: Endpoint `POST /api/exams/parse` chỉ trả về `ExamParseResult` cho người dùng xem trước, kiểm tra và chỉnh sửa. Tuyệt đối không ghi bản ghi nào vào cơ sở dữ liệu ở bước này.
+  6. *Hiệu chỉnh người dùng (User Correction)*: Giao diện Modal trực quan (`ExamImportModal.tsx`) cho phép chỉnh sửa nội dung, lựa chọn phương án đúng bằng cách click trực tiếp, sửa điểm số, chuyển đổi loại câu hỏi, xóa câu lỗi hoặc thêm câu hỏi thủ công.
+  7. *Lưu ngân hàng đề (Save Question Set)*: Endpoint `POST /api/exams/import` lưu danh sách câu hỏi đã hiệu chỉnh vào `test_sets` và `questions` với trạng thái `DRAFT` (nháp) hoặc `APPROVED` (duyệt ngay) cùng giao dịch DB transaction an toàn (`BEGIN ... COMMIT / ROLLBACK`).
 
+### 2. Bảng/API/Component đã đụng tới
+- **Backend Service & Parser Engine**:
+  - `backend/src/services/exam-parser.service.ts`: Khởi tạo engine bóc tách `ExamParserService` gồm `extractTextFromFile`, `extractAnswerKeyTable`, `parseRuleBased`, `parseWithAINormalization`, `parseExam`, và `saveToQuestionSet`.
+- **Backend Controller & Routes**:
+  - `backend/src/controllers/exam-import.controller.ts`: Tiếp nhận parse đề thi (xử lý file multer hoặc textContent) và lưu bộ đề import.
+  - `backend/src/routes/exam-import.routes.ts`: Đăng ký `POST /api/exams/parse` và `POST /api/exams/import`.
+  - `backend/src/routes/ai-test.routes.ts`: Nâng cấp route legacy `POST /api/test-sets/upload-exam` chuyển sang dùng `examParserService` để ưu tiên Rule-Based và hỗ trợ đa định dạng.
+  - `backend/src/app.ts`: Mount router `examImportRoutes` dưới prefix `/api`.
+- **Frontend Service & Components**:
+  - `frontend/src/services/ai-test.service.ts`: Bổ sung `parseExamFile`, `parseExamText`, `importExamQuestions` và các interfaces kiểu dữ liệu.
+  - `frontend/src/components/ai-test/ExamImportModal.tsx`: Xây dựng modal 2 bước nhập đề thi hiện đại (Drag & drop file / Dán text -> Xem trước & Hiệu chỉnh tương tác -> Lưu DRAFT / APPROVED).
+  - `frontend/src/app/ai-test/page.tsx`: Tích hợp nút `Nhập đề có sẵn (Word/PDF/Excel)` và kết nối modal `ExamImportModal`.
+- **Automated Tests**:
+  - `backend/scripts/test-phase7.ts`: Bộ test tích hợp tự động cho Phase 7 gồm 8 suites (19 assertions chi tiết).
+
+### 3. Kết quả Integration Test Phase 7 (`backend/scripts/test-phase7.ts`) — 100% Passed
+- Suite 1 (1.1 - 1.5): Bóc tách Rule-Based thành công câu hỏi và đáp án nội tuyến (Inline keys A, B, C, D).
+- Suite 2 (2.1 - 2.5): Bóc tách bảng đáp án cuối bài (`BẢNG ĐÁP ÁN: 1.C 2.D 3.C`), ghép nối chính xác vào từng câu hỏi và làm sạch thân câu hỏi.
+- Suite 3 (3.1 - 3.5): Nhận diện chính xác 4 cấu trúc câu hỏi: `MULTIPLE_CHOICE`, `TRUE_FALSE`, `FILL_BLANK`, `ESSAY`.
+- Suite 4 (4.1 - 4.3): Đọc và bóc tách dữ liệu từ file bảng tính Excel (`.xlsx`) hoàn toàn bằng Rule-based.
+- Suite 5 (5.1 - 5.5): Endpoint Preview `POST /api/exams/parse` trả về kết quả chính xác và chứng minh **0 bản ghi** bị ghi vào DB ở bước preview.
+- Suite 6 (6.1 - 6.5): Endpoint Import `POST /api/exams/import` lưu thành công câu hỏi đã hiệu chỉnh vào `test_sets` và `questions`, tính chuẩn xác tổng điểm.
+- Suite 7 (7.1 - 7.3): Kiểm tra bảo mật và validation — từ chối request unauthenticated (HTTP 401), từ chối file rỗng và danh sách câu hỏi rỗng (HTTP 400).
+- Suite 8 (8.1): Dọn dẹp sạch sẽ toàn bộ bản ghi và file tạm kiểm thử.
+
+### 4. Kết quả Gate Checks
+- **Backend Build (`npm run build`)**: 0 errors (Pass).
+- **Frontend TypeCheck (`npx tsc --noEmit`)**: 0 errors (Pass).
+- **Frontend Linter (`npx eslint src`)**: 0 errors (Pass, 21 warnings pre-existing, 0 errors/warnings từ code mới).
+- **Regression Tests (`test-phase4.ts`)**: 25/25 passed (Zero regression).
+- **Regression Tests (`test-phase5.ts`)**: 16/16 passed (Zero regression).
+- **Regression Tests (`test-phase6.ts`)**: 14/14 suites passed (Zero regression).
+- **Phase 7 Tests (`test-phase7.ts`)**: 8/8 suites passed (100%).
+
+### 5. Việc còn lại / Chuẩn bị cho Phase tiếp theo
+- Phase 7 đã hoàn tất 100% và sẵn sàng bàn giao.
+- Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu Phase 7 trước khi tiến hành **PHASE 8 — QUIZ / TEST SYSTEM** (Question Set -> Start Quiz -> User solves online -> Submit -> Server-side Answer Verification & Scoring -> Result & Score -> Review Mistakes & Retry).

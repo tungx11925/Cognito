@@ -6,6 +6,7 @@ import { Sparkles, Loader2, Plus, Trash2, Edit3, ToggleLeft, ToggleRight, FileTe
 import toast from "react-hot-toast";
 import { MainLayout } from "@/components/layout/MainLayout";
 import TestSetWorkspace from "@/components/ai-test/TestSetWorkspace";
+import ExamImportModal from "@/components/ai-test/ExamImportModal";
 import {
   getAIConfig, updateAIConfig,
   getMyDocuments, getMyDecks, getDeckContent, getDocumentContent,
@@ -56,6 +57,7 @@ export default function AITestPage() {
   const [generating, setGenerating] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [showGenPanel, setShowGenPanel] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editTarget, setEditTarget] = useState<TestSet | null>(null);
 
   // Source picker
@@ -390,10 +392,14 @@ export default function AITestPage() {
             </h1>
             <p className="text-sm text-gray-500 mt-1">Tự động tạo bộ đề từ tài liệu, flashcard hoặc nội dung bất kỳ.</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => setShowConfig(p => !p)}
               className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-gray-600 border border-gray-200 bg-white rounded-xl hover:bg-gray-50 transition-colors">
               <Settings2 size={14} /> Cấu hình
+            </button>
+            <button onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm">
+              <Upload size={14} /> Nhập đề có sẵn (Word/PDF/Excel)
             </button>
             <button onClick={() => setShowGenPanel(p => !p)}
               className="flex items-center gap-2 px-4 py-2 bg-[#1a3a2a] text-white text-sm font-bold rounded-xl hover:bg-[#234b37] transition-colors shadow-lg shadow-[#1a3a2a]/20">
@@ -895,6 +901,15 @@ export default function AITestPage() {
           <TestSetWorkspace testSetId={editTarget.id} testSetName={editTarget.name} onClose={() => setEditTarget(null)} />
         )}
       </AnimatePresence>
+
+      <ExamImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={(newSet) => {
+          setTestSets(prev => [newSet, ...prev]);
+          setEditTarget(newSet);
+        }}
+      />
     </MainLayout>
   );
 }
