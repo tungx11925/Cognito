@@ -214,7 +214,50 @@ async function runPhase9Tests() {
     } catch (err: any) {
       notFoundBlocked = err.response?.status === 404;
     }
-    assert(notFoundBlocked, '2.4 Trả về HTTP 404 khi truy cập ghi chú không tồn tại\n');
+    assert(notFoundBlocked, '2.4 Trả về HTTP 404 khi truy cập ghi chú không tồn tại');
+
+    // 2.5 Foreign Key IDOR: User B tạo note gắn document_id riêng tư của User A
+    let bCreateAttachPrivateDocBlocked = false;
+    try {
+      await axios.post(
+        `${API_BASE}/notes`,
+        {
+          title: 'Ghi chú nghe lén của User B',
+          content: 'Cố tình lấy document_title của User A qua foreign key',
+          document_id: testDocId,
+        },
+        { headers: headersB }
+      );
+    } catch (err: any) {
+      bCreateAttachPrivateDocBlocked = err.response?.status === 403;
+    }
+    assert(
+      bCreateAttachPrivateDocBlocked,
+      '2.5 [IDOR Khóa ngoại] Chặn User B tạo note gắn vào document riêng tư của User A (HTTP 403 Forbidden)'
+    );
+
+    // 2.6 Foreign Key IDOR: User B sửa note của mình để gắn document_id riêng tư của User A
+    const bNoteRes = await axios.post(
+      `${API_BASE}/notes`,
+      { title: 'Note hợp lệ của B', content: 'Nội dung của B' },
+      { headers: headersB }
+    );
+    const bNoteId = bNoteRes.data.note.id;
+
+    let bUpdateAttachPrivateDocBlocked = false;
+    try {
+      await axios.put(
+        `${API_BASE}/notes/${bNoteId}`,
+        { document_id: testDocId },
+        { headers: headersB }
+      );
+    } catch (err: any) {
+      bUpdateAttachPrivateDocBlocked = err.response?.status === 403;
+    }
+    assert(
+      bUpdateAttachPrivateDocBlocked,
+      '2.6 [IDOR Khóa ngoại] Chặn User B sửa note để gắn vào document riêng tư của User A (HTTP 403 Forbidden)\n'
+    );
 
     // ─────────────────────────────────────────────────────────────
     // SUITE 3: Mindmap System (CRUD, Document Attachment, Search)
@@ -340,7 +383,50 @@ async function runPhase9Tests() {
     } catch (err: any) {
       notFoundMmBlocked = err.response?.status === 404;
     }
-    assert(notFoundMmBlocked, '4.4 Trả về HTTP 404 khi truy cập sơ đồ không tồn tại\n');
+    assert(notFoundMmBlocked, '4.4 Trả về HTTP 404 khi truy cập sơ đồ không tồn tại');
+
+    // 4.5 Foreign Key IDOR: User B tạo mindmap gắn document_id riêng tư của User A
+    let bCreateMmAttachPrivateDocBlocked = false;
+    try {
+      await axios.post(
+        `${API_BASE}/mindmaps`,
+        {
+          title: 'Sơ đồ nghe lén của User B',
+          mermaid_code: 'mindmap\n  root((Hacked))',
+          document_id: testDocId,
+        },
+        { headers: headersB }
+      );
+    } catch (err: any) {
+      bCreateMmAttachPrivateDocBlocked = err.response?.status === 403;
+    }
+    assert(
+      bCreateMmAttachPrivateDocBlocked,
+      '4.5 [IDOR Khóa ngoại] Chặn User B tạo mindmap gắn vào document riêng tư của User A (HTTP 403 Forbidden)'
+    );
+
+    // 4.6 Foreign Key IDOR: User B sửa mindmap của mình để gắn document_id riêng tư của User A
+    const bMmRes = await axios.post(
+      `${API_BASE}/mindmaps`,
+      { title: 'Mindmap hợp lệ của B', mermaid_code: 'mindmap\n  root((Valid B))' },
+      { headers: headersB }
+    );
+    const bMmId = bMmRes.data.mindmap.id;
+
+    let bUpdateMmAttachPrivateDocBlocked = false;
+    try {
+      await axios.put(
+        `${API_BASE}/mindmaps/${bMmId}`,
+        { document_id: testDocId },
+        { headers: headersB }
+      );
+    } catch (err: any) {
+      bUpdateMmAttachPrivateDocBlocked = err.response?.status === 403;
+    }
+    assert(
+      bUpdateMmAttachPrivateDocBlocked,
+      '4.6 [IDOR Khóa ngoại] Chặn User B sửa mindmap để gắn vào document riêng tư của User A (HTTP 403 Forbidden)\n'
+    );
 
     // ─────────────────────────────────────────────────────────────
     // SUITE 5: Flashcard System (Manual Creation, Deck CRUD, NO AI)
@@ -412,7 +498,86 @@ async function runPhase9Tests() {
     } catch (err: any) {
       bDeckDeleteBlocked = err.response?.status === 403;
     }
-    assert(bDeckDeleteBlocked, '5.5 Chặn User B xóa bộ thẻ của User A (HTTP 403 Forbidden)\n');
+    assert(bDeckDeleteBlocked, '5.5 Chặn User B xóa bộ thẻ của User A (HTTP 403 Forbidden)');
+
+    // 5.6 Foreign Key IDOR: User B tạo flashcard trong deck của mình nhưng gắn document_id riêng tư của User A
+    const bDeckRes = await axios.post(
+      `${API_BASE}/flashcards/decks`,
+      { name: 'Deck của B' },
+      { headers: headersB }
+    );
+    const bDeckId = bDeckRes.data.id;
+
+    let bCreateCardAttachPrivateDocBlocked = false;
+    try {
+      await axios.post(
+        `${API_BASE}/flashcards`,
+        {
+          deck_id: bDeckId,
+          front: 'Front B',
+          back: 'Back B',
+          document_id: testDocId,
+        },
+        { headers: headersB }
+      );
+    } catch (err: any) {
+      bCreateCardAttachPrivateDocBlocked = err.response?.status === 403;
+    }
+    assert(
+      bCreateCardAttachPrivateDocBlocked,
+      '5.6 [IDOR Khóa ngoại] Chặn User B tạo flashcard gắn vào document riêng tư của User A (HTTP 403 Forbidden)'
+    );
+
+    // 5.7 Per-Card IDOR: User B cố tình sửa nội dung thẻ của User A
+    let bEditCardBlocked = false;
+    try {
+      await axios.put(
+        `${API_BASE}/flashcards/${testCardId}`,
+        { front: 'Hacker sửa thẻ của User A', back: 'Hacker sửa back' },
+        { headers: headersB }
+      );
+    } catch (err: any) {
+      bEditCardBlocked = err.response?.status === 404 || err.response?.status === 403;
+    }
+    assert(bEditCardBlocked, '5.7 [IDOR Cấp thẻ] Chặn User B sửa thẻ trong bộ thẻ của User A (HTTP 404/403)');
+
+    // 5.8 Per-Card IDOR: User B cố tình gắn sao thẻ của User A
+    let bStarCardBlocked = false;
+    try {
+      await axios.put(
+        `${API_BASE}/flashcards/${testCardId}/star`,
+        { is_starred: true },
+        { headers: headersB }
+      );
+    } catch (err: any) {
+      bStarCardBlocked = err.response?.status === 404 || err.response?.status === 403;
+    }
+    assert(bStarCardBlocked, '5.8 [IDOR Cấp thẻ] Chặn User B gắn sao thẻ trong bộ thẻ của User A (HTTP 404/403)');
+
+    // 5.9 Per-Card IDOR: User B cố tình xóa thẻ của User A
+    let bDeleteCardBlocked = false;
+    try {
+      await axios.delete(
+        `${API_BASE}/flashcards/${testCardId}`,
+        { headers: headersB }
+      );
+    } catch (err: any) {
+      bDeleteCardBlocked = err.response?.status === 404 || err.response?.status === 403;
+    }
+    assert(bDeleteCardBlocked, '5.9 [IDOR Cấp thẻ] Chặn User B xóa thẻ trong bộ thẻ của User A (HTTP 404/403)');
+
+    // 5.10 Per-Card IDOR: User B cố tình ôn tập thẻ của User A
+    let bReviewCardBlocked = false;
+    try {
+      await axios.post(
+        `${API_BASE}/flashcards/review/${testCardId}`,
+        { difficulty: 'good' },
+        { headers: headersB }
+      );
+    } catch (err: any) {
+      bReviewCardBlocked = err.response?.status === 404 || err.response?.status === 403;
+    }
+    assert(bReviewCardBlocked, '5.10 [IDOR Cấp thẻ] Chặn User B ôn tập thẻ trong bộ thẻ của User A (HTTP 404/403)\n');
 
     // ─────────────────────────────────────────────────────────────
     // SUITE 6: Spaced Repetition (SM-2 Algorithm Deep Verification)

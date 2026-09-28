@@ -26,11 +26,15 @@ export class NoteService {
       throw new AppError('Nội dung ghi chú không được để trống', 400);
     }
 
-    // Nếu có document_id, kiểm tra xem document có tồn tại không
+    // Nếu có document_id, kiểm tra xem document có tồn tại và người dùng có quyền truy cập không
     if (document_id) {
-      const docCheck = await db.query('SELECT id, title FROM documents WHERE id = $1', [document_id]);
+      const docCheck = await db.query('SELECT id, user_id, visibility, title FROM documents WHERE id = $1', [document_id]);
       if (docCheck.rows.length === 0) {
         throw new AppError('Tài liệu được gắn không tồn tại', 404);
+      }
+      const doc = docCheck.rows[0];
+      if (doc.user_id !== userId && doc.visibility !== 'public') {
+        throw new AppError('Bạn không có quyền truy cập hoặc liên kết với tài liệu riêng tư này', 403);
       }
     }
 
@@ -135,9 +139,13 @@ export class NoteService {
     }
 
     if (newDocId) {
-      const docCheck = await db.query('SELECT id FROM documents WHERE id = $1', [newDocId]);
+      const docCheck = await db.query('SELECT id, user_id, visibility FROM documents WHERE id = $1', [newDocId]);
       if (docCheck.rows.length === 0) {
         throw new AppError('Tài liệu được gắn không tồn tại', 404);
+      }
+      const doc = docCheck.rows[0];
+      if (doc.user_id !== userId && doc.visibility !== 'public') {
+        throw new AppError('Bạn không có quyền truy cập hoặc liên kết với tài liệu riêng tư này', 403);
       }
     }
 

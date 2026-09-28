@@ -1,6 +1,7 @@
 import { flashcardRepository } from '../repositories/flashcard.repository';
 import { AppError } from '../utils/AppError';
 import { activityService } from './activity.service';
+import { db } from '../db';
 
 class FlashcardService {
   async getDecks(userId: number) {
@@ -56,6 +57,19 @@ class FlashcardService {
     const deck = await flashcardRepository.getDeckById(deckId);
     if (!deck || deck.user_id !== userId) {
       throw new AppError('Bạn không có quyền truy cập bộ thẻ này hoặc bộ thẻ không tồn tại', 403);
+    }
+    if (documentId) {
+      const docCheck = await db.query(
+        'SELECT id, user_id, visibility FROM documents WHERE id = $1',
+        [documentId]
+      );
+      if (docCheck.rows.length === 0) {
+        throw new AppError('Tài liệu được gắn không tồn tại', 404);
+      }
+      const doc = docCheck.rows[0];
+      if (doc.user_id !== userId && doc.visibility !== 'public') {
+        throw new AppError('Bạn không có quyền truy cập hoặc liên kết với tài liệu riêng tư này', 403);
+      }
     }
     return await flashcardRepository.createFlashcard(deckId, documentId, front, back);
   }

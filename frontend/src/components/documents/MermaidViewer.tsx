@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 mermaid.initialize({
   startOnLoad: false,
   theme: 'forest',
-  securityLevel: 'loose',
+  securityLevel: 'strict',
   fontFamily: 'var(--font-sans), sans-serif',
   suppressErrorRendering: true,
 });

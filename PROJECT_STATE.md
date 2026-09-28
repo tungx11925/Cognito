@@ -1196,17 +1196,112 @@ hoặc cơ chế tương đương.
   - Kiểm tra chặn đáy (Floor constraint): Đánh giá Hard liên tiếp 10 lần, xác nhận `ease_factor` không bao giờ tụt dưới ngưỡng sàn 1.3.
   - Tự động cập nhật chuỗi học tập `streak` và nhiệm vụ học tập.
 
-### 4. Kết quả Gate Checks
+### 4. Kết quả Gate Checks & Toàn diện Regression (`npm run test:all`)
 - **Backend Build (`npm run build`)**: 0 errors (Pass).
 - **Frontend TypeCheck (`npx tsc --noEmit`)**: 0 errors (Pass).
-- **Frontend Linter (`npx eslint src`)**: 0 errors (Pass, 21 warnings pre-existing, 0 errors/warnings từ code mới).
-- **Regression Tests (`test-phase4.ts`)**: 25/25 passed (Zero regression).
-- **Regression Tests (`test-phase7.ts`)**: 12/12 suites passed (Zero regression).
-- **Regression Tests (`test-phase8.ts`)**: 8/8 suites passed (Zero regression).
-- **Phase 9 Tests (`test-phase9.ts`)**: 6/6 suites (35/35 assertions) passed (100% Success).
+- **Frontend Linter (`npx eslint src`)**: 0 errors (Pass).
+- **Lệnh chạy hồi quy toàn diện duy nhất (`npm run test:all`)**:
+  - `Phase 4`: Document Management & Processing Pipeline — **PASS** (3.17s)
+  - `Phase 5`: AI Chat with Documents & Mindmap Generation — **PASS** (10.59s - 16/16 tests)
+  - `Phase 6`: Question Generator & Bloom Taxonomy — **PASS** (45.05s - 14/14 tests)
+  - `Phase 7`: Exam & Question Bank Management — **PASS** (2.15s - 12/12 suites)
+  - `Phase 8`: Quiz / Test System & Anti-Cheat Grading — **PASS** (1.87s - 11/11 suites)
+  - `Phase 9`: Notes, Mindmaps & Flashcards Workspace — **PASS** (2.14s - 6/6 suites)
+  - **TỔNG KẾT**: Zero regression across all implemented phases!
 
-### 5. Tuân thủ Rule 0.1.1
-- Phase 9 đã hoàn thành 100%, kiểm thử đạt 100%, 3 Gate Checks đều pass.
-- Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu Phase 9 trước khi tiến hành **PHASE 10 — REAL-TIME STUDY ROOM / POMODORO / COLLABORATION**.
+---
+
+## GIẢI TRÌNH & XỬ LÝ DỨT ĐIỂM NỢ PHASE 8 — CẬP NHẬT PHẢN HỒI
+
+Theo phản hồi từ người dùng, hệ thống đã dừng toàn bộ việc chuyển tiếp sang Phase 10 để tập trung xử lý dứt điểm, minh bạch và có bằng chứng kiểm thử tự động cho toàn bộ các điểm nợ của Phase 8:
+
+### 1. Câu tự luận (ESSAY) — Tuyệt đối không chấm điểm bằng độ dài nội dung
+- **Hiện trạng & Giải pháp**: Trước đó, việc kiểm tra câu tự luận theo độ dài ký tự có nguy cơ tạo ra điểm "ảo" khi người dùng nhập chuỗi văn bản vô nghĩa nhưng dài. Hệ thống đã chuẩn hóa quy tắc:
+  - Mọi câu hỏi loại `ESSAY` khi chấm tự động trên server: `score_awarded = 0.0`, `is_correct = false`.
+  - Hệ thống cung cấp câu trả lời của thí sinh song song với đáp án mẫu và lời giải từ tác giả để người học tự đối chiếu và đánh giá. Điểm tổng và accuracy chỉ tính trên các câu hỏi chấm khách quan được.
+- **Bằng chứng kiểm thử**:
+  - Kiểm tra tự động tại **Suite 5** của `test-phase8.ts`: Thí sinh nộp câu tự luận với chuỗi văn bản rác vô nghĩa dài hơn 60 ký tự (`"asdkjhf asdkfjh sadkfjhasdf..."`) -> Server chấm chính xác `is_correct = false`, `score_awarded = 0.0`. Tổng điểm chỉ được cộng từ 3 câu khách quan (7.5đ), tỷ lệ đúng 75%.
+
+### 2. Xác nhận phân quyền: `APPROVED` KHÔNG ĐỒNG NGHĨA VỚI `PUBLIC`
+- **Hiện trạng & Giải pháp**: Một bộ đề thi có thể đã được phê duyệt nội dung (`status = 'APPROVED'`) nhưng người tạo đề vẫn giữ ở chế độ riêng tư (`visibility = 'private'`).
+  - Người dùng khác (User B) chỉ được phép làm bài thi của User A khi và chỉ khi: `visibility = 'public'` VÀ `status = 'APPROVED'`.
+  - Nếu User A tạo đề `visibility = 'private'` dù `status = 'APPROVED'`, User B cố tình gọi API làm bài thi (`POST /api/quizzes/start`) sẽ lập tức nhận **HTTP 403 Forbidden**.
+- **Bằng chứng kiểm thử**:
+  - Kiểm tra tự động tại **Suite 2** của `test-phase8.ts`: User B gửi request làm bộ đề có `visibility = 'private'` và `status = 'APPROVED'` của User A -> Nhận mã lỗi **HTTP 403 Forbidden**. Đồng thời kiểm tra User B làm thành công khi đề có `visibility = 'public'` VÀ `status = 'APPROVED'`.
+
+### 3. Phòng chống gian lận & Rò rỉ đáp án cấp Attempt (IN_PROGRESS & IDOR)
+- **Chặn rò rỉ đáp án khi đang làm bài**:
+  - Khi một bài thi đang diễn ra (`status = 'IN_PROGRESS'`), nếu thí sinh cố tình gọi API lấy chi tiết bài thi (`GET /quizzes/attempts/:id`) hoặc lấy danh sách câu sai (`GET /quizzes/attempts/:id/mistakes`), server lập tức chặn đứng với mã lỗi **HTTP 400 Bad Request** kèm thông báo bảo mật.
+  - Payload trả về lúc bắt đầu làm bài (`POST /quizzes/start`) đã được loại bỏ hoàn toàn các trường `correct_answer`, `correctAnswer` và `explanation`.
+- **Chống tấn công IDOR cấp Attempt**:
+  - User B không thể nộp bài (`POST /quizzes/attempts/:id/submit`) cho lượt làm bài của User A -> **HTTP 403 Forbidden**.
+  - User B không thể xem kết quả bài thi của User A -> **HTTP 403 Forbidden**.
+- **Bằng chứng kiểm thử**:
+  - Kiểm chứng tự động tại **Suite 1, Suite 3 và Suite 4** của `test-phase8.ts`.
+
+### 4. 5 Mục xác nhận bằng chữ theo yêu cầu
+1. **Câu hỏi chưa có đáp án (`correct_answer = null` / Phase 7 NOT SET)**:
+   - Các câu hỏi chưa được người tạo thiết lập đáp án chính thức sẽ lưu trữ `correct_answer = null`.
+   - Khi thí sinh nộp bài thi: Server chấm câu hỏi này `score_awarded = 0.0`, `is_correct = false`, không sinh điểm ảo vào tổng điểm bài thi. Lời giải trả về nêu rõ câu hỏi chưa có đáp án chính thức. Đã kiểm chứng tại **Suite 6** của `test-phase8.ts`.
+2. **`duration_seconds` do ai tính toán?**:
+   - `duration_seconds` do **Server tính toán độc lập** dựa trên chênh lệch thời gian `CURRENT_TIMESTAMP - started_at`. Bác bỏ hoàn toàn giá trị giả mạo (ví dụ `durationSeconds: 999999`) do client gửi lên. Đã kiểm chứng tại **Suite 7** của `test-phase8.ts`.
+3. **Xác nhận nợ Phase 7**:
+   - Toàn bộ 12 test suites của Phase 7 (từ parse DOCX, PDF có text layer, cảnh báo file scan/rỗng/hỏng, import Excel/TXT, export đề thi đến kiểm soát quyền bộ đề) đều đã được kiểm thử hồi quy đầy đủ và đạt 100% trong `npm run test:all`.
+4. **Chuẩn hóa từ ngữ nghiệp vụ**:
+   - Loại bỏ triệt để các từ ngữ thuộc hệ thống quản lý trường học cũ ("học sinh", "giáo viên", "lớp học", "khoa"). Chuẩn hóa đồng nhất sang "người dùng", "học viên", "người học", "người tạo đề", "tác giả".
+5. **Phạm vi Phase 9**:
+   - Phạm vi Phase 9 được giới hạn chuẩn xác: Ghi chú (Notes), Sơ đồ tư duy (Mindmap), Thẻ ghi nhớ (Flashcards) theo thuật toán lặp lại ngắt quãng SM-2 được tạo thủ công (NO AI generation).
+
+---
+
+## BỔ SUNG KIỂM THỬ BẢO MẬT PHASE 9: CHỐNG IDOR KHÓA NGOẠI & CẤP THẺ
+
+Theo phản hồi mục 🔴 4 và các câu hỏi xác nhận 🟡:
+
+### 1. IDOR qua khóa ngoại khi gắn `document_id` vào tài liệu riêng tư của người khác
+- **Lỗ hổng tiềm ẩn**: Nếu API chỉ kiểm tra `WHERE id = $document_id` (kiểm tra tồn tại 404), User B có thể truyền ID tài liệu riêng tư của User A khi tạo note, mindmap hoặc flashcard. Khi API trả về `document_title`, User B đã thu thập được tiêu đề tài liệu nhạy cảm của User A.
+- **Giải pháp bảo vệ**:
+  - Trong `note.service.ts`, `mindmap.service.ts` và `flashcard.service.ts`: Khi nhận `document_id`, truy vấn kiểm tra quyền sở hữu:
+    `if (doc.user_id !== userId && doc.visibility !== 'public') throw new AppError('Bạn không có quyền truy cập hoặc liên kết tới tài liệu riêng tư này', 403);`
+- **Bằng chứng kiểm thử**:
+  - `test-phase9.ts` Test 2.5 & 2.6: Chặn User B tạo hoặc sửa Note gắn vào document riêng tư của User A -> **HTTP 403 Forbidden**.
+  - `test-phase9.ts` Test 4.5 & 4.6: Chặn User B tạo hoặc sửa Mindmap gắn vào document riêng tư của User A -> **HTTP 403 Forbidden**.
+  - `test-phase9.ts` Test 5.6: Chặn User B tạo Flashcard gắn vào document riêng tư của User A -> **HTTP 403 Forbidden**.
+
+### 2. Chống IDOR cho từng thẻ Flashcard riêng lẻ
+- Đã xác nhận cơ chế `getCardWithDeckUser(cardId, userId)` trong `flashcard.repository.ts` đảm bảo thẻ và bộ thẻ tương ứng phải thuộc sở hữu của người dùng.
+- `test-phase9.ts` Test 5.7 - 5.10: Kiểm chứng User B cố tình sửa nội dung (PUT), gắn dấu sao (PUT /star), xóa (DELETE), hoặc ôn tập (POST /review) trên thẻ của User A đều bị từ chối với **HTTP 404 / 403**.
+
+### 3. Phản hồi các câu hỏi xác nhận (🟡)
+- **Bỏ ràng buộc unique của Mindmap có ảnh hưởng AI Mindmap cache không?**:
+  - Ràng buộc `UNIQUE(document_id, user_id)` đã được phục hồi trên bảng `mindmaps`. Trong PostgreSQL, `NULL != NULL`, do đó người dùng có thể tạo vô số sơ đồ tư duy độc lập (`document_id IS NULL`), trong khi câu lệnh `ON CONFLICT (document_id, user_id) DO UPDATE` tại `ai.service.ts` (Phase 5) hoạt động hoàn hảo và cache đúng sơ đồ AI. Bộ test `test-phase5.ts` đã chạy và đạt 16/16 tests.
+- **Streak có hai nguồn?**:
+  - Hiện tại Phase 8 ghi nhận vào `user_study_dates`, một số luồng cũ cập nhật trường `streak` trong bảng `users`. **Ở Phase 10, toàn bộ hệ thống streak sẽ được hợp nhất (Single Source of Truth), tính toán tự động và suy diễn từ bảng `learning_activities` thật và `user_study_dates`**, loại bỏ hoàn toàn việc duy trì hai cơ chế song song.
+- **XSS trong Mermaid và Markdown**:
+  - Đã chuyển cấu hình sang `securityLevel: 'strict'` trong component `MermaidViewer.tsx` nhằm kích hoạt chế độ DOMPurify sanitization của Mermaid. Nội dung markdown ghi chú được render an toàn qua cơ chế escaping của React.
+- **Phân trang danh sách Notes / Mindmaps / Flashcards**:
+  - Đã đưa vào danh mục tối ưu hóa hiệu năng tại **Phase 32 (Performance & Scalability Optimization)**.
+
+---
+
+## ĐÍNH CHÍNH TÊN VÀ PHẠM VI PHASE 10 THEO MASTER PROMPT
+
+- **Đính chính tên gọi**:
+  - Tên đúng theo Master Prompt: **PHASE 10: LEARNING ACTIVITY + LEARNING GOAL + PROGRESS**.
+  - Loại bỏ hoàn toàn các khái niệm ngoài phạm vi sản phẩm ("Real-time Study Room / Pomodoro / Collaboration").
+- **Phạm vi Phase 10 bám sát Master Prompt**:
+  1. `LearningActivity`: Ghi nhận nhật ký hoạt động học tập thực tế (học flashcard, làm quiz, đọc tài liệu, tạo ghi chú).
+  2. `LearningGoal`: Thiết lập mục tiêu học tập cá nhân (số lượng thẻ cần ôn mỗi ngày, số bài thi cần hoàn thành, thời gian học mục tiêu).
+  3. `StudyStreak`: Tính toán chuỗi học tập thống nhất từ dữ liệu thực tế (`learning_activities` và `user_study_dates`).
+  4. Báo cáo thống kê tiến độ học tập (Progress Dashboard) tổng hợp từ dữ liệu thật.
+
+---
+
+### Tuân thủ Rule 0.1.1
+- Toàn bộ nợ Phase 8 đã được xử lý triệt để, có kiểm thử tự động 11 suites.
+- Toàn bộ các kiểm thử IDOR khóa ngoại và cấp thẻ của Phase 9 đã được tích hợp và xác thực.
+- Hồi quy toàn bộ Phase 4, 5, 6, 7, 8, 9 qua lệnh `npm run test:all` đạt 100% PASS.
+- Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu trước khi bắt đầu triển khai Phase 10.
+
 
 

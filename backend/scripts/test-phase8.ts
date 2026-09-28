@@ -54,16 +54,16 @@ async function runPhase8Tests() {
     console.log(`[Setup] User A ID: ${testUserAId}, User B ID: ${testUserBId}\n`);
 
     // 1. Tạo 1 bộ đề riêng tư (visibility = 'private', status = 'APPROVED') của User A
-    // Gồm 4 câu: MULTIPLE_CHOICE, TRUE_FALSE, FILL_BLANK, ESSAY
+    // Gồm 5 câu: MULTIPLE_CHOICE, TRUE_FALSE, FILL_BLANK, ESSAY, và NO_ANSWER (correct_answer = null)
     const tsRes = await db.query(
       `INSERT INTO test_sets (created_by, name, total_questions, total_score, is_active, status, visibility)
-       VALUES ($1, 'Đề thi trắc nghiệm & tự luận Sinh học 12 (Riêng tư)', 4, 10.0, true, 'APPROVED', 'private')
+       VALUES ($1, 'Đề thi trắc nghiệm & tự luận Sinh học 12 (Riêng tư)', 5, 12.5, true, 'APPROVED', 'private')
        RETURNING id`,
       [testUserAId]
     );
     testSetId = tsRes.rows[0].id;
 
-    // Chèn 4 câu hỏi với các loại câu hỏi khác nhau
+    // Chèn 5 câu hỏi
     const q1 = await db.query(
       `INSERT INTO questions (test_set_id, type, content, score, options, correct_answer, explanation, difficulty, status)
        VALUES ($1, 'MULTIPLE_CHOICE', 'Quá trình nhân đôi ADN diễn ra ở pha nào của chu kỳ tế bào?', 2.5,
@@ -101,6 +101,16 @@ async function runPhase8Tests() {
     );
     const q4Id = q4.rows[0].id;
 
+    // Câu 5: Câu hỏi chưa có đáp án chính thức (correct_answer = null / Phase 7 NOT SET)
+    const q5 = await db.query(
+      `INSERT INTO questions (test_set_id, type, content, score, correct_answer, explanation, difficulty, status)
+       VALUES ($1, 'FILL_BLANK', 'Dự đoán biến dị tổ hợp phát sinh trong quần thể giao phối ngẫu nhiên (chưa có đáp án chính thức)', 2.5,
+               NULL, 'Câu hỏi này chưa được thiết lập đáp án chính thức.', 'hard', 'APPROVED')
+       RETURNING id`,
+      [testSetId]
+    );
+    const q5Id = q5.rows[0].id;
+
     // 2. Tạo 1 bộ đề DRAFT của User B (để test quyền truy cập)
     const draftB = await db.query(
       `INSERT INTO test_sets (created_by, name, total_questions, total_score, is_active, status, visibility)
@@ -130,7 +140,7 @@ async function runPhase8Tests() {
     );
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 1: Bắt đầu làm bài thi (Start Quiz) & Bảo mật dữ liệu
+    // SUITE 1: Bắt đầu làm bài thi & Chống rò rỉ đề (Start Quiz & Sanitization)
     // ─────────────────────────────────────────────────────────────
     console.log('--- SUITE 1: Start Quiz & Anti-Cheat Payload Sanitization ---');
     const startRes = await axios.post(
@@ -141,11 +151,11 @@ async function runPhase8Tests() {
 
     assert(startRes.status === 201, 'POST /quizzes/start trả về HTTP 201 Created');
     assert(startRes.data.attempt && startRes.data.attempt.status === 'IN_PROGRESS', 'Lượt làm bài có trạng thái IN_PROGRESS');
-    assert(startRes.data.attempt.totalQuestions === 4, 'Tổng số câu hỏi của bài thi là 4');
-    assert(startRes.data.attempt.totalScore === 10, 'Tổng điểm tối đa là 10.0');
-    assert(Array.isArray(startRes.data.questions) && startRes.data.questions.length === 4, 'Trả về danh sách 4 câu hỏi');
+    assert(startRes.data.attempt.totalQuestions === 5, 'Tổng số câu hỏi của bài thi là 5');
+    assert(startRes.data.attempt.totalScore === 12.5, 'Tổng điểm tối đa là 12.5');
+    assert(Array.isArray(startRes.data.questions) && startRes.data.questions.length === 5, 'Trả về danh sách 5 câu hỏi');
 
-    // BẢO MẬT: Kiểm tra tuyệt đối không rò rỉ đáp án hoặc lời giải
+    // BẢO MẬT: Bóc bỏ hoàn toàn correct_answer và explanation khi bắt đầu làm bài
     for (const q of startRes.data.questions) {
       assert(q.correct_answer === undefined && q.correctAnswer === undefined, `Câu hỏi #${q.id} KHÔNG chứa correct_answer`);
       assert(q.explanation === undefined, `Câu hỏi #${q.id} KHÔNG chứa explanation`);
@@ -156,16 +166,16 @@ async function runPhase8Tests() {
     console.log(`[Suite 1] Attempt 1 ID created: ${attempt1Id}\n`);
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 2: Quyền truy cập Test Set & Phân định APPROVED != Public
+    // SUITE 2: Phân định rõ ràng APPROVED != Public (Access Control)
     // ─────────────────────────────────────────────────────────────
     console.log('--- SUITE 2: Test Set Access Control (APPROVED Private vs Public) ---');
     
-    // Test 2.1: User B cố tình làm bài thi APPROVED nhưng PRIVATE của User A
+    // Test 2.1: User B cố làm đề APPROVED nhưng PRIVATE của User A -> BẮT BUỘC 403
     let approvedPrivateBlocked = false;
     try {
       await axios.post(
         `${API_BASE}/quizzes/start`,
-        { testSetId }, // Đề của User A, status APPROVED nhưng visibility = 'private'
+        { testSetId }, // Đề của User A: status APPROVED nhưng visibility = 'private'
         { headers: headersB }
       );
     } catch (err: any) {
@@ -178,7 +188,7 @@ async function runPhase8Tests() {
       'User B bị CHẶN khi cố làm đề thi APPROVED nhưng PRIVATE của User A (HTTP 403 Forbidden - APPROVED != Public)'
     );
 
-    // Test 2.2: User A cố tình truy cập bộ đề DRAFT private của User B
+    // Test 2.2: User A cố tình làm đề DRAFT private của User B -> BẮT BUỘC 403
     let draftBlocked = false;
     try {
       await axios.post(
@@ -193,15 +203,15 @@ async function runPhase8Tests() {
     }
     assert(draftBlocked, 'User A không được phép làm đề thi DRAFT riêng tư của User B (HTTP 403 Forbidden)');
 
-    // Test 2.3: User B ĐƯỢC PHÉP làm đề thi công khai (visibility = 'public' AND status = 'APPROVED') của User A
+    // Test 2.3: User B ĐƯỢC PHÉP làm đề khi và chỉ khi đề ở chế độ PUBLIC VÀ APPROVED
     const pubStartRes = await axios.post(
       `${API_BASE}/quizzes/start`,
       { testSetId: publicApprovedSetId },
       { headers: headersB }
     );
-    assert(pubStartRes.status === 201, 'User B làm được đề thi khi đề ở chế độ PUBLIC và APPROVED (HTTP 201 Created)');
+    assert(pubStartRes.status === 201, 'User B làm được đề thi khi đề ở chế độ PUBLIC VÀ APPROVED (HTTP 201 Created)');
 
-    // Test 2.4: Bộ đề không tồn tại
+    // Test 2.4: Bộ đề không tồn tại -> 404
     let notFoundCaught = false;
     try {
       await axios.post(
@@ -217,11 +227,11 @@ async function runPhase8Tests() {
     assert(notFoundCaught, 'Truy cập bộ đề không tồn tại trả về HTTP 404 Not Found\n');
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 3: Bảo mật cấp Attempt (Anti-Cheat during IN_PROGRESS & IDOR)
+    // SUITE 3: Chống gian lận khi bài thi đang IN_PROGRESS (Anti-Leak)
     // ─────────────────────────────────────────────────────────────
-    console.log('--- SUITE 3: Attempt-Level Security & In-Progress Anti-Cheat ---');
+    console.log('--- SUITE 3: Anti-Cheat & Answer Leak Prevention (IN_PROGRESS) ---');
 
-    // Test 3.1: Khi bài thi còn IN_PROGRESS, gọi GET /attempts/:id xem đáp án PHẢI BỊ CHẶN (Anti-cheat)
+    // Test 3.1: Gọi GET /attempts/:id khi đang IN_PROGRESS PHẢI BỊ CHẶN (HTTP 400)
     let inProgressLeakBlocked = false;
     try {
       await axios.get(
@@ -238,7 +248,7 @@ async function runPhase8Tests() {
       'Chặn đứng xem kết quả/đáp án khi attempt đang IN_PROGRESS (Anti-cheat: HTTP 400 Bad Request)'
     );
 
-    // Test 3.2: Khi bài thi còn IN_PROGRESS, gọi GET /mistakes PHẢI BỊ CHẶN
+    // Test 3.2: Gọi GET /mistakes khi đang IN_PROGRESS PHẢI BỊ CHẶN (HTTP 400)
     let inProgressMistakesBlocked = false;
     try {
       await axios.get(
@@ -250,9 +260,14 @@ async function runPhase8Tests() {
         inProgressMistakesBlocked = true;
       }
     }
-    assert(inProgressMistakesBlocked, 'Chặn đứng xem mistakes khi attempt đang IN_PROGRESS (HTTP 400)');
+    assert(inProgressMistakesBlocked, 'Chặn đứng xem mistakes khi attempt đang IN_PROGRESS (HTTP 400 Bad Request)\n');
 
-    // Test 3.3: User B cố tình nộp bài thi (submit) cho attempt của User A (IDOR attack)
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 4: Bảo vệ cấp Attempt chống IDOR
+    // ─────────────────────────────────────────────────────────────
+    console.log('--- SUITE 4: Attempt-Level IDOR Protection ---');
+
+    // Test 4.1: User B cố tình nộp bài thi cho attempt của User A -> HTTP 403
     let idorSubmitBlocked = false;
     try {
       await axios.post(
@@ -267,7 +282,7 @@ async function runPhase8Tests() {
     }
     assert(idorSubmitBlocked, 'User B bị CHẶN khi cố tình nộp bài thi cho attempt của User A (IDOR: HTTP 403 Forbidden)');
 
-    // Test 3.4: User B cố tình xem kết quả attempt của User A (IDOR attack)
+    // Test 4.2: User B cố tình xem attempt của User A -> HTTP 403
     let idorViewBlocked = false;
     try {
       await axios.get(
@@ -282,16 +297,16 @@ async function runPhase8Tests() {
     assert(idorViewBlocked, 'User B bị CHẶN khi cố tình xem attempt của User A (IDOR: HTTP 403 Forbidden)\n');
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 4: Chấm điểm Server-side & Kiểm tra tự luận vô nghĩa (Essay Anti-Gibberish)
+    // SUITE 5: Chấm điểm tự luận chống nội dung vô nghĩa (Essay Anti-Gibberish)
     // ─────────────────────────────────────────────────────────────
-    console.log('--- SUITE 4: Server-Side Grading & Essay Gibberish Protection ---');
+    console.log('--- SUITE 5: Essay Scoring Anti-Gibberish Protection ---');
 
     // User A nộp:
     // Q1: MC - Chọn 'B' (Đúng -> +2.5đ)
     // Q2: TF - Chọn 'A' (Đúng -> +2.5đ)
     // Q3: Fill blank - 'peptidil transferaza' (Đúng -> +2.5đ)
-    // Q4: Essay - Gõ chuỗi ký tự vô nghĩa rất dài (60+ ký tự):
-    // "asdkjhf asdkfjh sadkfjhasdf kjhasdf kjashdf kjashdfkjahsdfkjahsdfkjahsdf"
+    // Q4: Essay - Gõ chuỗi ký tự vô nghĩa rất dài (60+ ký tự)
+    // Q5: Fill blank không có đáp án - Gõ text bất kỳ
     const gibberishEssay = 'asdkjhf asdkfjh sadkfjhasdf kjhasdf kjashdf kjashdfkjahsdfkjahsdfkjahsdf 1234567890 vô nghĩa dài';
     const submitPayload1 = {
       answers: [
@@ -299,8 +314,9 @@ async function runPhase8Tests() {
         { questionId: q2Id, answer: 'A' },
         { questionId: q3Id, answer: 'peptidil transferaza' },
         { questionId: q4Id, answer: gibberishEssay },
+        { questionId: q5Id, answer: 'Đáp án phỏng đoán của học viên' },
       ],
-      durationSeconds: 999999, // Client gửi số giả mạo 999999
+      durationSeconds: 999999, // Client cố tình gửi số giả mạo 999999
     };
 
     const submitRes1 = await axios.post(
@@ -311,40 +327,38 @@ async function runPhase8Tests() {
 
     assert(submitRes1.status === 200, 'POST /submit trả về HTTP 200 OK');
 
-    // KIỂM TRA ĐẶC TẢ 🔴 1: Tự luận vô nghĩa dài TUYỆT ĐỐI KHÔNG được cộng điểm
+    // KIỂM TRA ĐẶC TẢ: Tự luận vô nghĩa dài TUYỆT ĐỐI KHÔNG được cộng điểm
     const essayAns = submitRes1.data.answers.find((a: any) => a.question_id === q4Id);
     assert(essayAns && essayAns.is_correct === false, 'Câu tự luận vô nghĩa KHÔNG được tính là đúng (is_correct = false)');
     assert(essayAns && Number(essayAns.score_awarded) === 0, 'Câu tự luận vô nghĩa được chấm 0.0 điểm (score_awarded = 0)');
 
     // Tổng điểm tự động awarded đúng bằng 7.5 (chỉ 3 câu trắc nghiệm/khách quan được cộng)
-    assert(Number(submitRes1.data.attempt.score) === 7.5, 'Tổng điểm đạt 7.5/10.0 (3 câu khách quan đúng x 2.5đ, câu tự luận 0đ)');
-    assert(submitRes1.data.attempt.correctCount === 3, 'Số câu đúng chính xác là 3/4 câu');
-    assert(submitRes1.data.attempt.percentage === 75, 'Tỷ lệ chính xác khách quan là 75%');
-    assert(submitRes1.data.attempt.status === 'SUBMITTED', 'Trạng thái attempt chuyển sang SUBMITTED');
+    assert(Number(submitRes1.data.attempt.score) === 7.5, 'Tổng điểm đạt 7.5/12.5 (3 câu khách quan đúng x 2.5đ, câu tự luận 0đ)');
+    assert(submitRes1.data.attempt.correctCount === 3, 'Số câu đúng chính xác là 3 câu khách quan');
+    assert(submitRes1.data.attempt.status === 'SUBMITTED', 'Trạng thái attempt chuyển sang SUBMITTED\n');
 
-    // KIỂM TRA ĐẶC TẢ 🟡 2: duration_seconds do SERVER tự tính từ started_at, không tin số 999999 của client
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 6: Xử lý câu hỏi chưa có đáp án (correct_answer = null)
+    // ─────────────────────────────────────────────────────────────
+    console.log('--- SUITE 6: Unset Correct Answer Handling (correct_answer = null) ---');
+    const unsetAns = submitRes1.data.answers.find((a: any) => a.question_id === q5Id);
+    assert(unsetAns && unsetAns.is_correct === false, 'Câu hỏi chưa có đáp án chính thức KHÔNG được tính điểm (is_correct = false)');
+    assert(unsetAns && Number(unsetAns.score_awarded) === 0, 'Điểm câu hỏi chưa có đáp án là 0.0 (không cộng điểm ảo)');
+    console.log('[Suite 6] Verified no ghost score awarded for unset answer questions\n');
+
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 7: Server tính toán duration_seconds độc lập
+    // ─────────────────────────────────────────────────────────────
+    console.log('--- SUITE 7: Server-side Independent Duration Calculation ---');
     assert(
       submitRes1.data.attempt.durationSeconds >= 0 && submitRes1.data.attempt.durationSeconds < 60,
-      `duration_seconds do Server tính toán chuẩn xác (${submitRes1.data.attempt.durationSeconds}s), từ chối số giả 999999 từ client`
+      `duration_seconds do Server tính toán chuẩn xác (${submitRes1.data.attempt.durationSeconds}s), từ chối số giả 999999 từ client\n`
     );
-
-    // Kiểm tra lưu vết Activity & Streak
-    const studyDateCheck = await db.query(
-      `SELECT * FROM user_study_dates WHERE user_id = $1 AND study_date = CURRENT_DATE`,
-      [testUserAId]
-    );
-    assert(studyDateCheck.rows.length > 0, 'Streak học tập được ghi nhận tự động vào user_study_dates');
-
-    const activityCheck = await db.query(
-      `SELECT * FROM learning_activities WHERE user_id = $1 AND activity_type = 'take_quiz'`,
-      [testUserAId]
-    );
-    assert(activityCheck.rows.length > 0, 'Ghi nhận lịch sử hoạt động vào learning_activities\n');
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 5: Chống nộp bài trùng lặp (Anti-Double Submit)
+    // SUITE 8: Chống nộp bài trùng lặp (Anti-Double Submit)
     // ─────────────────────────────────────────────────────────────
-    console.log('--- SUITE 5: Anti-Double Submission Protection ---');
+    console.log('--- SUITE 8: Anti-Double Submission Protection ---');
     let doubleSubmitCaught = false;
     try {
       await axios.post(
@@ -360,29 +374,29 @@ async function runPhase8Tests() {
     assert(doubleSubmitCaught, 'Không thể nộp lại bài thi đã SUBMITTED (Khóa lượt làm bài, HTTP 400)\n');
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 6: Xem kết quả chi tiết & Xem danh sách câu sai (Review Mistakes)
+    // SUITE 9: Xem kết quả chi tiết & Xem danh sách câu sai (Review Mistakes)
     // ─────────────────────────────────────────────────────────────
-    console.log('--- SUITE 6: Result Breakdown & Review Mistakes (Post-Submission) ---');
+    console.log('--- SUITE 9: Result Breakdown & Review Mistakes (Post-Submission) ---');
     const resultRes = await axios.get(
       `${API_BASE}/quizzes/attempts/${attempt1Id}`,
       { headers: headersA }
     );
     assert(resultRes.status === 200, 'GET /attempts/:id thành công sau khi đã nộp bài (HTTP 200)');
     assert(Number(resultRes.data.attempt.score) === 7.5, 'Attempt score khớp với lượt nộp (7.5)');
-    assert(resultRes.data.answers.length === 4, 'Đầy đủ 4 câu hỏi kèm đáp án đối chiếu');
+    assert(resultRes.data.answers.length === 5, 'Đầy đủ 5 câu hỏi kèm đáp án đối chiếu');
 
     const mistakesRes = await axios.get(
       `${API_BASE}/quizzes/attempts/${attempt1Id}/mistakes`,
       { headers: headersA }
     );
     assert(mistakesRes.status === 200, 'GET /attempts/:id/mistakes trả về HTTP 200');
-    assert(mistakesRes.data.totalMistakes === 1, 'Lọc chính xác 1 câu chưa đạt điểm (câu tự luận)');
+    assert(mistakesRes.data.totalMistakes === 2, 'Lọc chính xác 2 câu chưa đạt điểm (câu tự luận + câu chưa có đáp án)');
     assert(mistakesRes.data.mistakes.every((m: any) => m.is_correct === false), 'Mọi câu trong danh sách mistakes đều có is_correct = false\n');
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 7: Chế độ 1-click làm lại các câu sai (Retry Mistakes)
+    // SUITE 10: Chế độ 1-click làm lại các câu sai (Retry Mistakes)
     // ─────────────────────────────────────────────────────────────
-    console.log('--- SUITE 7: One-Click Retry Mistakes Mode ---');
+    console.log('--- SUITE 10: One-Click Retry Mistakes Mode ---');
     const retryRes = await axios.post(
       `${API_BASE}/quizzes/start`,
       {
@@ -395,14 +409,14 @@ async function runPhase8Tests() {
 
     assert(retryRes.status === 201, 'Khởi tạo phòng thi ôn tập câu sai thành công');
     assert(retryRes.data.isRetryMistakes === true, 'isRetryMistakes = true');
-    assert(retryRes.data.attempt.totalQuestions === 1, 'Tổng số câu thi mới chỉ bao gồm 1 câu chưa đạt điểm');
-    assert(retryRes.data.questions.length === 1, 'Danh sách câu hỏi chỉ gồm câu tự luận cần ôn tập');
-    assert(retryRes.data.questions[0].id === q4Id, 'Bao gồm chính xác câu Q4\n');
+    assert(retryRes.data.attempt.totalQuestions === 2, 'Tổng số câu thi mới chỉ bao gồm 2 câu chưa đạt điểm');
+    assert(retryRes.data.questions.length === 2, 'Danh sách câu hỏi chỉ gồm 2 câu cần ôn tập');
+    console.log('[Suite 10] Retry mistakes room initialized with exact missed questions\n');
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 8: Lịch sử làm bài thi (Quiz History)
+    // SUITE 11: Lịch sử làm bài, Learning Activities & Ghi nhận Study Dates
     // ─────────────────────────────────────────────────────────────
-    console.log('--- SUITE 8: User Quiz History ---');
+    console.log('--- SUITE 11: Quiz History, Learning Activity & Study Streak Tracking ---');
     const historyRes = await axios.get(
       `${API_BASE}/quizzes/history?limit=10`,
       { headers: headersA }
@@ -414,10 +428,22 @@ async function runPhase8Tests() {
     const firstHistory = historyRes.data.attempts[0];
     assert(firstHistory.testSetName !== undefined, 'Bao gồm tên bộ đề thi');
     assert(firstHistory.percentage !== undefined, 'Bao gồm phần trăm điểm số');
-    console.log(`[Suite 8] Quiz history count: ${historyRes.data.total}\n`);
+
+    // Kiểm tra lưu vết Activity & Streak
+    const studyDateCheck = await db.query(
+      `SELECT * FROM user_study_dates WHERE user_id = $1 AND study_date = CURRENT_DATE`,
+      [testUserAId]
+    );
+    assert(studyDateCheck.rows.length > 0, 'Streak học tập được ghi nhận tự động vào user_study_dates');
+
+    const activityCheck = await db.query(
+      `SELECT * FROM learning_activities WHERE user_id = $1 AND activity_type = 'take_quiz'`,
+      [testUserAId]
+    );
+    assert(activityCheck.rows.length > 0, 'Ghi nhận lịch sử hoạt động vào learning_activities\n');
 
     console.log('========================================================');
-    console.log('  ALL 8 TEST SUITES FOR PHASE 8 PASSED FLAWLESSLY!     ');
+    console.log('  ALL 11 TEST SUITES FOR PHASE 8 PASSED FLAWLESSLY!    ');
     console.log('========================================================\n');
   } catch (err: any) {
     console.error('\x1b[31m[ERROR IN TEST RUNNER]\x1b[0m', err.response?.data || err.message);

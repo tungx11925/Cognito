@@ -33,7 +33,11 @@ exports.up = async pgm => {
 
     ALTER TABLE mindmaps ALTER COLUMN document_id DROP NOT NULL;
     ALTER TABLE mindmaps ADD COLUMN IF NOT EXISTS title VARCHAR(255) DEFAULT 'Sơ đồ tư duy';
-    ALTER TABLE mindmaps DROP CONSTRAINT IF EXISTS unique_document_user_mindmap;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_document_user_mindmap') THEN
+        ALTER TABLE mindmaps ADD CONSTRAINT unique_document_user_mindmap UNIQUE (document_id, user_id);
+      END IF;
+    END $$;
     CREATE INDEX IF NOT EXISTS idx_mindmaps_user_doc ON mindmaps(user_id, document_id);
     -- 3. Updates for flashcards table
     ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
