@@ -197,6 +197,9 @@ interface StudyContextType {
     total_reviews?: number;
     total_notes?: number;
     chart_data: { day: string; minutes: number }[];
+    goals?: any[];
+    recent_activities?: any[];
+    streak_details?: any;
   };
   fetchAnalytics: () => Promise<void>;
 
@@ -337,23 +340,18 @@ const MOCK_CARDS: Record<number, FlashcardItem[]> = {
   ]
 };
 
-const MOCK_ANALYTICS = {
-  total_study_minutes: 185,
-  total_sessions: 12,
-  total_documents: 3,
-  total_flashcards: 5,
-  streak: 12,
+const EMPTY_ANALYTICS = {
+  total_study_minutes: 0,
+  total_sessions: 0,
+  total_documents: 0,
+  total_flashcards: 0,
+  streak: 0,
   total_reviews: 0,
   total_notes: 0,
-  chart_data: [
-    { day: 'Thứ 2', minutes: 30 },
-    { day: 'Thứ 3', minutes: 45 },
-    { day: 'Thứ 4', minutes: 20 },
-    { day: 'Thứ 5', minutes: 60 },
-    { day: 'Thứ 6', minutes: 15 },
-    { day: 'Thứ 7', minutes: 40 },
-    { day: 'Chủ Nhật', minutes: 50 },
-  ]
+  chart_data: [] as { day: string; minutes: number }[],
+  goals: [] as any[],
+  recent_activities: [] as any[],
+  streak_details: null as any,
 };
 
 const StudyContext = createContext<StudyContextType | undefined>(undefined);
@@ -425,16 +423,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [quizSubmitted, setQuizSubmitted] = useState(false);
 
   // Analytics states
-  const [analyticsData, setAnalyticsData] = useState({
-    total_study_minutes: 0,
-    total_sessions: 0,
-    total_documents: 0,
-    total_flashcards: 0,
-    streak: 0,
-    total_reviews: 0,
-    total_notes: 0,
-    chart_data: [] as { day: string; minutes: number }[]
-  });
+  const [analyticsData, setAnalyticsData] = useState(EMPTY_ANALYTICS);
 
   // Tasks & Friends states
   const [tasks, setTasks] = useState<any[]>([]);
@@ -846,18 +835,33 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch stats
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/study-sessions/stats`, {
+      const res = await fetch(`${API_BASE_URL}/progress/summary`, {
         headers: getAuthHeaders()
       });
       if (res.ok) {
-        const data = await res.json();
-        setAnalyticsData(data);
+        const summary = await res.json();
+        setAnalyticsData({
+          total_study_minutes: summary.total_study_minutes || 0,
+          total_sessions: summary.total_activities || 0,
+          total_documents: summary.total_documents_read || 0,
+          total_flashcards: summary.total_flashcards_reviewed || 0,
+          streak: summary.streak?.currentStreak || 0,
+          total_reviews: summary.total_flashcards_reviewed || 0,
+          total_notes: summary.total_notes || 0,
+          chart_data: (summary.weekly_chart || []).map((c: any) => ({
+            day: c.day,
+            minutes: c.minutes,
+          })),
+          goals: summary.daily_goals || [],
+          recent_activities: summary.recent_activities || [],
+          streak_details: summary.streak,
+        });
         return;
       }
-      setAnalyticsData(MOCK_ANALYTICS);
+      setAnalyticsData(EMPTY_ANALYTICS);
     } catch (e) {
       console.error("Error fetching stats:", e);
-      setAnalyticsData(MOCK_ANALYTICS);
+      setAnalyticsData(EMPTY_ANALYTICS);
     }
   };
 

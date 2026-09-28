@@ -93,14 +93,24 @@ const SUBJECT_COLORS = [
   "#3b82f6", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4",
 ];
 function computeSubjects(docs: any[], deckCountsMap: Record<number, { total: number; mastered: number }>, decksArr: any[]) {
-  return [
-    { name: "Toán học", level: 80, color: "#ef4444", xp: "420 XP" },
-    { name: "Văn học", level: 65, color: "#8b5cf6", xp: "280 XP" },
-    { name: "Tiếng Anh", level: 90, color: "#22c55e", xp: "550 XP" },
-    { name: "Vật lý", level: 70, color: "#06b6d4", xp: "310 XP" },
-    { name: "Hóa học", level: 55, color: "#6366f1", xp: "190 XP" },
-    { name: "Sinh học", level: 75, color: "#84cc16", xp: "330 XP" },
-  ];
+  if (!docs || docs.length === 0) {
+    return [];
+  }
+  const categoryCounts: Record<string, number> = {};
+  for (const d of docs) {
+    const cat = d.category || 'Tài liệu học tập';
+    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+  }
+  return Object.entries(categoryCounts).map(([cat, count], idx) => {
+    const color = SUBJECT_COLORS[idx % SUBJECT_COLORS.length];
+    const level = Math.min(100, count * 20);
+    return {
+      name: cat,
+      level,
+      color,
+      xp: `${count * 50} XP`,
+    };
+  });
 }
 
 // Compute achievements dynamically from real user data

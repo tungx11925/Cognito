@@ -174,6 +174,22 @@ class FlashcardService {
     nextReview.setDate(nextReview.getDate() + interval_days);
 
     const updatedCard = await flashcardRepository.updateCardReview(cardId, ease_factor, repetitions, interval_days, nextReview);
+
+    try {
+      await db.query(
+        `INSERT INTO learning_activities (user_id, activity_type, entity_type, entity_id, duration_seconds, details)
+         VALUES ($1, 'study_flashcards', 'flashcard', $2, 30, $3)`,
+        [userId, cardId, JSON.stringify({ deckId: card.deck_id, difficulty })]
+      );
+      await db.query(
+        `INSERT INTO user_study_dates (user_id, study_date)
+         VALUES ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)
+         ON CONFLICT (user_id, study_date) DO NOTHING`,
+        [userId]
+      );
+    } catch (actErr) {
+      console.warn('Flashcard activity log non-fatal error:', actErr);
+    }
     
     const updatedStreak = await activityService.updateUserStreak(userId);
     const taskUpdate = await activityService.incrementTaskProgress(userId, 'study_flashcards', 1);

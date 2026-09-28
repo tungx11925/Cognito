@@ -292,24 +292,27 @@ export class QuizService {
       // 5. Ghi nhận Activity & Học tập
       try {
         await client.query(
-          `INSERT INTO learning_activities (user_id, activity_type, entity_type, entity_id, details)
-           VALUES ($1, 'take_quiz', 'test_set', $2, $3)`,
+          `INSERT INTO learning_activities (user_id, activity_type, entity_type, entity_id, duration_seconds, details, idempotency_key)
+           VALUES ($1, 'take_quiz', 'test_set', $2, $3, $4, $5)
+           ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
           [
             userId,
             attempt.test_set_id,
+            serverDurationSeconds,
             JSON.stringify({
               attemptId,
               score: totalAwardedScore,
               correctCount,
               totalQuestions: attempt.total_questions,
             }),
+            `quiz_attempt:${attemptId}`,
           ]
         );
 
-        // Cập nhật streak học tập
+        // Cập nhật streak học tập theo múi giờ UTC+7
         await client.query(
           `INSERT INTO user_study_dates (user_id, study_date)
-           VALUES ($1, CURRENT_DATE)
+           VALUES ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)
            ON CONFLICT (user_id, study_date) DO NOTHING`,
           [userId]
         );

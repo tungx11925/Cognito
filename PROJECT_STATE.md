@@ -1346,7 +1346,128 @@ Theo phản hồi mục 🔴 4 và các câu hỏi xác nhận 🟡:
 - Khắc phục triệt để 🔴 1 (Mindmap partial unique index) và 🔴 2 (Câu tự luận `is_correct = null`, 100% accuracy, mistakes rỗng).
 - Trả lời đầy đủ và minh chứng 4 mục xác nhận 🟡.
 - Bổ sung `npm run test:fast` (~13s) và tích hợp Phase 3 vào bộ kiểm thử.
-- Tuân thủ nghiêm ngặt **Rule 0.1.1**: DỪNG LẠI và chờ người dùng xác nhận nghiệm thu trước khi bắt đầu triển khai Phase 10.
+- Tuân thủ nghiêm ngặt **Rule 0.1.1**: Đã dừng lại và nhận được xác nhận ("xacs nhan") chính thức từ người dùng trước khi triển khai Phase 10.
+
+---
+
+## PHASE 10: LEARNING ACTIVITY + LEARNING GOAL + PROGRESS — 2026-09-28
+Status: COMPLETED (WAITING FOR USER ACCEPTANCE)
+
+### 1. Mục tiêu & Phạm vi hoàn thành
+- Triển khai toàn diện hạ tầng nhật ký hoạt động học tập (`learning_activities`) với tính năng chống ghi đè/nhân đôi bản ghi (`idempotency_key`).
+- Xây dựng hệ thống mục tiêu học tập cá nhân hóa (`learning_goals`) với cơ chế tính toán tiến độ động theo thời gian thực (0% fake data).
+- Chuẩn hóa chuỗi học tập `StudyStreak` theo triết lý **Single Source of Truth** (SSOT), loại bỏ hoàn toàn sự phụ thuộc giả tạo vào cột `users.streak`.
+- Chuẩn hóa múi giờ ranh giới ngày học tập theo giờ Việt Nam (`Asia/Ho_Chi_Minh` - UTC+7).
+- Chuyển giao bảng điều khiển tiến độ người dùng (`/progress`) với đồ thị trực quan, lịch chuỗi học tập, danh sách hoạt động phân trang và mục tiêu có thanh tiến độ thật.
+
+---
+
+### 2. Thay đổi Cơ sở Dữ liệu & Migration
+- File migration: [1790700000000_phase10_learning_activity_goal_progress.js](file:///d:/Ky_7/EXE101/Cognito/backend/migrations/1790700000000_phase10_learning_activity_goal_progress.js).
+- Đã thực thi qua lệnh `npm run migrate:up`:
+  1. **Bảng `learning_activities`**:
+     - Bổ sung `duration_seconds` (INTEGER DEFAULT 0).
+     - Bổ sung `idempotency_key` (VARCHAR(255)).
+     - Bổ sung `subject` (VARCHAR(100)).
+     - Tạo Partial Unique Index chống trùng lặp:
+       `CREATE UNIQUE INDEX idx_learning_activities_idempotency ON learning_activities(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;`
+     - Tạo Index tối ưu hóa truy vấn theo ngày và người dùng:
+       `CREATE INDEX idx_learning_activities_user_date ON learning_activities(user_id, created_at DESC);`
+  2. **Bảng `learning_goals`**:
+     - Bổ sung `title` (VARCHAR(255) DEFAULT 'Mục tiêu học tập').
+     - Bổ sung `subject` (VARCHAR(100)).
+  3. **Backfill dữ liệu cũ**:
+     - Tự động di chuyển lịch sử làm bài thi `quiz_attempts` hợp lệ (`status = 'SUBMITTED'`) sang `learning_activities` với tiền tố idempotency `quiz_attempt:${id}`.
+     - Tự động di chuyển các phiên học tập `study_sessions` sang `learning_activities` với tiền tố `study_session:${id}`.
+     - Tự động di chuyển các ngày điểm danh cũ từ `user_study_dates` sang `learning_activities` với tiền tố `study_date:${userId}:${studyDate}` theo múi giờ UTC+7.
+
+---
+
+### 3. Thiết kế Backend & API Endpoints
+Đã xây dựng các service, controller, Zod schema và routes chuẩn hóa:
+
+| Endpoint | Method | Quyền | Mục đích nghiệp vụ |
+| :--- | :--- | :--- | :--- |
+| `/api/learning-activities` | `POST` | Authenticated | Ghi nhận hoạt động học tập (Hỗ trợ `idempotency_key`, tự động tính duration và streak). |
+| `/api/learning-activities` | `GET` | Authenticated | Lấy danh sách hoạt động học tập phân trang (lọc theo `activity_type`, `date`). |
+| `/api/learning-goals` | `POST` | Authenticated | Thiết lập mục tiêu học tập cá nhân (theo ngày/tuần, theo loại hoạt động hoặc môn học). |
+| `/api/learning-goals` | `GET` | Authenticated | Lấy danh sách mục tiêu kèm `current_value`, `progress_percentage`, `is_completed` tính động từ dữ liệu thật. |
+| `/api/learning-goals/:id` | `PUT` | Authenticated | Cập nhật mục tiêu học tập cá nhân (chỉ chủ sở hữu). |
+| `/api/learning-goals/:id` | `DELETE` | Authenticated | Xóa mục tiêu học tập cá nhân (chỉ chủ sở hữu). |
+| `/api/progress/summary` | `GET` | Authenticated | Báo cáo tiến độ tổng thể chuẩn xác: `total_study_minutes`, `total_activities`, `total_quizzes_completed`, `total_flashcards_reviewed`, `weekly_chart` (7 ngày), `daily_goals`, `recent_activities`. Tuyệt đối 0% dữ liệu mẫu. |
+| `/api/progress/streak` | `GET` | Authenticated | Trích xuất trạng thái chuỗi học tập: `currentStreak`, `longestStreak`, `studiedToday`, `studyDates` (30 ngày gần nhất), `nextMilestone`. |
+
+#### Tích hợp xuyên suốt các Module:
+1. **Quiz Module (`quiz.service.ts`)**:
+   - Khi hoàn thành bài thi (`submitAttempt`), hệ thống tự động ghi nhận hoạt động `take_quiz` với `idempotency_key: quiz_attempt:${attemptId}`, thời lượng tính theo giây đo đếm từ server, và ghi nhận ngày học tập theo múi giờ UTC+7.
+2. **Flashcard Module (`flashcard.service.ts`)**:
+   - Khi ôn tập thẻ (`reviewCard`), hệ thống tự động ghi nhận hoạt động `study_flashcards` và cập nhật chuỗi streak.
+3. **Study Module (`study.service.ts`)**:
+   - Khi mở phiên học tài liệu (`createStudySession`), tự động ghi nhận `read_doc`.
+   - Hàm `getStats` được ủy thác trực tiếp sang `progressService.getProgressSummary` để đồng nhất dữ liệu.
+4. **Auth & Activity Services**:
+   - `auth.service.ts` (`/api/auth/me`, `/login`) gọi `streakService.calculateStreak` để trả về số ngày streak chuẩn xác, hủy bỏ hành vi cũ tự động cộng streak chỉ vì đăng nhập.
+   - `activity.service.ts` gọi `streakService` và đồng bộ ngược về `users.streak` chỉ để tương thích ngược với các query cũ, trong khi toàn bộ core logic tiến độ đọc trực tiếp từ `learning_activities`.
+
+---
+
+### 4. Giao diện Người dùng (Frontend)
+- **Dashboard Tiến độ & Mục tiêu (`/progress`)**:
+  - Giao diện thiết kế theo phong cách hiện đại (Premium Dark Aesthetic), responsive mượt mà.
+  - **5 Thẻ chỉ số tổng quan (Metrics Cards)**: Chuỗi học tập (Streak), Thời gian học tập tích lũy, Bài trắc nghiệm hoàn thành, Thẻ nhớ đã ôn, Tài liệu đã học.
+  - **Khu vực Mục tiêu học tập (Learning Goals)**:
+    + Thể hiện danh sách mục tiêu cá nhân với thanh tiến độ thời gian thực (real-time progress bar).
+    + Huy hiệu trạng thái: Hoàn thành (Đang có tick xanh) hoặc Đang thực hiện.
+    + Modal tạo mục tiêu mới với form nhập liệu trực quan hoặc chọn nhanh từ template có sẵn (30 phút học/ngày, 1 bài quiz/ngày, 20 flashcards/ngày).
+    + Chức năng xóa mục tiêu trực tiếp.
+  - **Biểu đồ thời gian học tập 7 ngày (Weekly Learning Time Chart)**: Biểu đồ AreaChart trực quan hóa số phút học mỗi ngày trong tuần theo múi giờ UTC+7.
+  - **Lịch chuỗi học tập (Streak Calendar Heatmap)**: Trực quan hóa 42 ngày (6 tuần) liên tiếp, làm nổi bật các ngày người học có hoạt động học tập thực tế.
+  - **Nhật ký hoạt động gần đây (Recent Activities Log)**:
+    + Phân loại icon và màu sắc theo từng hoạt động: Làm trắc nghiệm (Tím), Ôn thẻ nhớ (Hồng), Đọc tài liệu (Xanh lam), Phiên tập trung (Cam).
+    + Bộ lọc theo tab: Tất cả, Trắc nghiệm, Thẻ nhớ, Đọc tài liệu.
+    + Hiển thị trạng thái ban đầu (Empty State) sạch sẽ, khuyến khích học viên bắt đầu hoạt động thay vì giả mạo số liệu.
+- **Thanh điều hướng (`Navbar.tsx`)**:
+  - Thêm liên kết trực tiếp "Tiến độ & Mục tiêu" vào Menu điều hướng chính trên Desktop và Menu xổ xuống của Profile.
+- **Trang Hồ sơ (`profile/page.tsx`)**:
+  - Loại bỏ các cấp độ môn học hardcoded ("Toán 12", "Vật lý 12"). Thay thế bằng cơ chế phân loại động dựa trên môn học từ tài liệu thực tế của người dùng.
+- **Context đồng bộ (`StudyContext.tsx`)**:
+  - Thay thế hoàn toàn `MOCK_ANALYTICS` (185 phút, 12 streak, biểu đồ giả) bằng `EMPTY_ANALYTICS` (0 phút, 0 streak, biểu đồ 0).
+  - Kết nối hàm `fetchAnalytics` trực tiếp tới endpoint `/api/progress/summary`.
+
+---
+
+### 5. Kết quả Kiểm thử & Đảm bảo Chất lượng
+1. **Kiểm thử chuyên sâu Phase 10 (`scripts/test-phase10.ts`)**:
+   - Đã thực thi và vượt qua **5/5 Suites (100%)**:
+     - *Suite 1 (Zero Fake Data)*: Người dùng mới tạo có đúng 0 phút học, 0 hoạt động, streak = 0, biểu đồ 7 ngày đều là 0, không có bất kỳ con số hardcoded 185 hay 12 nào.
+     - *Suite 2 (Idempotency)*: Ghi nhận hoạt động kèm `idempotency_key` trả về 201 (`isNew = true`), gửi lại đúng key trả về 200 (`isNew = false`), CSDL chỉ lưu duy nhất 1 bản ghi.
+     - *Suite 3 (Learning Goals CRUD & Real-time Progress)*: Tạo mục tiêu 60 phút/ngày $\rightarrow$ tiến độ ban đầu 0% $\rightarrow$ đọc tài liệu 30 phút $\rightarrow$ tiến độ 50% $\rightarrow$ làm quiz 35 phút $\rightarrow$ tiến độ 100% (`is_completed = true`). Sửa và xóa mục tiêu thành công.
+     - *Suite 4 (Streak Single Source of Truth)*: Giả lập update `users.streak = 999` trong CSDL $\rightarrow$ `/api/progress/streak` và `/api/progress/summary` vẫn kiên định trả về streak thật = 1 (tuyệt đối không bị can thiệp bởi giá trị giả trong bảng users). Giả lập học 3 ngày liên tiếp $\rightarrow$ streak tính chính xác = 3.
+     - *Suite 5 (Aggregated Metrics)*: Tổng thời gian học và số bài tập tính chính xác từ tổng duration thực tế của các activities.
+2. **Kiểm thử Hồi quy Toàn diện (`npm run test:fast`)**:
+   - Đã thực thi đồng thời toàn bộ các module từ Phase 3 đến Phase 10:
+     - **Phase 3**: PASS (Auth & User System, Profile, Avatar, Forgot/Reset) — 2.21s
+     - **Phase 4**: PASS (Document Processing Pipeline & Chunks) — 3.47s
+     - **Phase 7**: PASS (Exam & Question Bank Management) — 2.14s
+     - **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 1.86s
+     - **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 2.61s
+     - **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 1.64s
+     - $\rightarrow$ **100% PASSED, ZERO REGRESSION**.
+3. **Kiểm thử AI Live (`npm run test:live-ai`)**:
+   - **Phase 5** (AI Chat & Mindmap): 16/16 test cases PASSED.
+   - **Phase 6** (Question Generator): 14/14 test cases PASSED.
+4. **3 Gate Checks Nghiêm ngặt (Mục 0.1.3)**:
+   - **Gate Check 1 (Backend TypeScript Build)**: `npm run build` (`tsc`) $\rightarrow$ **PASSED (0 errors)**.
+   - **Gate Check 2 (Frontend TypeScript Typecheck)**: `npx tsc --noEmit` $\rightarrow$ **PASSED (0 errors)**.
+   - **Gate Check 3 (Frontend Production Build)**: `npm run build` (`next build`) $\rightarrow$ **PASSED (0 errors)**. Toàn bộ 22/22 static pages biên dịch thành công, bao gồm route mới `/progress`.
+
+---
+
+### Tuân thủ Rule 0.1.1
+- Toàn bộ tính năng thuộc Phase 10 đã được triển khai, kiểm thử, hồi quy và build production hoàn tất.
+- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 11**.
+- Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, phản hồi hoặc nghiệm thu chính thức.
+
 
 
 

@@ -2,23 +2,14 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { userRepository } from '../repositories/user.repository';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/mailer';
-import { activityService } from './activity.service';
+import { streakService } from './streak.service';
 import { db } from '../db';
 
 export class AuthService {
   async getUserStudyDates(userId: number): Promise<string[]> {
     try {
-      const datesRes = await db.query(
-        'SELECT study_date FROM user_study_dates WHERE user_id = $1 ORDER BY study_date DESC',
-        [userId]
-      );
-      return datesRes.rows.map(row => {
-        const d = new Date(row.study_date);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      });
+      const streakInfo = await streakService.calculateUserStreak(userId);
+      return streakInfo.studyDates;
     } catch (err) {
       console.error('Error in getUserStudyDates:', err);
       return [];
@@ -92,16 +83,21 @@ export class AuthService {
       { expiresIn: '24h' }
     );
 
-    await activityService.updateUserStreak(user.id);
+    const streakInfo = await streakService.calculateUserStreak(user.id);
     const updatedUserRes = await userRepository.findById(user.id);
-    const studyDates = await this.getUserStudyDates(user.id);
 
     const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = updatedUserRes;
 
     return { 
       requires2FA: false,
       token, 
-      user: { ...safeUser, study_dates: studyDates }
+      user: { 
+        ...safeUser, 
+        streak: streakInfo.currentStreak,
+        longest_streak: streakInfo.longestStreak,
+        studied_today: streakInfo.studiedToday,
+        study_dates: streakInfo.studyDates,
+      }
     };
   }
 
@@ -120,9 +116,8 @@ export class AuthService {
 
     await userRepository.updateVerificationCode(user.id, null, null);
 
-    await activityService.updateUserStreak(user.id);
+    const streakInfo = await streakService.calculateUserStreak(user.id);
     const updatedUserRes = await userRepository.findById(user.id);
-    const studyDates = await this.getUserStudyDates(user.id);
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role || 'user' }, 
@@ -132,7 +127,16 @@ export class AuthService {
 
     const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = updatedUserRes;
 
-    return { token, user: { ...safeUser, study_dates: studyDates } };
+    return { 
+      token, 
+      user: { 
+        ...safeUser, 
+        streak: streakInfo.currentStreak,
+        longest_streak: streakInfo.longestStreak,
+        studied_today: streakInfo.studiedToday,
+        study_dates: streakInfo.studyDates,
+      } 
+    };
   }
 
   async toggleVerification(userId: number, enable: boolean) {
@@ -163,23 +167,36 @@ export class AuthService {
       { expiresIn: '24h' }
     );
 
-    await activityService.updateUserStreak(user.id);
+    const streakInfo = await streakService.calculateUserStreak(user.id);
     const updatedUserRes = await userRepository.findById(user.id);
-    const studyDates = await this.getUserStudyDates(user.id);
 
     const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = updatedUserRes;
 
-    return { token, user: { ...safeUser, study_dates: studyDates } };
+    return { 
+      token, 
+      user: { 
+        ...safeUser, 
+        streak: streakInfo.currentStreak,
+        longest_streak: streakInfo.longestStreak,
+        studied_today: streakInfo.studiedToday,
+        study_dates: streakInfo.studyDates,
+      } 
+    };
   }
 
   async getMe(userId: number) {
-    await activityService.updateUserStreak(userId);
     const user = await userRepository.findById(userId);
     if (!user) throw new Error('Người dùng không tồn tại');
 
-    const studyDates = await this.getUserStudyDates(userId);
+    const streakInfo = await streakService.calculateUserStreak(userId);
     const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = user;
-    return { ...safeUser, study_dates: studyDates };
+    return { 
+      ...safeUser, 
+      streak: streakInfo.currentStreak,
+      longest_streak: streakInfo.longestStreak,
+      studied_today: streakInfo.studiedToday,
+      study_dates: streakInfo.studyDates,
+    };
   }
 
   async refreshToken(oldToken: string) {

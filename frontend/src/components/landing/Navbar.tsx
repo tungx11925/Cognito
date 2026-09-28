@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown, CheckCheck, MessageSquare, Presentation } from "lucide-react";
+import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown, CheckCheck, MessageSquare, Presentation, TrendingUp, Target } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
@@ -252,6 +252,19 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   >
                     <Presentation size={14} />
                     Giảng dạy & Slide
+                  </Link>
+
+                  <Link
+                    href="/progress"
+                    prefetch={true}
+                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg ${
+                      pathname === '/progress'
+                        ? 'bg-[#1a3d28] text-white shadow-sm font-bold'
+                        : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
+                    }`}
+                  >
+                    <TrendingUp size={13} />
+                    Tiến độ & Mục tiêu
                   </Link>
 
                   <Link
@@ -563,6 +576,17 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                           >
                             <Layout size={14} className="text-gray-400" />
                             Thư viện của tôi
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setDropdownOpen(false);
+                              router.push('/progress');
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                          >
+                            <TrendingUp size={14} className="text-gray-400" />
+                            Tiến độ & Mục tiêu
                           </button>
 
                           <button
