@@ -17,7 +17,7 @@ class FlashcardService {
 
   async getDeckCards(deckId: number, userId: number) {
     const deck = await flashcardRepository.getDeckById(deckId);
-    if (!deck || deck.user_id !== userId) {
+    if (!deck || (deck.user_id !== userId && !deck.is_public)) {
       throw new AppError('Bạn không có quyền truy cập bộ thẻ này hoặc bộ thẻ không tồn tại', 403);
     }
     return await flashcardRepository.getDeckCards(deckId);
@@ -25,7 +25,7 @@ class FlashcardService {
 
   async getDueCards(deckId: number, userId: number) {
     const deck = await flashcardRepository.getDeckById(deckId);
-    if (!deck || deck.user_id !== userId) {
+    if (!deck || (deck.user_id !== userId && !deck.is_public)) {
       throw new AppError('Bạn không có quyền truy cập bộ thẻ này hoặc bộ thẻ không tồn tại', 403);
     }
     return await flashcardRepository.getDueCards(deckId);
