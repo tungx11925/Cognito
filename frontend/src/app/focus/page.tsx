@@ -309,18 +309,25 @@ function FocusContent() {
     // Pagehide / Beforeunload handler (using sendBeacon to immediately mark session INTERRUPTED on tab close)
     const handlePageUnload = () => {
       if (!activeSession || isPaused) return;
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-      const url = `${apiBase}/focus/${activeSession.id}/interrupt?token=${encodeURIComponent(token)}`;
-      const payload = JSON.stringify({ actual_duration_seconds: secondsElapsed });
+      // URL sạch sẽ, TUYỆT ĐỐI KHÔNG chứa token trong query string (Chống lộ Sensitive Data Exposure)
+      const url = `${apiBase}/focus/${activeSession.id}/interrupt`;
+      const payload = JSON.stringify({
+        actual_duration_seconds: secondsElapsed,
+        interrupt_token: activeSession.interrupt_token,
+      });
 
       if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
         const blob = new Blob([payload], { type: 'application/json' });
         navigator.sendBeacon(url, blob);
       } else {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
         fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: payload,
           keepalive: true,
         }).catch(() => {});

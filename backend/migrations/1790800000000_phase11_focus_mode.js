@@ -29,9 +29,11 @@ exports.up = async (pgm) => {
     ALTER TABLE study_sessions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'IN_PROGRESS';
     ALTER TABLE study_sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMP;
     ALTER TABLE study_sessions ADD COLUMN IF NOT EXISTS focus_score NUMERIC(5, 2) DEFAULT 100.00;
+    ALTER TABLE study_sessions ADD COLUMN IF NOT EXISTS interrupt_token VARCHAR(128);
 
     CREATE INDEX IF NOT EXISTS idx_study_sessions_user_status ON study_sessions(user_id, status);
     CREATE INDEX IF NOT EXISTS idx_study_sessions_started_at ON study_sessions(started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_study_sessions_interrupt_token ON study_sessions(id, interrupt_token);
 
     -- 2. Tạo bảng focus_distraction_events
     CREATE TABLE IF NOT EXISTS focus_distraction_events (

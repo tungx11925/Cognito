@@ -96,29 +96,33 @@ export const getSessionSummary = async (req: AuthRequest, res: Response, next: N
 
 export const interruptSession = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const sessionId = parseInt(req.params.id, 10);
+    const actualDurationSeconds = req.body?.actual_duration_seconds;
+    const interruptToken = req.body?.interrupt_token;
+
     let userId = req.user?.id;
-    // Hỗ trợ token từ query string hoặc body (dành cho navigator.sendBeacon)
-    if (!userId) {
-      const token = (req.query.token as string) || req.body?.token;
-      if (token) {
-        try {
-          const jwtSecret = process.env.JWT_SECRET || 'your_secret_key';
-          const decoded: any = jwt.verify(token, jwtSecret);
-          userId = decoded.userId || decoded.id;
-        } catch {
-          // Token không hợp lệ
-        }
+
+    // Kiểm tra Authorization header nếu chưa qua middleware authenticate
+    if (!userId && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      try {
+        const token = req.headers.authorization.split(' ')[1];
+        const jwtSecret = process.env.JWT_SECRET_KEY || process.env.JWT_SECRET || 'your_secret_key';
+        const decoded: any = jwt.verify(token, jwtSecret);
+        userId = decoded.userId || decoded.id;
+      } catch {
+        // Token không hợp lệ
       }
     }
 
-    if (!userId) {
-      return res.status(401).json({ error: 'Chưa xác thực danh tính' });
+    if (!userId && !interruptToken) {
+      return res.status(401).json({ error: 'Chưa xác thực danh tính (yêu cầu JWT hoặc interrupt_token trong body)' });
     }
 
-    const sessionId = parseInt(req.params.id, 10);
-    const actualDurationSeconds = req.body?.actual_duration_seconds;
-
-    const result = await focusService.interruptSession(sessionId, userId, actualDurationSeconds);
+    const result = await focusService.interruptSession(
+      sessionId,
+      { userId, interruptToken },
+      actualDurationSeconds
+    );
     res.status(200).json(result);
   } catch (error) {
     next(error);

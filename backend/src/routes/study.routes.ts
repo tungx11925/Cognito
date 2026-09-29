@@ -6,10 +6,8 @@ import * as StudyController from '../controllers/study.controller';
 
 const router = Router();
 
-router.use(authenticate);
-
-router.get('/study-sessions/stats', StudyController.getStudyStats);
-router.post('/study-sessions/active-ping', validate(activePingSchema), StudyController.activePing);
-router.post('/study-sessions', validate(createStudySessionSchema), StudyController.createStudySession);
+router.get('/study-sessions/stats', authenticate, StudyController.getStudyStats);
+router.post('/study-sessions/active-ping', authenticate, validate(activePingSchema), StudyController.activePing);
+router.post('/study-sessions', authenticate, validate(createStudySessionSchema), StudyController.createStudySession);
 
 export default router;

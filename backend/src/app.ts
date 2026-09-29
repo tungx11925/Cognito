@@ -68,18 +68,18 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/lectures', lectureRoutes);
-app.use('/api', activityRoutes);
-app.use('/api', studyRoutes);
-app.use('/api', aiTestRoutes);
-app.use('/api', questionGenerationRoutes);
-app.use('/api', examImportRoutes);
-app.use('/api', quizRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/mindmaps', mindmapRoutes);
 app.use('/api/learning-activities', learningActivityRoutes);
 app.use('/api/learning-goals', learningGoalRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/focus', focusRoutes);
+app.use('/api', activityRoutes);
+app.use('/api', studyRoutes);
+app.use('/api', aiTestRoutes);
+app.use('/api', questionGenerationRoutes);
+app.use('/api', examImportRoutes);
+app.use('/api', quizRoutes);
 
 // Tạo các bảng phục vụ tính năng "Bài tập AI" và "Bài giảng Giảng viên (Lecture Slides)"
 bootstrapAITestSchema().catch(err => console.error('AI test schema bootstrap failed:', err));

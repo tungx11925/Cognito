@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { db } from '../db';
 import { AppError } from '../utils/AppError';
 import { streakService } from './streak.service';
@@ -85,16 +86,19 @@ export class FocusService {
       [userId]
     );
 
-    // 5. Khởi tạo phiên tập trung mới
+    // 5. Khởi tạo mã bảo mật ngắt quãng dùng một lần (One-Time Scoped Interrupt Token)
+    const interruptToken = crypto.randomBytes(32).toString('hex');
+
+    // 6. Khởi tạo phiên tập trung mới
     const sessionRes = await db.query(
       `INSERT INTO study_sessions (
          user_id, document_id, quiz_id, learning_goal_id,
          target_duration_seconds, actual_duration_seconds, duration_seconds,
-         status, started_at, distraction_count, focus_score
+         status, started_at, distraction_count, focus_score, interrupt_token
        )
-       VALUES ($1, $2, $3, $4, $5, 0, 0, 'IN_PROGRESS', CURRENT_TIMESTAMP, 0, 100.00)
+       VALUES ($1, $2, $3, $4, $5, 0, 0, 'IN_PROGRESS', CURRENT_TIMESTAMP, 0, 100.00, $6)
        RETURNING *`,
-      [userId, documentId, quizId, learningGoalId, targetDurationSeconds]
+      [userId, documentId, quizId, learningGoalId, targetDurationSeconds, interruptToken]
     );
 
     return sessionRes.rows[0];
@@ -324,19 +328,49 @@ export class FocusService {
   }
 
   /**
-   * Đánh dấu ngắt quãng phiên tập trung tức thì (dành cho pagehide/beforeunload hoặc sendBeacon khi đóng tab)
+   * Đánh dấu ngắt quãng phiên tập trung tức thì (dành cho pagehide/beforeunload hoặc sendBeacon khi đóng tab).
+   * Hỗ trợ xác thực bảo mật qua:
+   * 1. interrupt_token: Mã ngắn hạn, dùng một lần (One-Time Scoped Token) do server sinh khi mở phiên,
+   *    truyền an toàn qua request body (Blob), TUYỆT ĐỐI KHÔNG lộ JWT hay token qua URL query string.
+   * 2. userId: Xác thực qua JWT header/cookie thông thường.
+   * Cả 2 phương thức đều kiểm tra quyền sở hữu phiên (IDOR) chặt chẽ.
    */
-  async interruptSession(sessionId: number, userId: number, actualDurationSeconds?: number) {
-    const sessionCheck = await db.query(
-      `SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2`,
-      [sessionId, userId]
-    );
+  async interruptSession(
+    sessionId: number,
+    auth: { userId?: number; interruptToken?: string },
+    actualDurationSeconds?: number
+  ) {
+    let session: any;
 
-    if (sessionCheck.rows.length === 0) {
-      throw new AppError('Phiên tập trung không tồn tại hoặc không thuộc quyền sở hữu của bạn', 404);
+    if (auth.interruptToken) {
+      // 1. Xác thực bằng One-Time Scoped Interrupt Token
+      const res = await db.query('SELECT * FROM study_sessions WHERE id = $1', [sessionId]);
+      if (res.rows.length === 0) {
+        throw new AppError('Phiên tập trung không tồn tại', 404);
+      }
+      session = res.rows[0];
+
+      if (!session.interrupt_token || session.interrupt_token !== auth.interruptToken) {
+        throw new AppError('Mã xác thực ngắt quãng (interrupt_token) không hợp lệ hoặc đã hết hạn', 403);
+      }
+
+      // Vô hiệu hóa ngay interrupt_token sau khi dùng (Single-use token)
+      await db.query('UPDATE study_sessions SET interrupt_token = NULL WHERE id = $1', [sessionId]);
+    } else if (auth.userId) {
+      // 2. Xác thực bằng JWT userId (IDOR check: kiểm tra quyền sở hữu phiên)
+      const res = await db.query('SELECT * FROM study_sessions WHERE id = $1', [sessionId]);
+      if (res.rows.length === 0) {
+        throw new AppError('Phiên tập trung không tồn tại', 404);
+      }
+      session = res.rows[0];
+
+      if (session.user_id !== auth.userId) {
+        throw new AppError('Bạn không có quyền can thiệp vào phiên tập trung của người dùng khác (IDOR)', 403);
+      }
+    } else {
+      throw new AppError('Yêu cầu xác thực danh tính để ngắt quãng phiên', 401);
     }
 
-    const session = sessionCheck.rows[0];
     if (session.status !== 'IN_PROGRESS') {
       return { session, message: 'Phiên đã kết thúc trước đó' };
     }
@@ -352,7 +386,7 @@ export class FocusService {
       ? Math.max(session.actual_duration_seconds || 0, Math.round(actualDurationSeconds))
       : (session.actual_duration_seconds || 0);
 
-    return this.finishSession(userId, sessionId, {
+    return this.finishSession(session.user_id, sessionId, {
       status: 'INTERRUPTED',
       actualDurationSeconds: duration,
     });

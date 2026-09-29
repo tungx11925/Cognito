@@ -22,6 +22,7 @@ export interface FocusSession {
   ended_at: string | null;
   distraction_count: number;
   focus_score: number;
+  interrupt_token?: string;
   document_title?: string;
   quiz_title?: string;
 }

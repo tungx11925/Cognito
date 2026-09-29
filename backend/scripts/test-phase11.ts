@@ -336,9 +336,9 @@ export async function runPhase11Tests() {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 7: Real-time Pagehide / Beforeunload SendBeacon Interrupt
+    // SUITE 7: Secure SendBeacon Interrupt (One-Time Token & Anti-Sensitive-Data-Exposure)
     // ─────────────────────────────────────────────────────────────
-    console.log('\n--- SUITE 7: Pagehide / Beforeunload SendBeacon Interrupt ---');
+    console.log('\n--- SUITE 7: Secure SendBeacon Interrupt (One-Time Scoped Token & Zero URL Leak) ---');
 
     // 7.1 Bắt đầu phiên tập trung mới
     const startBeacon = await axios.post(
@@ -347,28 +347,88 @@ export async function runPhase11Tests() {
       { headers: authHeaders1 }
     );
     const beaconSessionId = startBeacon.data.id;
+    const interruptToken = startBeacon.data.interrupt_token;
     assert(startBeacon.status === 201, 'POST /api/focus/start trả về 201 Created');
+    assert(
+      typeof interruptToken === 'string' && interruptToken.length === 64,
+      'Server phát hành interrupt_token bảo mật dùng 1 lần (64 ký tự hex)'
+    );
 
     // Kiểm tra activeSession tồn tại
     const activeBeforeUnload = await axios.get(`${API_BASE}/focus/active`, { headers: authHeaders1 });
     assert(activeBeforeUnload.data.activeSession?.id === beaconSessionId, 'activeSession trả về đúng session vừa tạo');
 
-    // 7.2 Giả lập browser đóng tab/cửa sổ gửi navigator.sendBeacon kèm ?token=...
-    const beaconUrl = `${API_BASE}/focus/${beaconSessionId}/interrupt?token=${encodeURIComponent(testUser1Token)}`;
+    // 7.2 KIỂM TRA BẢO MẬT & CHỐNG IDOR TRÊN ENDPOINT /interrupt
+    // Test 7.2.1: User 2 dùng JWT của mình để can thiệp ngắt quãng session của User 1 -> PHẢI BỊ CHẶN 403
+    let idorJwtBlocked = false;
+    try {
+      await axios.post(
+        `${API_BASE}/focus/${beaconSessionId}/interrupt`,
+        { actual_duration_seconds: 100 },
+        { headers: authHeaders2 }
+      );
+    } catch (err: any) {
+      idorJwtBlocked = err.response?.status === 403;
+    }
+    assert(idorJwtBlocked, 'Bảo vệ IDOR: Chặn User 2 dùng JWT để ngắt quãng phiên của User 1 (HTTP 403 Forbidden)');
+
+    // Test 7.2.2: Kẻ tấn công gửi interrupt_token giả mạo -> PHẢI BỊ CHẶN 403
+    let fakeTokenBlocked = false;
+    try {
+      await axios.post(
+        `${API_BASE}/focus/${beaconSessionId}/interrupt`,
+        { actual_duration_seconds: 100, interrupt_token: 'fake_token_1234567890abcdef' },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+    } catch (err: any) {
+      fakeTokenBlocked = err.response?.status === 403;
+    }
+    assert(fakeTokenBlocked, 'Bảo vệ: Chặn yêu cầu với interrupt_token không hợp lệ (HTTP 403 Forbidden)');
+
+    // Test 7.2.3: Không gửi bất kỳ token nào -> PHẢI BỊ CHẶN 401
+    let unauthenticatedBlocked = false;
+    try {
+      await axios.post(
+        `${API_BASE}/focus/${beaconSessionId}/interrupt`,
+        { actual_duration_seconds: 100 },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+    } catch (err: any) {
+      unauthenticatedBlocked = err.response?.status === 401;
+    }
+    assert(unauthenticatedBlocked, 'Bảo vệ: Chặn yêu cầu ngắt quãng khi không có thông tin xác thực (HTTP 401 Unauthorized)');
+
+    // 7.3 Gửi beacon ngắt quãng hợp lệ: URL SẠCH SẼ HOÀN TOÀN, KHÔNG CHỨA TOKEN TRÊN QUERY STRING
+    const cleanBeaconUrl = `${API_BASE}/focus/${beaconSessionId}/interrupt`;
+    assert(!cleanBeaconUrl.includes('?token='), 'URL gọi sendBeacon sạch sẽ, TUYỆT ĐỐI KHÔNG chứa token trong query string (Chống lộ log server/proxy)');
+
     const beaconRes = await axios.post(
-      beaconUrl,
-      { actual_duration_seconds: 420 },
-      { headers: { 'Content-Type': 'application/json' } } // sendBeacon gửi dạng JSON blob không có Authorization header
+      cleanBeaconUrl,
+      { actual_duration_seconds: 420, interrupt_token: interruptToken },
+      { headers: { 'Content-Type': 'application/json' } } // sendBeacon gửi dạng JSON blob trong body
     );
-    assert(beaconRes.status === 200, 'Endpoint /:id/interrupt (sendBeacon) phản hồi HTTP 200 OK');
+    assert(beaconRes.status === 200, 'Endpoint /:id/interrupt (sendBeacon) phản hồi HTTP 200 OK với interrupt_token trong body');
     assert(beaconRes.data.summary.status === 'INTERRUPTED', 'Phiên được đánh dấu INTERRUPTED ngay lập tức khi đóng tab');
     assert(beaconRes.data.summary.actualFocusSeconds === 420, 'actualFocusSeconds ghi nhận đúng 420s lúc đóng tab');
 
-    // 7.3 Xác nhận không còn phiên active nào bị treo
+    // 7.4 Kiểm tra tính chất One-Time Token (Single-use): Tái sử dụng token cũ lập tức bị từ chối
+    let reusedTokenBlocked = false;
+    try {
+      await axios.post(
+        cleanBeaconUrl,
+        { actual_duration_seconds: 500, interrupt_token: interruptToken },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+    } catch (err: any) {
+      reusedTokenBlocked = err.response?.status === 403;
+    }
+    assert(reusedTokenBlocked, 'Tính chất Single-use: interrupt_token bị vô hiệu hóa ngay sau lần gọi đầu tiên (HTTP 403)');
+
+    // 7.5 Xác nhận không còn phiên active nào bị treo
     const activeAfterUnload = await axios.get(`${API_BASE}/focus/active`, { headers: authHeaders1 });
     assert(activeAfterUnload.data.activeSession === null, 'Sau khi đóng tab, activeSession = null ngay lập tức (không bị treo)');
 
-    // 7.4 Kiểm tra sự kiện xao nhãng PAGE_HIDDEN do unload được ghi vào DB
+    // 7.6 Kiểm tra sự kiện xao nhãng PAGE_HIDDEN do unload được ghi vào DB
     const beaconEventCheck = await db.query(
       `SELECT * FROM focus_distraction_events WHERE session_id = $1 AND event_type = 'PAGE_HIDDEN'`,
       [beaconSessionId]
@@ -376,34 +436,34 @@ export async function runPhase11Tests() {
     assert(beaconEventCheck.rows.length >= 1, 'Sự kiện xao nhãng PAGE_HIDDEN được ghi nhận thành công từ sendBeacon');
 
     // ─────────────────────────────────────────────────────────────
-    // SUITE 8: Non-overlapping Time Guarantee (read_doc vs focus_session)
+    // SUITE 8: Non-overlapping Time Guarantee (Same Document Deduplication)
     // ─────────────────────────────────────────────────────────────
-    console.log('\n--- SUITE 8: Non-overlapping Time Guarantee (read_doc vs focus_session) ---');
+    console.log('\n--- SUITE 8: Non-overlapping Time Guarantee (read_doc vs focus_session cùng tài liệu) ---');
 
-    // 8.1 Tạo tài liệu mới cho User 1 để test
-    const testDocOverlap = await db.query(
+    // 8.1 Tạo tài liệu Doc A cho User 1 để test
+    const testDocA = await db.query(
       `INSERT INTO documents (user_id, title, file_type, doc_url, status)
-       VALUES ($1, 'Overlap Doc Test', 'pdf', 'https://example.com/overlap.pdf', 'READY')
+       VALUES ($1, 'Overlap Doc A Test', 'pdf', 'https://example.com/overlap_a.pdf', 'READY')
        RETURNING id`,
       [testUser1Id]
     );
-    const overlapDocId = testDocOverlap.rows[0].id;
+    const docAId = testDocA.rows[0].id;
 
     // Lấy thời gian học ban đầu
     const summaryBeforeOverlap = await axios.get(`${API_BASE}/progress/summary`, { headers: authHeaders1 });
     const initialMinutes = summaryBeforeOverlap.data.total_study_minutes;
 
-    // 8.2 User mở tài liệu và tạo phiên đọc tài liệu 10 phút (600s)
+    // 8.2 User mở tài liệu Doc A và tạo phiên đọc tài liệu 10 phút (600s)
     await axios.post(
       `${API_BASE}/study-sessions`,
-      { document_id: overlapDocId, duration_seconds: 600 },
+      { document_id: docAId, duration_seconds: 600 },
       { headers: authHeaders1 }
     );
 
-    // 8.3 Ngay sau đó, user bấm nút "Tập trung" trên viewer -> Bắt đầu Focus Session 25 phút (1500s) cho tài liệu đó
+    // 8.3 Ngay sau đó, user bấm nút "Tập trung" trên viewer -> Bắt đầu Focus Session 25 phút (1500s) cho Doc A
     const startFocusOverlap = await axios.post(
       `${API_BASE}/focus/start`,
-      { target_duration_seconds: 1500, document_id: overlapDocId },
+      { target_duration_seconds: 1500, document_id: docAId },
       { headers: authHeaders1 }
     );
     const focusOverlapId = startFocusOverlap.data.id;
@@ -426,8 +486,73 @@ export async function runPhase11Tests() {
       `Chống tính trùng thành công: thời gian tăng thêm là đúng 25 phút (thực tế: ${addedMinutes}m, không bị cộng dồn thành 35m)`
     );
 
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 9: Cross-Document Preservation Guarantee (Không xóa nhầm read_doc tài liệu khác)
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n--- SUITE 9: Cross-Document Preservation Guarantee (Không xóa nhầm tài liệu khác) ---');
+
+    // 9.1 Tạo tài liệu Doc B (khác Doc A)
+    const testDocB = await db.query(
+      `INSERT INTO documents (user_id, title, file_type, doc_url, status)
+       VALUES ($1, 'Preserved Doc B Test', 'pdf', 'https://example.com/preserved_b.pdf', 'READY')
+       RETURNING id`,
+      [testUser1Id]
+    );
+    const docBId = testDocB.rows[0].id;
+
+    // 9.2 Tạo một tài liệu Doc C nữa để đọc 15 phút (900s)
+    const testDocC = await db.query(
+      `INSERT INTO documents (user_id, title, file_type, doc_url, status)
+       VALUES ($1, 'Document C Independent', 'pdf', 'https://example.com/c.pdf', 'READY')
+       RETURNING id`,
+      [testUser1Id]
+    );
+    const docCId = testDocC.rows[0].id;
+
+    const summaryBeforeC = await axios.get(`${API_BASE}/progress/summary`, { headers: authHeaders1 });
+    const minutesBeforeC = summaryBeforeC.data.total_study_minutes;
+
+    // User đọc Document C trong 15 phút (900s) -> Ghi nhận read_doc cho Doc C
+    await axios.post(
+      `${API_BASE}/study-sessions`,
+      { document_id: docCId, duration_seconds: 900 },
+      { headers: authHeaders1 }
+    );
+
+    // 9.3 Sau đó User bắt đầu và hoàn thành phiên Focus 25 phút (1500s) cho Document B (khác Doc C)
+    const startFocusB = await axios.post(
+      `${API_BASE}/focus/start`,
+      { target_duration_seconds: 1500, document_id: docBId },
+      { headers: authHeaders1 }
+    );
+    const focusBId = startFocusB.data.id;
+
+    await axios.post(
+      `${API_BASE}/focus/${focusBId}/finish`,
+      { status: 'COMPLETED', actual_duration_seconds: 1500 },
+      { headers: authHeaders1 }
+    );
+
+    // 9.4 KIỂM TRA ĐẢM BẢO DỮ LIỆU:
+    // Bản ghi read_doc của Document C TUYỆT ĐỐI KHÔNG BỊ XÓA NHẦM khi hoàn thành Focus của Document B
+    const docCActivityCheck = await db.query(
+      `SELECT * FROM learning_activities
+       WHERE user_id = $1 AND activity_type = 'read_doc' AND entity_id = $2`,
+      [testUser1Id, docCId]
+    );
+    assert(docCActivityCheck.rows.length === 1, 'Bản ghi read_doc của Document C vẫn tồn tại nguyên vẹn (không bị xóa nhầm)');
+    assert(docCActivityCheck.rows[0].duration_seconds === 900, 'Thời lượng 15 phút (900s) của Document C được bảo toàn');
+
+    // Tổng thời gian tăng thêm phải bằng ĐÚNG: 15 phút (Doc C) + 25 phút (Doc B) = 40 phút!
+    const summaryAfterB = await axios.get(`${API_BASE}/progress/summary`, { headers: authHeaders1 });
+    const addedMinutesCross = summaryAfterB.data.total_study_minutes - minutesBeforeC;
+    assert(
+      addedMinutesCross === 40,
+      `Bảo toàn tài liệu khác: tổng phút học tăng đúng 40 phút (15m Doc C + 25m Doc B Focus, thực tế: ${addedMinutesCross}m)`
+    );
+
     console.log('\n========================================================');
-    console.log('    ✅ ALL PHASE 11 INTEGRATION TESTS PASSED (8/8)     ');
+    console.log('    ✅ ALL PHASE 11 INTEGRATION TESTS PASSED (9/9)     ');
     console.log('========================================================\n');
   } catch (err: any) {
     console.error('\x1b[31m[ERROR IN PHASE 11 TEST EXECUTION]:\x1b[0m', err.response?.data || err.message || err);

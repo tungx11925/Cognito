@@ -1600,43 +1600,64 @@ Status: DONE
 
 ---
 
-#### B. Xác nhận & Bằng chứng 2 mục trọng yếu Phase 11 (Critical 🔴 Requirements)
-1. **Mục 🔴 1: Bắt sự kiện `pagehide` / `beforeunload` dùng `sendBeacon` đánh dấu INTERRUPTED tức thời**:
-   - **Hiện trạng xử lý**:
-     - Phía Frontend (`frontend/src/app/focus/page.tsx`): Đã đăng ký cả 2 sự kiện `pagehide` và `beforeunload`. Khi người dùng đóng tab, đóng cửa sổ trình duyệt hoặc chuyển trang đột ngột, hàm `handleUnload` tự động kích hoạt `navigator.sendBeacon` gửi dữ liệu ngắt quãng `{ actual_duration_seconds }` đến endpoint `POST /api/focus/:id/interrupt?token=...`. Sử dụng URL query param token vì `sendBeacon` không hỗ trợ tùy biến HTTP Header.
-     - Phía Backend (`backend/src/controllers/focus.controller.ts` & `backend/src/services/focus.service.ts`): Endpoint `POST /api/focus/:id/interrupt` hỗ trợ xác thực JWT token từ cả Header lẫn Query String. Khi nhận tín hiệu, server lập tức:
-       - Cập nhật trạng thái phiên thành `INTERRUPTED` và ghi nhận thời lượng thực tế đã học.
-       - Ghi nhận sự kiện xao nhãng `PAGE_HIDDEN` vào bảng `focus_distraction_events`.
-       - Ngay lập tức giải phóng phiên: `GET /api/focus/active` trả về `null`, không để phiên bị treo `IN_PROGRESS` chờ dọn dẹp mồ côi.
-   - **Bằng chứng kiểm thử**: Đã kiểm thử thành công trong `scripts/test-phase11.ts` (**Suite 7**):
-     - `Endpoint /:id/interrupt (sendBeacon) phản hồi HTTP 200 OK`
-     - `Phiên được đánh dấu INTERRUPTED ngay lập tức khi đóng tab`
-     - `actualFocusSeconds ghi nhận đúng 420s lúc đóng tab`
-     - `Sau khi đóng tab, activeSession = null ngay lập tức (không bị treo)`
-     - `Sự kiện xao nhãng PAGE_HIDDEN được ghi nhận thành công từ sendBeacon`
+#### B. Xác nhận & Bằng chứng các mục trọng yếu Phase 11 & Khắc phục Lỗ hổng Bảo mật
+1. **Mục 🔴 1: Bắt sự kiện `pagehide` / `beforeunload` dùng `sendBeacon` đánh dấu INTERRUPTED tức thời & Khắc phục Lỗ hổng Sensitive Data Exposure (Token JWT trong URL)**:
+   - **Lỗ hổng được phát hiện**: Trước đó, `sendBeacon` truyền JWT qua URL query string `POST /api/focus/:id/interrupt?token=...`, vi phạm nghiêm trọng nguyên tắc bảo mật (bị ghi lại trong access log, reverse proxy/CDN log, browser history, referer headers).
+   - **Kiến trúc khắc phục triệt để (Session-Scoped Capability Token)**:
+     - **Database Migration (`1790800000000_phase11_focus_mode.js`)**: Bổ sung cột `interrupt_token VARCHAR(128)` kèm partial index `idx_study_sessions_interrupt_token` vào bảng `study_sessions`.
+     - **Phát mã ngắn hạn dùng 1 lần (`startSession`)**: Khi tạo phiên, server sinh mã ngẫu nhiên 64 ký tự hex (`crypto.randomBytes(32).toString('hex')`) lưu vào database và trả về client trong payload `interrupt_token`. Mã này hoàn toàn tách biệt với JWT của người dùng, chỉ có hiệu lực cho đúng phiên đó.
+     - **Client `sendBeacon` qua POST Body sạch sẽ (`page.tsx`)**: Đổi sang URL hoàn toàn sạch: `POST /api/focus/:id/interrupt` (không chứa bất kỳ query param hay token nào). Gói payload `{ interrupt_token, actual_duration_seconds }` vào `Blob` JSON gửi qua `navigator.sendBeacon`.
+     - **Single-Use & Ngay lập tức vô hiệu hóa (`interruptSession`)**: Khi nhận mã, server đối chiếu `session.interrupt_token === interruptToken` và **ngay lập tức** cập nhật `interrupt_token = NULL` để chống replay attack.
+     - **Loại bỏ token khỏi URL toàn hệ thống**: Xóa bỏ hoàn toàn fallback `req.query?.token` trong `auth.middleware.ts` và controller.
+   - **Xác nhận phòng chống IDOR trên `/interrupt`**:
+     - Endpoint kiểm tra chặt chẽ:
+       * Nếu xác thực qua JWT (`Authorization: Bearer`): Kiểm tra `session.user_id === userId` (chặn người dùng khác can thiệp bằng HTTP 403).
+       * Nếu xác thực qua `interrupt_token`: Chỉ chấp nhận token khớp chính xác với phiên `id` đang active (`session.interrupt_token === interruptToken`).
+       * Nếu dùng token giả mạo, token của phiên khác, hoặc token đã bị thu hồi $\rightarrow$ HTTP 403 Forbidden.
+       * Nếu không có cả JWT lẫn `interrupt_token` $\rightarrow$ HTTP 401 Unauthorized.
+   - **Bằng chứng kiểm thử**: Đã kiểm thử tự động trong `scripts/test-phase11.ts` (**Suite 7**):
+     - `URL sendBeacon hoàn toàn sạch: không chứa query param token (?token=)`
+     - `Chặn IDOR: User 2 dùng token của User 1 bị từ chối với HTTP 403 Forbidden`
+     - `Chặn token giả mạo: interrupt_token không đúng bị từ chối với HTTP 403 Forbidden`
+     - `Chặn request không xác thực: thiếu token bị từ chối với HTTP 401 Unauthorized`
+     - `sendBeacon với interrupt_token qua body JSON thành công (HTTP 200 OK)`
+     - `Single-use: Dùng lại interrupt_token lần 2 bị từ chối ngay lập tức (HTTP 403 Forbidden)`
+     - `activeSession giải phóng ngay lập tức (null), distraction PAGE_HIDDEN ghi nhận chuẩn xác`
 
 2. **Mục 🔴 2: Triệt tiêu nguy cơ tính trùng thời gian giữa `read_doc` (Phase 10) và `focus_session` (Phase 11)**:
    - **Hiện trạng xử lý**:
      - Trong `backend/src/services/study.service.ts`: Khi `createStudySession` được gọi cho một tài liệu, hệ thống kiểm tra nếu đang có phiên Focus `IN_PROGRESS` cho tài liệu đó thì trả về phiên Focus hiện tại thay vì tạo phiên đọc tài liệu song song.
-     - Trong `backend/src/services/focus.service.ts`: Khi kết thúc phiên Focus (`finishSession`), hệ thống kích hoạt cơ chế khử trùng lặp (Anti-Double Counting Mechanism): Tự động dọn dẹp các bản ghi `read_doc` cho cùng `document_id` phát sinh trong khoảng thời gian phiên Focus đang hoạt động (`created_at >= session.started_at`).
+     - Trong `backend/src/services/focus.service.ts`: Khi kết thúc phiên Focus (`finishSession`), hệ thống kích hoạt cơ chế khử trùng lặp (Anti-Double Counting Mechanism): Tự động dọn dẹp các bản ghi `read_doc` cho cùng `document_id` phát sinh trong khoảng thời gian phiên Focus đang hoạt động (`created_at >= session.started_at` và `entity_id = $2`).
      - Đảm bảo tính toán thời gian trong `/progress/summary` và `/progress/streak` chỉ phản ánh thời gian học tập thực tế duy nhất, không bị nhân đôi.
    - **Bằng chứng kiểm thử**: Đã kiểm thử thành công trong `scripts/test-phase11.ts` (**Suite 8**):
      - Kịch bản: Người dùng mở tài liệu đọc 10 phút (`read_doc`), sau đó bấm "Tập trung" 25 phút (`focus_session`) cho tài liệu đó $\rightarrow$ Sau khi hoàn thành, kiểm tra tổng phút trong `/progress/summary`.
      - Kết quả test: `addedMinutes === 25` $\rightarrow$ `Chống tính trùng thành công: thời gian tăng thêm là đúng 25 phút (thực tế: 25m, không bị cộng dồn thành 35m)`.
 
+3. **Mục 🟡 3: Xác nhận phạm vi dọn dẹp `read_doc` không xóa nhầm dữ liệu của tài liệu khác (Cross-Document Preservation Guarantee)**:
+   - **Hiện trạng xử lý**: Câu truy vấn khử trùng lặp trong `finishSession` sử dụng điều kiện nghiêm ngặt:
+     `DELETE FROM learning_activities WHERE user_id = $1 AND entity_id = $2 AND activity_type = 'read_doc' AND created_at >= $3`
+     Trong đó `$2` là `session.document_id`. Điều kiện này chỉ khoanh vùng đúng tài liệu đang Focus, tuyệt đối không ảnh hưởng tới bất kỳ tài liệu nào khác.
+   - **Bằng chứng kiểm thử mới**: Đã bổ sung kịch bản kiểm thử tường minh trong `scripts/test-phase11.ts` (**Suite 9**):
+     - Kịch bản: Người dùng mở đọc Tài liệu C (15 phút `read_doc`), sau đó chuyển sang mở phiên Focus cho Tài liệu B (25 phút `focus_session`).
+     - Kết quả kiểm chứng tự động:
+       * Bản ghi `read_doc` của Tài liệu C vẫn **nguyên vẹn 100%** trong database, không bị xóa.
+       * Tổng thời gian học trong `/progress/summary` cộng dồn chuẩn xác 40 phút (15 phút Tài liệu C + 25 phút Focus Tài liệu B).
+       * $\rightarrow$ Xác nhận tường minh: Thao tác xóa `read_doc` đúng phạm vi, tuyệt đối không xóa nhầm tài liệu khác.
+
 ---
 
 #### C. Tổng hợp Kiểm thử Tích hợp & Hồi quy Toàn diện
 1. **Kiểm thử chuyên sâu Phase 11 (`scripts/test-phase11.ts`)**:
-   - Đã thực thi và vượt qua **8/8 Suites (100%)**:
+   - Đã thực thi và vượt qua **9/9 Suites (100%)**:
      - *Suite 1 (Standalone Focus Session Lifecycle)*: Start $\rightarrow$ activeSession $\rightarrow$ ping $\rightarrow$ finish $\rightarrow$ summary $\rightarrow$ activeSession null.
      - *Suite 2 (Entry Points Integration)*: Bắt đầu Focus từ Document và Quiz gắn kết chính xác `document_id` và `quiz_id`.
      - *Suite 3 (Distraction Detection & Focus Score Penalty)*: Ghi nhận sự kiện `TAB_SWITCH`, `PAGE_BLUR`, `PAGE_HIDDEN` $\rightarrow$ `distractionCount` tăng chính xác = 3 $\rightarrow$ Focus Score bị trừ tương ứng từ 100 xuống 85 điểm.
      - *Suite 4 (Interrupted & Cancelled States)*: Phiên CANCELLED có điểm = 0. Phiên mồ côi cũ tự động đánh dấu thành INTERRUPTED khi mở phiên mới.
      - *Suite 5 (Auto-Logging to learning_activities & Streak Sync)*: Tự động ghi nhận đúng 1 bản ghi `learning_activities` (`activity_type: 'focus_session'`) và cập nhật `studiedToday = true`, tăng chuỗi Streak.
      - *Suite 6 (IDOR Protection & Authorization)*: Chặn người dùng khác can thiệp, kết thúc, xem summary hay gắn tài liệu riêng tư của người khác với mã HTTP 403/404.
-     - *Suite 7 (Pagehide / Beforeunload SendBeacon Interrupt)*: Đánh dấu INTERRUPTED tức thì khi đóng tab qua sendBeacon, activeSession giải phóng ngay lập tức.
-     - *Suite 8 (Non-overlapping Time Guarantee)*: Khử trùng lặp giữa read_doc và focus_session, thời gian học tăng chuẩn xác 25 phút.
+     - *Suite 7 (Pagehide / Beforeunload SendBeacon Security & IDOR)*: URL sạch không token; chặn IDOR; chặn token giả; chặn replay; dọn dẹp activeSession tức thì.
+     - *Suite 8 (Non-overlapping Time Guarantee)*: Khử trùng lặp giữa read_doc và focus_session trên cùng tài liệu, thời gian học tăng chuẩn xác 25 phút.
+     - *Suite 9 (Cross-Document Preservation Guarantee)*: Xác nhận `read_doc` của tài liệu khác không bị xóa nhầm, cộng dồn đủ 40 phút.
 
 2. **Kiểm thử Hồi quy Toàn diện (`npm run test:fast`)**:
    - Đã thực thi đồng thời toàn bộ 7 modules từ Phase 3 đến Phase 11:
