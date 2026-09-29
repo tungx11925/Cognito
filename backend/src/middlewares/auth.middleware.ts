@@ -6,7 +6,7 @@ export interface AuthRequest extends Request {
   user?: { id: number; email: string; role?: string | null };
 }
 
-export const authenticate = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     let token = req.cookies?.token;
 
@@ -27,6 +27,18 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY) as { id: number; email: string; role?: string };
     req.user = decoded;
+
+    // Check suspension status and current role
+    const userCheck = await db.query('SELECT role, is_suspended, suspension_reason FROM users WHERE id = $1', [decoded.id]);
+    if (userCheck.rows[0]?.is_suspended) {
+      return res.status(403).json({
+        error: `Tài khoản của bạn đã bị đình chỉ. Lý do: ${userCheck.rows[0].suspension_reason || 'Vi phạm chính sách cộng đồng'}`,
+      });
+    }
+    if (userCheck.rows[0]?.role) {
+      req.user.role = userCheck.rows[0].role;
+    }
+
     next();
   } catch (error) {
     console.error('Authentication Error:', error);

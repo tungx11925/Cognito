@@ -29,9 +29,19 @@ import {
   TrendingUp,
   Sparkles,
   Filter,
+  Flag,
+  UserX,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import RegisterModal from '@/components/auth/RegisterModal';
+import {
+  safetyService,
+  ReportTargetType,
+  ReportReason,
+  BlockedUserItem,
+} from '@/services/safety.service';
 import {
   getCommunityFeed,
   publishResource,
@@ -123,6 +133,136 @@ export default function CommunityPage() {
   const [commentInput, setCommentInput] = useState('');
   const [replyParent, setReplyParent] = useState<CommunityCommentItem | null>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+
+  // Safety: Report Modal State
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState<{
+    targetType: ReportTargetType;
+    targetId: number;
+    title: string;
+  } | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason>('INAPPROPRIATE');
+  const [reportDetails, setReportDetails] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
+  // Safety: Block User Modal State
+  const [blockModalOpen, setBlockModalOpen] = useState(false);
+  const [blockTargetUser, setBlockTargetUser] = useState<{ id: number; name: string } | null>(null);
+  const [blockReason, setBlockReason] = useState('');
+  const [isBlockingUser, setIsBlockingUser] = useState(false);
+
+  // Safety: Blocked Users List Modal State
+  const [blockedUsersModalOpen, setBlockedUsersModalOpen] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUserItem[]>([]);
+  const [loadingBlockedUsers, setLoadingBlockedUsers] = useState(false);
+  const [isUnblockingId, setIsUnblockingId] = useState<number | null>(null);
+
+  const handleOpenReport = (targetType: ReportTargetType, targetId: number, title: string) => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
+    setReportTarget({ targetType, targetId, title });
+    setReportReason('INAPPROPRIATE');
+    setReportDetails('');
+    setReportModalOpen(true);
+  };
+
+  const handleSubmitReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportTarget) return;
+    setIsSubmittingReport(true);
+    try {
+      const res = await safetyService.reportContent(
+        reportTarget.targetType,
+        reportTarget.targetId,
+        reportReason,
+        reportDetails.trim() || undefined
+      );
+      if (res && res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success(res.message || 'Báo cáo của bạn đã được gửi thành công');
+        setReportModalOpen(false);
+        setReportTarget(null);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi gửi báo cáo');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
+  const handleOpenBlock = (userId: number, name: string) => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
+    setBlockTargetUser({ id: userId, name });
+    setBlockReason('');
+    setBlockModalOpen(true);
+  };
+
+  const handleConfirmBlock = async () => {
+    if (!blockTargetUser) return;
+    setIsBlockingUser(true);
+    try {
+      const res = await safetyService.blockUser(blockTargetUser.id, blockReason.trim() || undefined);
+      if (res && res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success(`Đã chặn người dùng ${blockTargetUser.name}. Toàn bộ nội dung của người này sẽ được ẩn khỏi bảng tin.`);
+        setBlockModalOpen(false);
+        setBlockTargetUser(null);
+        fetchFeed();
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi chặn người dùng');
+    } finally {
+      setIsBlockingUser(false);
+    }
+  };
+
+  const handleOpenBlockedUsersModal = async () => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
+    setBlockedUsersModalOpen(true);
+    setLoadingBlockedUsers(true);
+    try {
+      const res = await safetyService.getBlockedUsers();
+      if (res && Array.isArray(res.blockedUsers)) {
+        setBlockedUsers(res.blockedUsers);
+      } else if (res && Array.isArray(res.blocks)) {
+        setBlockedUsers(res.blocks);
+      } else {
+        setBlockedUsers([]);
+      }
+    } catch (err: any) {
+      toast.error('Lỗi khi tải danh sách chặn');
+    } finally {
+      setLoadingBlockedUsers(false);
+    }
+  };
+
+  const handleUnblockUser = async (userId: number, name: string) => {
+    setIsUnblockingId(userId);
+    try {
+      const res = await safetyService.unblockUser(userId);
+      if (res && res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success(`Đã bỏ chặn người dùng ${name}`);
+        setBlockedUsers((prev) => prev.filter((b) => b.blocked_id !== userId));
+        fetchFeed();
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi bỏ chặn');
+    } finally {
+      setIsUnblockingId(null);
+    }
+  };
 
   // Debounce search input
   useEffect(() => {
@@ -539,6 +679,16 @@ export default function CommunityPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              {isAuthenticated && (
+                <button
+                  onClick={handleOpenBlockedUsersModal}
+                  className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-stone-200 bg-white text-stone-700 font-medium text-sm hover:bg-stone-50 transition-all shadow-2xs"
+                  title="Quản lý danh sách người dùng đã chặn"
+                >
+                  <UserX size={16} className="text-stone-500" />
+                  <span>Danh sách chặn</span>
+                </button>
+              )}
               <button
                 onClick={handleOpenPublishModal}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a3a2a] text-white font-medium text-sm hover:bg-[#12281d] shadow-sm hover:shadow transition-all"
@@ -858,14 +1008,34 @@ export default function CommunityPage() {
                         </span>
                       </div>
 
-                      {/* Reshare Action */}
-                      <button
-                        onClick={() => handleOpenReshare(item)}
-                        className="p-1 text-stone-400 hover:text-emerald-700 transition-colors"
-                        title="Chia sẻ lại (Reshare)"
-                      >
-                        <Share2 size={15} />
-                      </button>
+                      {/* Safety & Reshare Actions */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleOpenReport('resource', item.id, item.title)}
+                          className="p-1 text-stone-400 hover:text-amber-600 transition-colors"
+                          title="Báo cáo vi phạm (Report)"
+                        >
+                          <Flag size={14} />
+                        </button>
+
+                        {!isOwner && (
+                          <button
+                            onClick={() => handleOpenBlock(item.user_id, item.author_name)}
+                            className="p-1 text-stone-400 hover:text-red-600 transition-colors"
+                            title="Chặn tác giả này (Block user)"
+                          >
+                            <UserX size={14} />
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleOpenReshare(item)}
+                          className="p-1 text-stone-400 hover:text-emerald-700 transition-colors"
+                          title="Chia sẻ lại (Reshare)"
+                        >
+                          <Share2 size={15} />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Bottom CTA Row: Study Button & Delete (if author) */}
@@ -1305,6 +1475,22 @@ export default function CommunityPage() {
                             >
                               <CornerDownRight size={12} /> Trả lời
                             </button>
+                            <button
+                              onClick={() => handleOpenReport('comment', c.id, c.content)}
+                              className="text-[11px] text-stone-400 hover:text-amber-600 flex items-center gap-1 transition-colors"
+                              title="Báo cáo bình luận"
+                            >
+                              <Flag size={11} /> Báo cáo
+                            </button>
+                            {!isAuthor && (
+                              <button
+                                onClick={() => handleOpenBlock(c.user_id, c.user_name)}
+                                className="text-[11px] text-stone-400 hover:text-red-600 flex items-center gap-1 transition-colors"
+                                title="Chặn người dùng này"
+                              >
+                                <UserX size={11} /> Chặn
+                              </button>
+                            )}
                             {(isAuthor || activeUser?.role === 'admin') && (
                               <button
                                 onClick={() => handleDeleteComment(c.id)}
@@ -1336,16 +1522,32 @@ export default function CommunityPage() {
                                     </span>
                                   </div>
                                   <p className="text-stone-700 whitespace-pre-wrap">{reply.content}</p>
-                                  {(isReplyAuthor || activeUser?.role === 'admin') && (
-                                    <div className="text-right mt-1">
+                                  <div className="flex items-center justify-end gap-2 mt-1">
+                                    <button
+                                      onClick={() => handleOpenReport('comment', reply.id, reply.content)}
+                                      className="text-[10px] text-stone-400 hover:text-amber-600 flex items-center gap-0.5 transition-colors"
+                                      title="Báo cáo câu trả lời"
+                                    >
+                                      <Flag size={10} /> Báo cáo
+                                    </button>
+                                    {!isReplyAuthor && (
+                                      <button
+                                        onClick={() => handleOpenBlock(reply.user_id, reply.user_name)}
+                                        className="text-[10px] text-stone-400 hover:text-red-600 flex items-center gap-0.5 transition-colors"
+                                        title="Chặn người này"
+                                      >
+                                        <UserX size={10} /> Chặn
+                                      </button>
+                                    )}
+                                    {(isReplyAuthor || activeUser?.role === 'admin') && (
                                       <button
                                         onClick={() => handleDeleteComment(reply.id)}
                                         className="text-[10px] text-red-500 hover:text-red-700"
                                       >
                                         Xóa
                                       </button>
-                                    </div>
-                                  )}
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })}
@@ -1390,6 +1592,243 @@ export default function CommunityPage() {
                     <Send size={15} />
                   </button>
                 </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Safety: Report Content Modal ─── */}
+      <AnimatePresence>
+        {reportModalOpen && reportTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-stone-100">
+                <div className="flex items-center gap-2 text-amber-700">
+                  <Flag size={20} />
+                  <h3 className="font-bold text-base text-stone-900">Báo cáo vi phạm</h3>
+                </div>
+                <button
+                  onClick={() => setReportModalOpen(false)}
+                  className="p-1.5 rounded-full text-stone-400 hover:bg-stone-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitReport} className="mt-4 space-y-4">
+                <div className="p-3 bg-stone-50 rounded-xl border border-stone-100 text-xs text-stone-600">
+                  <span className="font-semibold text-stone-800">
+                    {reportTarget.targetType === 'resource'
+                      ? 'Tài nguyên:'
+                      : reportTarget.targetType === 'comment'
+                      ? 'Bình luận:'
+                      : 'Người dùng:'}
+                  </span>{' '}
+                  <span className="line-clamp-1 italic">"{reportTarget.title}"</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1.5">
+                    Lý do báo cáo <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={reportReason}
+                    onChange={(e) => setReportReason(e.target.value as ReportReason)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                  >
+                    <option value="SPAM">Tin rác / Quảng cáo trái phép (SPAM)</option>
+                    <option value="INAPPROPRIATE">Nội dung phản cảm / Không phù hợp</option>
+                    <option value="COPYRIGHT_VIOLATION">Vi phạm bản quyền sở hữu trí tuệ</option>
+                    <option value="HARASSMENT">Quấy rối / Đả kích cá nhân</option>
+                    <option value="FALSE_INFORMATION">Thông tin sai lệch / Gây hiểu lầm</option>
+                    <option value="OTHER">Lý do khác</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1.5">
+                    Mô tả chi tiết (tùy chọn)
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Cung cấp thêm chi tiết để ban quản trị dễ dàng xác minh..."
+                    value={reportDetails}
+                    onChange={(e) => setReportDetails(e.target.value)}
+                    maxLength={1000}
+                    className="w-full px-3 py-2 text-xs bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] outline-none resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+                  <button
+                    type="button"
+                    onClick={() => setReportModalOpen(false)}
+                    className="px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-100 rounded-xl transition-colors"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingReport}
+                    className="px-5 py-2 text-xs font-semibold bg-amber-700 text-white rounded-xl hover:bg-amber-800 disabled:opacity-50 transition-colors shadow-xs"
+                  >
+                    {isSubmittingReport ? 'Đang gửi...' : 'Gửi báo cáo'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Safety: Block User Confirmation Modal ─── */}
+      <AnimatePresence>
+        {blockModalOpen && blockTargetUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-stone-100">
+                <div className="flex items-center gap-2 text-red-600">
+                  <UserX size={20} />
+                  <h3 className="font-bold text-base text-stone-900">Chặn người dùng</h3>
+                </div>
+                <button
+                  onClick={() => setBlockModalOpen(false)}
+                  className="p-1.5 rounded-full text-stone-400 hover:bg-stone-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Bạn có chắc muốn chặn <strong className="text-stone-900">{blockTargetUser.name}</strong>? Khi bị chặn:
+                </p>
+                <ul className="text-xs text-stone-500 space-y-1 list-disc pl-5">
+                  <li>Tài nguyên và bình luận của người này sẽ không còn hiển thị trên bảng tin của bạn.</li>
+                  <li>Người này cũng sẽ không thấy tài nguyên và không thể bình luận, thích hoặc lưu bài của bạn.</li>
+                </ul>
+
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Lý do chặn (nội bộ của bạn)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Bình luận spam, làm phiền..."
+                    value={blockReason}
+                    onChange={(e) => setBlockReason(e.target.value)}
+                    maxLength={500}
+                    className="w-full px-3 py-2 text-xs bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
+                  <button
+                    type="button"
+                    onClick={() => setBlockModalOpen(false)}
+                    className="px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-100 rounded-xl transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    onClick={handleConfirmBlock}
+                    disabled={isBlockingUser}
+                    className="px-5 py-2 text-xs font-semibold bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors shadow-xs"
+                  >
+                    {isBlockingUser ? 'Đang chặn...' : 'Xác nhận chặn'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Safety: Blocked Users List Modal ─── */}
+      <AnimatePresence>
+        {blockedUsersModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[85vh]"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-stone-100">
+                <div className="flex items-center gap-2 text-stone-800">
+                  <UserX size={20} className="text-stone-500" />
+                  <h3 className="font-bold text-base text-stone-900">Danh sách người dùng đã chặn</h3>
+                </div>
+                <button
+                  onClick={() => setBlockedUsersModalOpen(false)}
+                  className="p-1.5 rounded-full text-stone-400 hover:bg-stone-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto py-4 space-y-3">
+                {loadingBlockedUsers ? (
+                  <div className="py-12 text-center text-xs text-stone-400">
+                    <div className="w-6 h-6 border-2 border-[#1a3a2a] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    Đang tải danh sách chặn...
+                  </div>
+                ) : blockedUsers.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-stone-400">
+                    Bạn hiện chưa chặn người dùng nào.
+                  </div>
+                ) : (
+                  blockedUsers.map((b) => (
+                    <div
+                      key={b.block_id}
+                      className="p-3 bg-stone-50 rounded-2xl border border-stone-200/80 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-2.5 truncate">
+                        {b.avatar_url ? (
+                          <img src={b.avatar_url} alt={b.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-stone-200 text-stone-700 flex items-center justify-center font-bold text-xs shrink-0">
+                            {b.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="truncate">
+                          <p className="font-bold text-stone-900 truncate">{b.name}</p>
+                          <p className="text-[11px] text-stone-400 truncate">
+                            {b.reason ? `Lý do: ${b.reason}` : `Đã chặn ngày ${new Date(b.created_at).toLocaleDateString('vi-VN')}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleUnblockUser(b.blocked_id, b.name)}
+                        disabled={isUnblockingId === b.blocked_id}
+                        className="px-3 py-1.5 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-100 font-semibold text-xs whitespace-nowrap transition-colors disabled:opacity-50"
+                      >
+                        {isUnblockingId === b.blocked_id ? 'Đang mở...' : 'Bỏ chặn'}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-stone-100 text-right">
+                <button
+                  onClick={() => setBlockedUsersModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold bg-stone-100 text-stone-700 hover:bg-stone-200 rounded-xl transition-colors"
+                >
+                  Đóng
+                </button>
               </div>
             </motion.div>
           </div>

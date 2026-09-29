@@ -7,7 +7,8 @@ import {
   LayoutDashboard, Users, FileText, DollarSign, Search, Trash2, 
   Loader2, ArrowLeft, ShieldAlert, TrendingUp, BookOpen, 
   Layers, Clock, RefreshCw, ChevronRight, LogOut, CheckCircle,
-  HelpCircle, AlertTriangle, UserPlus, Edit, X, Plus, Mail, Lock, Phone, Eye
+  HelpCircle, AlertTriangle, UserPlus, Edit, X, Plus, Mail, Lock, Phone, Eye,
+  Flag, UserX
 } from "lucide-react";
 import { useStudy } from "@/context/StudyContext";
 import { 
@@ -22,8 +23,15 @@ import {
   warnAdminUser,
   getAdminUserDetails
 } from "@/services/admin.service";
+import {
+  safetyService,
+  ContentReportItem,
+  ModerationStats,
+  ModerationHistoryItem,
+  ModerationAction,
+} from "@/services/safety.service";
 
-type ActiveTab = "dashboard" | "users" | "documents" | "transactions";
+type ActiveTab = "dashboard" | "users" | "documents" | "transactions" | "moderation";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -90,6 +98,99 @@ export default function AdminPage() {
     limit: 10,
     totalPages: 1
   });
+
+  // Moderation Tab states
+  const [moderationStats, setModerationStats] = useState<ModerationStats | null>(null);
+  const [moderationReports, setModerationReports] = useState<ContentReportItem[]>([]);
+  const [moderationHistory, setModerationHistory] = useState<ModerationHistoryItem[]>([]);
+  const [moderationStatusFilter, setModerationStatusFilter] = useState<'PENDING' | 'REVIEWED' | 'RESOLVED' | 'DISMISSED' | 'ALL'>('PENDING');
+  const [moderationTypeFilter, setModerationTypeFilter] = useState<'ALL' | 'resource' | 'comment' | 'user'>('ALL');
+  const [moderationSubTab, setModerationSubTab] = useState<'queue' | 'history'>('queue');
+  const [moderationActionModalOpen, setModerationActionModalOpen] = useState(false);
+  const [selectedReportForAction, setSelectedReportForAction] = useState<ContentReportItem | null>(null);
+  const [chosenAction, setChosenAction] = useState<ModerationAction>('KEEP');
+  const [moderationReason, setModerationReason] = useState('');
+  const [moderationNotes, setModerationNotes] = useState('');
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+
+  const loadModerationData = async (
+    statusOverride?: string,
+    typeOverride?: string
+  ) => {
+    try {
+      const currentStatus = statusOverride !== undefined ? statusOverride : moderationStatusFilter;
+      const currentType = typeOverride !== undefined ? typeOverride : moderationTypeFilter;
+
+      const [statsRes, reportsRes, historyRes] = await Promise.all([
+        safetyService.getModerationStats(),
+        safetyService.getModerationReports({
+          status: currentStatus,
+          targetType: currentType,
+        }),
+        safetyService.getModerationHistory(1, 40),
+      ]);
+
+      if (statsRes && !statsRes.error) {
+        setModerationStats(statsRes);
+      }
+      if (reportsRes && Array.isArray(reportsRes.reports)) {
+        setModerationReports(reportsRes.reports);
+      }
+      if (historyRes && Array.isArray(historyRes.history)) {
+        setModerationHistory(historyRes.history);
+      }
+    } catch (err: any) {
+      triggerNotification('Lỗi khi tải dữ liệu kiểm duyệt', 'error');
+    }
+  };
+
+  const handleOpenModerationAction = (report: ContentReportItem, action: ModerationAction) => {
+    setSelectedReportForAction(report);
+    setChosenAction(action);
+    setModerationReason(
+      action === 'KEEP'
+        ? 'Nội dung hợp lệ sau kiểm tra thực tế, không vi phạm chính sách.'
+        : action === 'HIDE'
+        ? 'Nội dung vi phạm nhẹ hoặc cần xác minh thêm, tạm ẩn khỏi bảng tin.'
+        : action === 'REMOVE'
+        ? 'Nội dung vi phạm nghiêm trọng tiêu chuẩn cộng đồng, xóa vĩnh viễn.'
+        : action === 'WARN'
+        ? 'Cảnh cáo tài khoản về hành vi không phù hợp trong cộng đồng.'
+        : 'Đình chỉ tài khoản do vi phạm tiêu chuẩn cộng đồng nhiều lần.'
+    );
+    setModerationNotes('');
+    setModerationActionModalOpen(true);
+  };
+
+  const executeModerationAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedReportForAction) return;
+    if (!moderationReason.trim() || moderationReason.trim().length < 3) {
+      triggerNotification('Lý do xử lý kiểm duyệt bắt buộc có ít nhất 3 ký tự', 'error');
+      return;
+    }
+    setIsSubmittingAction(true);
+    try {
+      const res = await safetyService.applyModerationAction(
+        selectedReportForAction.id,
+        chosenAction,
+        moderationReason.trim(),
+        moderationNotes.trim() || undefined
+      );
+      if (res && res.error) {
+        triggerNotification(res.error, 'error');
+      } else {
+        triggerNotification(`Đã thực thi hành động ${chosenAction} thành công`, 'success');
+        setModerationActionModalOpen(false);
+        setSelectedReportForAction(null);
+        await loadModerationData();
+      }
+    } catch (err: any) {
+      triggerNotification(err.message || 'Lỗi khi xử lý kiểm duyệt', 'error');
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
 
   // Check if admin and load initial data
   useEffect(() => {
@@ -249,6 +350,8 @@ export default function AdminPage() {
         lastDocSearchRef.current = "";
       } else if (tab === "transactions") {
         await loadTransactions();
+      } else if (tab === "moderation") {
+        await loadModerationData();
       }
       setLoading(false);
     } catch (err) {
@@ -593,6 +696,25 @@ export default function AdminPage() {
             <DollarSign size={18} />
             <span>Doanh thu & Giao dịch</span>
           </button>
+
+          <button
+            onClick={() => handleTabChange("moderation")}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
+              activeTab === "moderation"
+                ? "bg-emerald-500 text-white shadow-md"
+                : "text-gray-300 hover:bg-[#153e34] hover:text-white"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <ShieldAlert size={18} />
+              <span>Kiểm duyệt & An toàn</span>
+            </div>
+            {moderationStats && (moderationStats.pendingReports > 0 || moderationStats.pendingReportsCount > 0) && (
+              <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-red-500 text-white animate-pulse">
+                {moderationStats.pendingReports || moderationStats.pendingReportsCount}
+              </span>
+            )}
+          </button>
         </nav>
 
         {/* Footer Actions */}
@@ -623,6 +745,7 @@ export default function AdminPage() {
               {activeTab === "users" && "Quản Lý Thành Viên Hệ Thống"}
               {activeTab === "documents" && "Quản Lý Tài Liệu Người Dùng"}
               {activeTab === "transactions" && "Nhật Ký Doanh Thu & Giao Dịch"}
+              {activeTab === "moderation" && "Kiểm Duyệt Nội Dung & An Toàn Cộng Đồng"}
             </h1>
           </div>
           <div className="flex items-center gap-4">
@@ -1207,6 +1330,350 @@ export default function AdminPage() {
                       </table>
                     </div>
                   </div>
+
+                </div>
+              )}
+
+              {/* SECTION 5: CONTENT MODERATION & SAFETY */}
+              {activeTab === "moderation" && (
+                <div className="space-y-8">
+                  {/* Moderation KPI Summary */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs flex items-center gap-4 relative overflow-hidden">
+                      <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center text-red-600 border border-red-100 shrink-0">
+                        <Flag size={22} />
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">Báo cáo chờ xử lý</span>
+                        <span className="text-2xl font-extrabold text-red-600 mt-1 block">
+                          {(moderationStats?.pendingReports ?? moderationStats?.pendingReportsCount ?? 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs flex items-center gap-4 relative overflow-hidden">
+                      <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 border border-amber-100 shrink-0">
+                        <Eye size={22} className="text-amber-600" />
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">Tài nguyên đã ẩn</span>
+                        <span className="text-2xl font-extrabold text-amber-600 mt-1 block">
+                          {(moderationStats?.hiddenResources ?? moderationStats?.hiddenResourcesCount ?? 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs flex items-center gap-4 relative overflow-hidden">
+                      <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 border border-purple-100 shrink-0">
+                        <UserX size={22} className="text-purple-600" />
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">Tài khoản bị khóa</span>
+                        <span className="text-2xl font-extrabold text-purple-700 mt-1 block">
+                          {(moderationStats?.suspendedUsers ?? moderationStats?.suspendedUsersCount ?? 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs flex items-center gap-4 relative overflow-hidden">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 border border-emerald-100 shrink-0">
+                        <Clock size={22} className="text-emerald-600" />
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">Xử lý (30 ngày qua)</span>
+                        <span className="text-2xl font-extrabold text-emerald-700 mt-1 block">
+                          {(moderationStats?.recentActions ?? moderationStats?.recentActionsCount ?? 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sub-Tabs & Filtering Toolbar */}
+                  <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-2 border-b md:border-b-0 pb-3 md:pb-0">
+                      <button
+                        onClick={() => setModerationSubTab("queue")}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                          moderationSubTab === "queue"
+                            ? "bg-[#0D2B24] text-white shadow-xs"
+                            : "text-gray-600 hover:bg-gray-100"
+                        }`}
+                      >
+                        Hàng đợi báo cáo ({moderationReports.length})
+                      </button>
+                      <button
+                        onClick={() => setModerationSubTab("history")}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                          moderationSubTab === "history"
+                            ? "bg-[#0D2B24] text-white shadow-xs"
+                            : "text-gray-600 hover:bg-gray-100"
+                        }`}
+                      >
+                        Nhật ký kiểm duyệt ({moderationHistory.length})
+                      </button>
+                    </div>
+
+                    {moderationSubTab === "queue" && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Status Filter */}
+                        <div className="flex items-center gap-1 text-xs">
+                          <span className="text-gray-400 font-semibold text-[11px]">Trạng thái:</span>
+                          <select
+                            value={moderationStatusFilter}
+                            onChange={(e) => {
+                              const s = e.target.value as any;
+                              setModerationStatusFilter(s);
+                              loadModerationData(s, moderationTypeFilter);
+                            }}
+                            className="bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          >
+                            <option value="PENDING">Chờ xử lý (Pending)</option>
+                            <option value="REVIEWED">Đang xem xét</option>
+                            <option value="RESOLVED">Đã giải quyết (Resolved)</option>
+                            <option value="DISMISSED">Đã bác bỏ (Dismissed)</option>
+                            <option value="ALL">Tất cả trạng thái</option>
+                          </select>
+                        </div>
+
+                        {/* Type Filter */}
+                        <div className="flex items-center gap-1 text-xs">
+                          <span className="text-gray-400 font-semibold text-[11px]">Đối tượng:</span>
+                          <select
+                            value={moderationTypeFilter}
+                            onChange={(e) => {
+                              const t = e.target.value as any;
+                              setModerationTypeFilter(t);
+                              loadModerationData(moderationStatusFilter, t);
+                            }}
+                            className="bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          >
+                            <option value="ALL">Tất cả loại</option>
+                            <option value="resource">Tài nguyên học tập</option>
+                            <option value="comment">Bình luận</option>
+                            <option value="user">Người dùng</option>
+                          </select>
+                        </div>
+
+                        <button
+                          onClick={() => loadModerationData()}
+                          className="p-2 text-gray-500 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 transition-colors"
+                          title="Làm mới hàng đợi"
+                        >
+                          <RefreshCw size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SUBTAB 1: REPORTS QUEUE */}
+                  {moderationSubTab === "queue" && (
+                    <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-[#0D2B24] text-white uppercase text-[10px] tracking-wider font-extrabold">
+                            <tr>
+                              <th className="py-3.5 px-4">ID</th>
+                              <th className="py-3.5 px-4">Mục tiêu</th>
+                              <th className="py-3.5 px-4">Lý do</th>
+                              <th className="py-3.5 px-4">Chi tiết phản ánh</th>
+                              <th className="py-3.5 px-4">Người báo cáo</th>
+                              <th className="py-3.5 px-4">Trạng thái</th>
+                              <th className="py-3.5 px-4">Thời gian</th>
+                              <th className="py-3.5 px-4 text-right">Xử lý</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 font-medium">
+                            {moderationReports.length === 0 ? (
+                              <tr>
+                                <td colSpan={8} className="py-12 text-center text-gray-400">
+                                  Không có báo cáo nào phù hợp với bộ lọc hiện tại.
+                                </td>
+                              </tr>
+                            ) : (
+                              moderationReports.map((rep) => {
+                                const targetBadge =
+                                  rep.target_type === "resource"
+                                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                                    : rep.target_type === "comment"
+                                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                                    : "bg-amber-50 text-amber-700 border-amber-200";
+
+                                const reasonColor =
+                                  rep.reason === "SPAM"
+                                    ? "text-red-700 bg-red-50 border-red-200"
+                                    : rep.reason === "INAPPROPRIATE"
+                                    ? "text-amber-700 bg-amber-50 border-amber-200"
+                                    : rep.reason === "HARASSMENT"
+                                    ? "text-rose-700 bg-rose-50 border-rose-200"
+                                    : "text-gray-700 bg-gray-50 border-gray-200";
+
+                                return (
+                                  <tr key={rep.id} className="hover:bg-gray-50/60 transition-colors">
+                                    <td className="py-3.5 px-4 font-bold text-gray-500">#{rep.id}</td>
+                                    <td className="py-3.5 px-4">
+                                      <div className="space-y-1">
+                                        <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase ${targetBadge}`}>
+                                          {rep.target_type === "resource" ? "Tài nguyên" : rep.target_type === "comment" ? "Bình luận" : "Người dùng"}
+                                        </span>
+                                        <p className="font-bold text-gray-900 line-clamp-1 max-w-[200px]">
+                                          {rep.target_title || `Mục tiêu #${rep.target_id}`}
+                                        </p>
+                                        {rep.target_author_name && (
+                                          <p className="text-[10px] text-gray-400">Tác giả: {rep.target_author_name}</p>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="py-3.5 px-4">
+                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${reasonColor}`}>
+                                        {rep.reason}
+                                      </span>
+                                    </td>
+                                    <td className="py-3.5 px-4">
+                                      <p className="text-gray-600 line-clamp-2 max-w-[240px] italic">
+                                        {rep.details ? `"${rep.details}"` : "Không có mô tả chi tiết"}
+                                      </p>
+                                    </td>
+                                    <td className="py-3.5 px-4">
+                                      <p className="font-bold text-gray-800">{rep.reporter_name || `User #${rep.reporter_id}`}</p>
+                                      {rep.reporter_email && (
+                                        <p className="text-[10px] text-gray-400 truncate max-w-[140px]">{rep.reporter_email}</p>
+                                      )}
+                                    </td>
+                                    <td className="py-3.5 px-4">
+                                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                        rep.status === "PENDING"
+                                          ? "bg-red-100 text-red-800"
+                                          : rep.status === "RESOLVED"
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : "bg-gray-100 text-gray-700"
+                                      }`}>
+                                        {rep.status}
+                                      </span>
+                                    </td>
+                                    <td className="py-3.5 px-4 text-gray-400 text-[11px] whitespace-nowrap">
+                                      {new Date(rep.created_at).toLocaleDateString("vi-VN")}
+                                    </td>
+                                    <td className="py-3.5 px-4 text-right">
+                                      {rep.status === "PENDING" ? (
+                                        <div className="flex items-center justify-end gap-1.5">
+                                          <button
+                                            onClick={() => handleOpenModerationAction(rep, "KEEP")}
+                                            className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] transition-colors"
+                                            title="Bác bỏ báo cáo & Giữ nguyên nội dung"
+                                          >
+                                            Giữ lại
+                                          </button>
+                                          <button
+                                            onClick={() => handleOpenModerationAction(rep, "HIDE")}
+                                            className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold text-[11px] transition-colors"
+                                            title="Ẩn nội dung khỏi bảng tin"
+                                          >
+                                            Ẩn
+                                          </button>
+                                          <button
+                                            onClick={() => handleOpenModerationAction(rep, "REMOVE")}
+                                            className="px-2 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 font-bold text-[11px] transition-colors"
+                                            title="Xóa vĩnh viễn"
+                                          >
+                                            Xóa
+                                          </button>
+                                          <button
+                                            onClick={() => handleOpenModerationAction(rep, "WARN")}
+                                            className="px-2 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold text-[11px] transition-colors"
+                                            title="Cảnh cáo tác giả vi phạm"
+                                          >
+                                            Cảnh cáo
+                                          </button>
+                                          <button
+                                            onClick={() => handleOpenModerationAction(rep, "SUSPEND")}
+                                            className="px-2 py-1 rounded-lg bg-stone-900 text-white hover:bg-black font-bold text-[11px] transition-colors"
+                                            title="Đình chỉ tài khoản tác giả"
+                                          >
+                                            Khóa
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <span className="text-[11px] text-gray-400 italic">
+                                          {rep.action_taken ? `Đã xử lý: ${rep.action_taken}` : "Đã hoàn tất"}
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SUBTAB 2: MODERATION AUDIT LOG */}
+                  {moderationSubTab === "history" && (
+                    <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-[#0D2B24] text-white uppercase text-[10px] tracking-wider font-extrabold">
+                            <tr>
+                              <th className="py-3.5 px-4">Thời gian</th>
+                              <th className="py-3.5 px-4">Quản trị viên</th>
+                              <th className="py-3.5 px-4">Hành động</th>
+                              <th className="py-3.5 px-4">Mục tiêu</th>
+                              <th className="py-3.5 px-4">Lý do xử lý</th>
+                              <th className="py-3.5 px-4">Ghi chú nội bộ</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 font-medium">
+                            {moderationHistory.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="py-12 text-center text-gray-400">
+                                  Chưa ghi nhận lịch sử kiểm duyệt nào.
+                                </td>
+                              </tr>
+                            ) : (
+                              moderationHistory.map((item) => (
+                                <tr key={item.id} className="hover:bg-gray-50/60 transition-colors">
+                                  <td className="py-3.5 px-4 text-gray-400 text-[11px] whitespace-nowrap">
+                                    {new Date(item.created_at).toLocaleString("vi-VN")}
+                                  </td>
+                                  <td className="py-3.5 px-4">
+                                    <p className="font-bold text-gray-900">{item.admin_name}</p>
+                                    <p className="text-[10px] text-gray-400">{item.admin_email}</p>
+                                  </td>
+                                  <td className="py-3.5 px-4">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                                      item.action === "KEEP"
+                                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                        : item.action === "HIDE"
+                                        ? "bg-amber-50 text-amber-800 border-amber-200"
+                                        : item.action === "REMOVE"
+                                        ? "bg-red-50 text-red-800 border-red-200"
+                                        : item.action === "WARN"
+                                        ? "bg-purple-50 text-purple-800 border-purple-200"
+                                        : "bg-stone-900 text-white border-stone-800"
+                                    }`}>
+                                      {item.action}
+                                    </span>
+                                  </td>
+                                  <td className="py-3.5 px-4">
+                                    <span className="font-mono text-gray-700 text-[11px]">
+                                      {item.target_type} #{item.target_id}
+                                    </span>
+                                  </td>
+                                  <td className="py-3.5 px-4 text-gray-800 font-semibold max-w-[260px]">
+                                    {item.reason}
+                                  </td>
+                                  <td className="py-3.5 px-4 text-gray-500 italic max-w-[200px]">
+                                    {item.notes || "—"}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
 
                 </div>
               )}
@@ -1973,6 +2440,189 @@ export default function AdminPage() {
                   Đóng cửa sổ
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* MODERATION ACTION MODAL */}
+        {moderationActionModalOpen && selectedReportForAction && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-gray-200 overflow-hidden text-left"
+            >
+              {/* Header */}
+              <div className="bg-[#0D2B24] text-white px-6 py-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-2xl ${
+                    chosenAction === "KEEP"
+                      ? "bg-emerald-600"
+                      : chosenAction === "HIDE"
+                      ? "bg-amber-600"
+                      : chosenAction === "REMOVE"
+                      ? "bg-red-600"
+                      : chosenAction === "WARN"
+                      ? "bg-purple-600"
+                      : "bg-stone-900"
+                  } text-white`}>
+                    <ShieldAlert size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black">
+                      {chosenAction === "KEEP" && "Bác bỏ & Giữ nguyên"}
+                      {chosenAction === "HIDE" && "Ẩn nội dung khỏi Feed"}
+                      {chosenAction === "REMOVE" && "Xóa vĩnh viễn nội dung"}
+                      {chosenAction === "WARN" && "Cảnh cáo vi phạm"}
+                      {chosenAction === "SUSPEND" && "Đình chỉ tài khoản"}
+                    </h3>
+                    <p className="text-[10px] font-bold text-emerald-300/80">
+                      Báo cáo #{selectedReportForAction.id} • Mục tiêu: {selectedReportForAction.target_type} #{selectedReportForAction.target_id}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setModerationActionModalOpen(false)}
+                  className="text-white/60 hover:text-white p-1.5 hover:bg-white/10 rounded-xl transition-all"
+                  disabled={isSubmittingAction}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <form onSubmit={executeModerationAction} className="p-6 space-y-4">
+                {/* Target info card */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400 font-bold">Người báo cáo:</span>
+                    <span className="text-gray-800 font-bold">
+                      {selectedReportForAction.reporter_name || selectedReportForAction.reporter_email || `#${selectedReportForAction.reporter_id}`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400 font-bold">Lý do báo cáo:</span>
+                    <span className="text-red-600 font-extrabold">{selectedReportForAction.reason}</span>
+                  </div>
+                  {selectedReportForAction.target_title && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-400 font-bold">Tiêu đề:</span>
+                      <span className="text-gray-800 font-semibold line-clamp-1">{selectedReportForAction.target_title}</span>
+                    </div>
+                  )}
+                  {selectedReportForAction.details && (
+                    <div>
+                      <span className="text-gray-400 font-bold block mb-1">Mô tả vi phạm:</span>
+                      <p className="text-gray-700 bg-white p-2.5 rounded-xl border border-gray-200/80 text-[11px] leading-relaxed">
+                        {selectedReportForAction.details}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action selector */}
+                <div>
+                  <label className="block text-[9px] font-extrabold uppercase tracking-wider text-gray-400 mb-1.5">
+                    Hành động áp dụng
+                  </label>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {(["KEEP", "HIDE", "REMOVE", "WARN", "SUSPEND"] as ModerationAction[]).map((act) => (
+                      <button
+                        key={act}
+                        type="button"
+                        onClick={() => {
+                          setChosenAction(act);
+                          setModerationReason(
+                            act === "KEEP"
+                              ? "Nội dung hợp lệ sau kiểm tra thực tế, không vi phạm chính sách."
+                              : act === "HIDE"
+                              ? "Nội dung vi phạm nhẹ hoặc cần xác minh thêm, tạm ẩn khỏi bảng tin."
+                              : act === "REMOVE"
+                              ? "Nội dung vi phạm nghiêm trọng tiêu chuẩn cộng đồng, xóa vĩnh viễn."
+                              : act === "WARN"
+                              ? "Cảnh cáo tài khoản về hành vi không phù hợp trong cộng đồng."
+                              : "Đình chỉ tài khoản do vi phạm tiêu chuẩn cộng đồng nhiều lần."
+                          );
+                        }}
+                        className={`py-2 px-1 text-center font-black text-[10px] rounded-xl border transition-all ${
+                          chosenAction === act
+                            ? act === "KEEP"
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                              : act === "HIDE"
+                              ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                              : act === "REMOVE"
+                              ? "bg-red-600 text-white border-red-600 shadow-sm"
+                              : act === "WARN"
+                              ? "bg-purple-600 text-white border-purple-600 shadow-sm"
+                              : "bg-black text-white border-black shadow-sm"
+                            : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                        }`}
+                      >
+                        {act}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Reason input */}
+                <div>
+                  <label className="block text-[9px] font-extrabold uppercase tracking-wider text-gray-400 mb-1.5">
+                    Lý do xử lý kiểm duyệt <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={moderationReason}
+                    onChange={(e) => setModerationReason(e.target.value)}
+                    placeholder="Nhập lý do xử lý nội dung..."
+                    className="w-full text-xs p-3.5 rounded-2xl border border-gray-200 focus:outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10 bg-slate-50/50 hover:bg-slate-50 transition-all font-medium text-gray-800 resize-none"
+                    disabled={isSubmittingAction}
+                  />
+                </div>
+
+                {/* Internal notes */}
+                <div>
+                  <label className="block text-[9px] font-extrabold uppercase tracking-wider text-gray-400 mb-1.5">
+                    Ghi chú nội bộ (Tùy chọn)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={moderationNotes}
+                    onChange={(e) => setModerationNotes(e.target.value)}
+                    placeholder="Ghi chú thêm cho đội ngũ Admin..."
+                    className="w-full text-xs p-3.5 rounded-2xl border border-gray-200 focus:outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10 bg-slate-50/50 hover:bg-slate-50 transition-all font-medium text-gray-800 resize-none"
+                    disabled={isSubmittingAction}
+                  />
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="flex gap-3 pt-3 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setModerationActionModalOpen(false)}
+                    className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 font-bold text-xs text-gray-600 rounded-xl transition-all active:scale-[0.98]"
+                    disabled={isSubmittingAction}
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-2.5 bg-[#0D2B24] hover:bg-[#133e34] font-bold text-xs text-white rounded-xl transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2"
+                    disabled={isSubmittingAction}
+                  >
+                    {isSubmittingAction ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin" /> Đang xử lý...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={14} /> Xác nhận xử lý
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

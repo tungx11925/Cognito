@@ -143,7 +143,8 @@ export const listComments = async (req: AuthRequest, res: Response) => {
     if (!resourceId || isNaN(resourceId)) {
       return res.status(400).json({ error: 'ID tài nguyên không hợp lệ' });
     }
-    const comments = await communityService.listComments(resourceId);
+    const userId = req.user?.id || null;
+    const comments = await communityService.listComments(resourceId, userId);
     return res.status(200).json({ comments });
   } catch (error: any) {
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi tải danh sách bình luận' });

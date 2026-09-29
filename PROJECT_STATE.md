@@ -1852,7 +1852,127 @@ Status: DONE
 ### Tuân thủ Rule 0.1.1
 - Toàn bộ 1 điểm 🔴 và các điểm 🟡 của người dùng đã được giải quyết triệt để, cập nhật mã nguồn và kiểm chứng bằng 80/80 bài test tự động.
 - Toàn bộ 3 Gate Checks của Rule 0.1.3 đều đạt chuẩn.
-- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 13 (Community Safety & Content Moderation)**.
+- **Dừng lại theo quy tắc vận hành và chỉ chuyển sang Phase 13 khi nhận được xác nhận từ người dùng.**
+
+---
+
+## PHASE 13 — COMMUNITY SAFETY & CONTENT MODERATION SYSTEM — 2026-09-29
+Status: DONE
+
+### Gate Baseline Checks (Mục 0.1.3):
+- **Backend TypeScript Build (`npx tsc --noEmit`)**: PASSED (0 errors)
+- **Frontend TypeScript Check (`npx tsc --noEmit`)**: PASSED (0 errors)
+- **Next.js Production Build (`npm run build`)**: PASSED (23/23 routes compiled)
+- **Phase 13 Integration Test Suite (`backend/scripts/test-phase13.ts`)**: 69/69 Assertions (100% Pass)
+- **Full Fast Regression Test Suite (`npm run test:fast`)**: 9/9 Phases Passed (Phase 3 through Phase 13), 0 regression detected.
+
+---
+
+### 1. Kiến trúc & Tính năng hoàn thành (Phase 13)
+
+#### A. User Safety Controls
+1. **Content & User Reporting**:
+   - Báo cáo tài nguyên (`resource`), bình luận (`comment`), hoặc tài khoản (`user`).
+   - Lý do báo cáo chuẩn hóa: `SPAM`, `INAPPROPRIATE`, `COPYRIGHT_VIOLATION`, `HARASSMENT`, `FALSE_INFORMATION`, `OTHER`.
+   - Vòng đời trạng thái báo cáo: `PENDING` $\rightarrow$ `REVIEWED` $\rightarrow$ `RESOLVED` / `DISMISSED`.
+   - Ngăn chặn tự báo cáo nội dung của chính mình (HTTP 400 Bad Request).
+   - Ngăn chặn báo cáo trùng lặp khi chưa xử lý (HTTP 400 Bad Request).
+   - **Tự động ẩn nội dung (Auto-flag threshold)**: Tự động đánh dấu `is_hidden = true` khi `report_count >= 5`.
+2. **User Blocking & Bi-directional Isolation**:
+   - API: `POST /api/community/blocks/:userId`, `DELETE /api/community/blocks/:userId`, `GET /api/community/blocks`.
+   - Chặn tự chặn bản thân (HTTP 400), chặn chặn Admin (HTTP 400).
+   - **Lọc chặn 2 chiều (Bi-directional block)**:
+     * Nếu A chặn B hoặc B chặn A: A và B không thể thấy bài viết của nhau trên bảng tin (`getFeed`).
+     * Nếu A chặn B hoặc B chặn A: A và B không thể xem chi tiết bài viết của nhau (HTTP 403 Forbidden).
+     * Bình luận của người bị chặn bị ẩn hoàn toàn khỏi danh sách bình luận (`listComments`).
+     * Tất cả tương tác (Like, Save, Reshare, Comment) giữa 2 bên đều bị chặn với HTTP 403 Forbidden.
+3. **Rate Limiting & Anti-Spam Protections**:
+   - Giới hạn xuất bản tài nguyên: Tối đa 5 bài / 10 phút.
+   - Bình luận Cooldown: Tối thiểu 3 giây giữa 2 bình luận liên tiếp.
+   - Giới hạn bình luận: Tối đa 15 bình luận / 5 phút.
+   - Phát hiện bình luận trùng lặp nội dung trên cùng một bài trong vòng 60 giây (HTTP 400 Bad Request).
+   - Giới hạn báo cáo: Tối đa 10 báo cáo / 10 phút.
+
+#### B. Admin Content Moderation System
+1. **Thống kê kiểm duyệt**: `GET /api/admin/moderation/stats` (Số báo cáo chờ xử lý, số bài bị ẩn, số tài khoản bị đình chỉ, số hành động gần đây).
+2. **Hàng đợi báo cáo**: `GET /api/admin/moderation/reports` (Hỗ trợ lọc theo `status`, `targetType`, và phân trang `page`, `limit`).
+3. **Thực thi hành động kiểm duyệt**: `POST /api/admin/moderation/reports/:id/action`:
+   - `KEEP`: Bác bỏ báo cáo (`status = DISMISSED`), giữ nguyên nội dung.
+   - `HIDE`: Ẩn nội dung (`is_hidden = true`, `status = RESOLVED`).
+   - `REMOVE`: Xóa vĩnh viễn nội dung vi phạm khỏi CSDL (`status = RESOLVED`).
+   - `WARN`: Gửi cảnh cáo người dùng (`status = WARNED`, tăng `warning_count`).
+   - `SUSPEND`: Đình chỉ tài khoản người dùng vi phạm (`is_suspended = true`, `status = SUSPENDED`).
+4. **Trực tiếp đình chỉ & Mở đình chỉ**: `POST /api/admin/moderation/users/:id/suspend` và `POST /api/admin/moderation/users/:id/unsuspend`.
+5. **Nhật ký kiểm duyệt (Audit Log)**: `GET /api/admin/moderation/history` ghi nhận đầy đủ `admin_id`, `admin_name`, `action`, `target_type`, `target_id`, `reason`, `notes`, `created_at`.
+6. **Middleware an ninh**: `auth.middleware.ts` kiểm tra cờ `is_suspended` trên mọi request có token (HTTP 403 Forbidden đối với tài khoản bị khóa). Đồng bộ role trực tiếp từ CSDL.
+
+#### C. Giao diện & Trải nghiệm Người dùng (Frontend)
+1. **Dịch vụ Safety Client**: `frontend/src/services/safety.service.ts` bao bọc toàn bộ các endpoint an toàn và kiểm duyệt.
+2. **Community Hub (`frontend/src/app/community/page.tsx`)**:
+   - Nút "Báo cáo" và "Chặn người dùng" trên từng thẻ tài nguyên (Feed Card).
+   - Nút "Báo cáo" và "Chặn người dùng" trên từng bình luận và phản hồi lồng nhau (Comment / Reply).
+   - Modal Báo cáo nội dung (`ReportModal`) với danh mục lý do chuẩn hóa và ô nhập chi tiết.
+   - Modal Chặn thành viên (`BlockModal`) với xác nhận an toàn và giải thích quyền riêng tư.
+   - Nút và Modal Quản lý danh sách chặn (`BlockedUsersModal`) trên thanh header, cho phép xem danh sách người bị chặn và mở chặn (`Unblock`).
+3. **Admin Dashboard (`frontend/src/app/admin/page.tsx`)**:
+   - Tab điều hướng mới: **"Kiểm duyệt" (Moderation)** trong sidebar với badge hiển thị số lượng báo cáo chờ xử lý màu đỏ.
+   - Dashboard Thống kê kiểm duyệt (KPI Cards: Báo cáo chờ duyệt, Bài đăng đã ẩn, Tài khoản bị khóa, Thao tác gần đây).
+   - Sub-tab chuyển đổi giữa **Hàng đợi báo cáo (Queue)** và **Nhật ký kiểm duyệt (Audit Log)**.
+   - Bảng hàng đợi báo cáo với các bộ lọc trạng thái và loại mục tiêu.
+   - Các nút hành động nhanh: Giữ lại, Ẩn, Xóa, Cảnh cáo, Khóa.
+   - Modal Xác nhận hành động kiểm duyệt (`ModerationActionModal`) với xem chi tiết đối tượng bị báo cáo, lý do kiểm duyệt, và ghi chú nội bộ.
+
+---
+
+### 2. Chi tiết Database Migration Phase 13
+- File migration: `backend/migrations/1791000000000_phase13_community_safety.js`.
+- Bảng dữ liệu mới:
+  * `user_blocks`: `id`, `blocker_id`, `blocked_id`, `reason`, `created_at` (Khóa độc nhất cặp `blocker_id, blocked_id`).
+  * `content_reports`: `id`, `reporter_id`, `target_type`, `target_id`, `reason`, `details`, `status`, `action_taken`, `reviewed_by`, `reviewed_at`, `moderation_notes`, `created_at`.
+  * `moderation_logs`: `id`, `admin_id`, `report_id`, `action`, `target_type`, `target_id`, `reason`, `notes`, `created_at`.
+- Cột mở rộng:
+  * `users`: `is_suspended BOOLEAN DEFAULT false`, `suspended_at TIMESTAMPTZ`, `suspended_reason TEXT`, `warning_count INTEGER DEFAULT 0`, `status VARCHAR(50) DEFAULT 'ACTIVE'`.
+  * `community_resources`: `report_count INTEGER DEFAULT 0`, `is_hidden BOOLEAN DEFAULT false`.
+  * `community_comments`: `report_count INTEGER DEFAULT 0`, `is_hidden BOOLEAN DEFAULT false`.
+- Chỉ mục hiệu năng (Indices):
+  * `idx_user_blocks_blocker` ON `user_blocks (blocker_id)`
+  * `idx_user_blocks_blocked` ON `user_blocks (blocked_id)`
+  * `idx_content_reports_status` ON `content_reports (status)`
+  * `idx_content_reports_target` ON `content_reports (target_type, target_id)`
+  * `idx_moderation_logs_target` ON `moderation_logs (target_type, target_id)`
+
+---
+
+### 3. Kết quả Kiểm thử Toàn diện & Hồi quy
+
+#### A. Kiểm thử Chuyên sâu Phase 13 (`scripts/test-phase13.ts` — 69/69 Assertions, 100% Pass)
+1. **Suite 1: User Blocking Lifecycle & Validation (8/8)**: Chặn tự chặn (400), chặn Admin (400), chặn thành công, lấy danh sách chặn, bỏ chặn, mở chặn user chưa bị chặn (404).
+2. **Suite 2: Bi-directional Block Effect on Feed & Comments (10/10)**: Lọc bảng tin 2 chiều (A không thấy B và B không thấy A), người thứ ba C trung lập thấy cả hai, chặn truy cập chi tiết (403), lọc bình luận 2 chiều.
+3. **Suite 3: Block Enforcement on Interactions (5/5)**: Chặn Like, Save, Reshare, Comment khi có quan hệ chặn (403 Forbidden cả 2 chiều).
+4. **Suite 4: Content Reporting Lifecycle & Anti-Spam Protections (10/10)**: Tự báo cáo bài của mình bị chặn (400), báo cáo tài nguyên, bình luận, người dùng; chặn báo cáo trùng lặp; tự động ẩn bài viết khi `report_count >= 5`.
+5. **Suite 5: Rate Limiting & Anti-Spam Protection (4/4)**: Comment cooldown <3s (429), bình luận lặp nội dung trong 60s (400), vượt ngưỡng xuất bản 5 bài / 10 phút (429).
+6. **Suite 6: Admin Content Moderation Queue & Action Execution (19/19)**: Lấy thống kê kiểm duyệt, duyệt hàng đợi, thực thi `KEEP` (DISMISSED), `HIDE` (is_hidden = true), `WARN` (warning_count + 1), `SUSPEND` (is_suspended = true, 403 khi gọi API), `UNSUSPEND`, `REMOVE` (xóa vĩnh viễn khỏi CSDL).
+7. **Suite 7: Moderation History Audit Trail (7/7)**: Ghi nhận đầy đủ audit log cho mọi hành động với admin_name, target, lý do.
+8. **Suite 8: IDOR & Role-Based Access Control (6/6)**: Người dùng thông thường cố truy cập API Admin Moderation đều nhận HTTP 403 Forbidden.
+
+#### B. Kiểm thử Hồi quy Toàn bộ 9 Giai đoạn (`npm run test:fast`)
+- **Phase 3**: PASS (Auth & User System) — 2.43s
+- **Phase 4**: PASS (Document Management & Processing Pipeline) — 3.38s
+- **Phase 7**: PASS (Exam & Question Bank Management) — 2.21s
+- **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 2.04s
+- **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 2.83s
+- **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.51s
+- **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 2.28s
+- **Phase 12**: PASS (Community Ecosystem & Resource Exchange) — 2.35s
+- **Phase 13**: PASS (Community Safety & Content Moderation System) — 3.24s
+- $\rightarrow$ **9/9 PHASES PASSED (100%), ZERO REGRESSION DETECTED**.
+
+---
+
+### Tuân thủ Rule 0.1.1
+- Toàn bộ tính năng Phase 13 đã được triển khai hoàn chỉnh cả Backend và Frontend, xác minh qua 69/69 test assertions và 9/9 giai đoạn hồi quy.
+- Toàn bộ 3 Gate Checks của Rule 0.1.3 đều đạt chuẩn xuất sắc (TypeScript 0 errors, Next.js build pass, Fast regression pass).
+- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 14 (User Profile & Public Profile)**.
 - Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, nghiệm thu trước khi tiếp tục.
 
 

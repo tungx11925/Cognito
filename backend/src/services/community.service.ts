@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { AppError } from '../utils/AppError';
 import { PublishResourceInput, CommunityFeedQuery } from '../schemas/community.schema';
+import { safetyService } from './safety.service';
 
 export class CommunityService {
   /**
@@ -58,6 +59,7 @@ export class CommunityService {
    * 1. Publish Personal Resource to Community
    */
   async publishResource(userId: number, input: PublishResourceInput) {
+    await safetyService.checkPublishRateLimit(userId);
     const underlying = await this.verifyUnderlyingOwnership(userId, input.resourceType, input.resourceId);
 
     // If publishing document, mark document as public & community_published
@@ -148,7 +150,18 @@ export class CommunityService {
     const offset = (page - 1) * limit;
 
     const params: any[] = [];
-    let whereClauses = ['cr.is_public = true'];
+    let whereClauses = ['cr.is_public = true', 'cr.is_hidden = false'];
+
+    // Block relationship filter: hide resources from blocked users and users who blocked the viewer
+    if (userId) {
+      params.push(userId);
+      const bIdx = params.length;
+      whereClauses.push(`NOT EXISTS (
+        SELECT 1 FROM user_blocks ub 
+        WHERE (ub.blocker_id = $${bIdx} AND ub.blocked_id = cr.user_id)
+           OR (ub.blocker_id = cr.user_id AND ub.blocked_id = $${bIdx})
+      )`);
+    }
 
     // Tab filter
     if (tab === 'saved') {
@@ -300,6 +313,16 @@ export class CommunityService {
 
     const resource = res.rows[0];
 
+    // Check if hidden by moderation
+    if (resource.is_hidden && (!userId || userId !== resource.user_id)) {
+      throw new AppError('Tài nguyên này hiện đang bị ẩn do kiểm duyệt hoặc vi phạm chính sách', 404);
+    }
+
+    // Check block relationship
+    if (userId && (await safetyService.hasBlockRelationship(userId, resource.user_id))) {
+      throw new AppError('Bạn không thể xem tài nguyên này do có tương tác chặn giữa hai người dùng', 403);
+    }
+
     // Increment view count
     await db.query('UPDATE community_resources SET view_count = view_count + 1 WHERE id = $1', [resourceId]);
     resource.view_count = Number(resource.view_count) + 1;
@@ -338,9 +361,18 @@ export class CommunityService {
    * 5. Toggle Like
    */
   async toggleLike(userId: number, resourceId: number) {
-    const resCheck = await db.query('SELECT id FROM community_resources WHERE id = $1', [resourceId]);
+    const resCheck = await db.query('SELECT id, user_id, is_hidden FROM community_resources WHERE id = $1', [resourceId]);
     if (resCheck.rows.length === 0) {
       throw new AppError('Không tìm thấy tài nguyên', 404);
+    }
+
+    const resource = resCheck.rows[0];
+    if (resource.is_hidden) {
+      throw new AppError('Tài nguyên này hiện đang bị ẩn', 400);
+    }
+
+    if (await safetyService.hasBlockRelationship(userId, resource.user_id)) {
+      throw new AppError('Bạn không thể tương tác với tài nguyên của người dùng này', 403);
     }
 
     const likeCheck = await db.query(
@@ -367,9 +399,18 @@ export class CommunityService {
    * 6. Toggle Save (Reference Only — Zero Data Duplication)
    */
   async toggleSave(userId: number, resourceId: number) {
-    const resCheck = await db.query('SELECT id FROM community_resources WHERE id = $1', [resourceId]);
+    const resCheck = await db.query('SELECT id, user_id, is_hidden FROM community_resources WHERE id = $1', [resourceId]);
     if (resCheck.rows.length === 0) {
       throw new AppError('Không tìm thấy tài nguyên', 404);
+    }
+
+    const resource = resCheck.rows[0];
+    if (resource.is_hidden) {
+      throw new AppError('Tài nguyên này hiện đang bị ẩn', 400);
+    }
+
+    if (await safetyService.hasBlockRelationship(userId, resource.user_id)) {
+      throw new AppError('Bạn không thể tương tác với tài nguyên của người dùng này', 403);
     }
 
     const saveCheck = await db.query(
@@ -402,12 +443,12 @@ export class CommunityService {
       `SELECT cr.*, u.name as author_name 
        FROM community_resources cr
        JOIN users u ON u.id = cr.user_id
-       WHERE cr.id = $1 AND cr.is_public = true`,
+       WHERE cr.id = $1 AND cr.is_public = true AND cr.is_hidden = false`,
       [resourceId]
     );
 
     if (targetCheck.rows.length === 0) {
-      throw new AppError('Không tìm thấy tài nguyên để chia sẻ lại', 404);
+      throw new AppError('Không tìm thấy tài nguyên để chia sẻ lại hoặc tài nguyên đã bị ẩn', 404);
     }
 
     const target = targetCheck.rows[0];
@@ -415,6 +456,14 @@ export class CommunityService {
     // Determine original attribution
     const originalResourceId = target.is_reshare ? target.original_resource_id : target.id;
     const originalAuthorId = target.is_reshare ? target.original_author_id : target.user_id;
+
+    // Check block relationship with target author or original author
+    if (await safetyService.hasBlockRelationship(userId, target.user_id)) {
+      throw new AppError('Bạn không thể chia sẻ lại tài nguyên của người dùng này', 403);
+    }
+    if (originalAuthorId && (await safetyService.hasBlockRelationship(userId, originalAuthorId))) {
+      throw new AppError('Bạn không thể chia sẻ lại tài nguyên của tác giả gốc do quan hệ chặn', 403);
+    }
 
     // Check if user already reshared this resource
     const existingReshare = await db.query(
@@ -454,15 +503,39 @@ export class CommunityService {
    * 8. Comments CRUD
    */
   async addComment(userId: number, resourceId: number, content: string, parentId?: number | null) {
-    const resCheck = await db.query('SELECT id FROM community_resources WHERE id = $1', [resourceId]);
+    // 1. Anti-spam & rate limit check
+    await safetyService.checkCommentSpamAndRateLimit(userId, resourceId, content);
+
+    // 2. Resource check & hidden check
+    const resCheck = await db.query('SELECT id, user_id, is_hidden FROM community_resources WHERE id = $1', [resourceId]);
     if (resCheck.rows.length === 0) {
       throw new AppError('Không tìm thấy tài nguyên', 404);
     }
+    const resource = resCheck.rows[0];
+    if (resource.is_hidden) {
+      throw new AppError('Tài nguyên này hiện đang bị ẩn, không thể bình luận', 400);
+    }
 
+    // 3. Block check against post author
+    if (await safetyService.hasBlockRelationship(userId, resource.user_id)) {
+      throw new AppError('Bạn không thể bình luận trên bài viết của người dùng này', 403);
+    }
+
+    // 4. Parent comment check & block check
     if (parentId) {
-      const parentCheck = await db.query('SELECT id FROM community_comments WHERE id = $1 AND resource_id = $2', [parentId, resourceId]);
+      const parentCheck = await db.query(
+        'SELECT id, user_id, is_hidden FROM community_comments WHERE id = $1 AND resource_id = $2',
+        [parentId, resourceId]
+      );
       if (parentCheck.rows.length === 0) {
         throw new AppError('Bình luận cha không tồn tại', 404);
+      }
+      const parent = parentCheck.rows[0];
+      if (parent.is_hidden) {
+        throw new AppError('Bình luận cha đã bị ẩn, không thể trả lời', 400);
+      }
+      if (await safetyService.hasBlockRelationship(userId, parent.user_id)) {
+        throw new AppError('Bạn không thể trả lời bình luận của người dùng này', 403);
       }
     }
 
@@ -484,7 +557,19 @@ export class CommunityService {
     };
   }
 
-  async listComments(resourceId: number) {
+  async listComments(resourceId: number, viewerId?: number | null) {
+    const params: any[] = [resourceId];
+    let blockFilter = '';
+
+    if (viewerId) {
+      params.push(viewerId);
+      blockFilter = `AND NOT EXISTS (
+        SELECT 1 FROM user_blocks ub 
+        WHERE (ub.blocker_id = $2 AND ub.blocked_id = cc.user_id)
+           OR (ub.blocker_id = cc.user_id AND ub.blocked_id = $2)
+      )`;
+    }
+
     const res = await db.query(
       `SELECT 
         cc.*,
@@ -492,9 +577,10 @@ export class CommunityService {
         u.avatar_url as author_avatar
        FROM community_comments cc
        JOIN users u ON u.id = cc.user_id
-       WHERE cc.resource_id = $1
+       WHERE cc.resource_id = $1 AND cc.is_hidden = false
+       ${blockFilter}
        ORDER BY cc.created_at ASC`,
-      [resourceId]
+      params
     );
     return res.rows;
   }

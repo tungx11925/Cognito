@@ -33,7 +33,7 @@ router.post('/resources/:id/save', authenticate, toggleSave);
 router.post('/resources/:id/reshare', authenticate, reshareResource);
 
 // Comments Tree
-router.get('/resources/:id/comments', listComments);
+router.get('/resources/:id/comments', optionalAuthenticate, listComments);
 router.post('/resources/:id/comments', authenticate, addComment);
 router.delete('/comments/:id', authenticate, deleteComment);
 
