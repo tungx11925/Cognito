@@ -102,6 +102,42 @@ export async function runPhase10Tests() {
     );
     assert(parseInt(dbCountRes.rows[0].count, 10) === 1, `DB chỉ lưu đúng DUY NHẤT 1 bản ghi (không nhân đôi dữ liệu)`);
 
+    // Kiểm tra bảo mật: Chặn khai khống duration_seconds (> 14400s)
+    let spoofDurationBlocked = false;
+    try {
+      await axios.post(
+        `${API_BASE}/learning-activities`,
+        {
+          activity_type: 'read_doc',
+          entity_type: 'document',
+          entity_id: 101,
+          duration_seconds: 999999, // 999,999 giây (> 4 giờ)
+        },
+        { headers: authHeaders }
+      );
+    } catch (err: any) {
+      spoofDurationBlocked = err.response?.status === 400;
+    }
+    assert(spoofDurationBlocked, 'Bảo vệ: Chặn client tự khai khống duration_seconds > 4h (HTTP 400 Bad Request)');
+
+    // Kiểm tra bảo mật: Chặn client tự khai khống activity_type = focus_session trực tiếp qua POST /learning-activities
+    let spoofFocusBlocked = false;
+    try {
+      await axios.post(
+        `${API_BASE}/learning-activities`,
+        {
+          activity_type: 'focus_session',
+          entity_type: 'session',
+          entity_id: 101,
+          duration_seconds: 1500,
+        },
+        { headers: authHeaders }
+      );
+    } catch (err: any) {
+      spoofFocusBlocked = err.response?.status === 403;
+    }
+    assert(spoofFocusBlocked, 'Bảo vệ: Chặn client tự khai khống focus_session trực tiếp (HTTP 403 Forbidden, bắt buộc qua Focus Engine)');
+
     console.log('\n--- SUITE 3: Learning Goals CRUD & Dynamic Progress Calculation ---');
 
     // 1. Tạo mục tiêu học 60 phút mỗi ngày
@@ -160,6 +196,7 @@ export async function runPhase10Tests() {
         duration_seconds: 2100,
         subject: 'Java',
         details: { score: 10, totalQuestions: 15 },
+        idempotency_key: `quiz_attempt:p10_step5_${Date.now()}`,
       },
       { headers: authHeaders }
     );

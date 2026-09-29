@@ -250,6 +250,20 @@ export class FocusService {
         const entityType = session.document_id ? 'document' : (session.quiz_id ? 'test_set' : 'session');
         const entityId = session.document_id || session.quiz_id || sessionId;
 
+        // 2.1. CHỐNG TÍNH TRÙNG THỜI GIAN (Deduplication between read_doc & focus_session):
+        // Nếu user bắt đầu focus từ viewer cho tài liệu X, xóa/hủy các bản ghi read_doc bị trùng lặp
+        // cho cùng tài liệu phát sinh trong thời gian phiên focus này đang chạy
+        if (session.document_id) {
+          await db.query(
+            `DELETE FROM learning_activities
+             WHERE user_id = $1
+               AND activity_type = 'read_doc'
+               AND entity_id = $2
+               AND created_at >= $3`,
+            [userId, session.document_id, session.started_at]
+          );
+        }
+
         await db.query(
           `INSERT INTO learning_activities (
              user_id, activity_type, entity_type, entity_id, duration_seconds, details, idempotency_key
@@ -307,6 +321,41 @@ export class FocusService {
         learningGoalId: session.learning_goal_id,
       },
     };
+  }
+
+  /**
+   * Đánh dấu ngắt quãng phiên tập trung tức thì (dành cho pagehide/beforeunload hoặc sendBeacon khi đóng tab)
+   */
+  async interruptSession(sessionId: number, userId: number, actualDurationSeconds?: number) {
+    const sessionCheck = await db.query(
+      `SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2`,
+      [sessionId, userId]
+    );
+
+    if (sessionCheck.rows.length === 0) {
+      throw new AppError('Phiên tập trung không tồn tại hoặc không thuộc quyền sở hữu của bạn', 404);
+    }
+
+    const session = sessionCheck.rows[0];
+    if (session.status !== 'IN_PROGRESS') {
+      return { session, message: 'Phiên đã kết thúc trước đó' };
+    }
+
+    // Ghi nhận sự kiện xao nhãng PAGE_HIDDEN do đóng tab/rời trang
+    await db.query(
+      `INSERT INTO focus_distraction_events (session_id, event_type, occurred_at, details)
+       VALUES ($1, 'PAGE_HIDDEN', CURRENT_TIMESTAMP, $2)`,
+      [sessionId, JSON.stringify({ reason: 'beacon_unload_interrupt' })]
+    );
+
+    const duration = actualDurationSeconds !== undefined
+      ? Math.max(session.actual_duration_seconds || 0, Math.round(actualDurationSeconds))
+      : (session.actual_duration_seconds || 0);
+
+    return this.finishSession(userId, sessionId, {
+      status: 'INTERRUPTED',
+      actualDurationSeconds: duration,
+    });
   }
 
   /**

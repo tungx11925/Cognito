@@ -60,7 +60,7 @@ export class QuizService {
         `SELECT q.id, q.type, q.content, q.score, q.options, q.difficulty
          FROM quiz_attempt_answers qaa
          JOIN questions q ON q.id = qaa.question_id
-         WHERE qaa.attempt_id = $1 AND qaa.is_correct = false
+         WHERE qaa.attempt_id = $1 AND qaa.is_correct = false AND q.type != 'ESSAY'
          ORDER BY q.id ASC`,
         [options.previousAttemptId]
       );
@@ -88,7 +88,9 @@ export class QuizService {
     }
 
     const totalQuestions = questions.length;
-    const totalScore = questions.reduce((sum, q) => sum + (Number(q.score) || 1.0), 0);
+    const totalScore = options.isRetryMistakes
+      ? questions.reduce((sum, q) => sum + (Number(q.score) || 1.0), 0)
+      : (Number(testSet.total_score) || questions.reduce((sum, q) => sum + (Number(q.score) || 1.0), 0));
 
     // 3. Khởi tạo bản ghi lượt làm bài (Attempt)
     const attemptRes = await db.query(
@@ -274,17 +276,19 @@ export class QuizService {
         });
       }
 
-      // 4. Cập nhật bảng quiz_attempts
+      // 4. Cập nhật bảng quiz_attempts với mẫu số total_score chuẩn xác (chỉ tính câu hỏi có thể chấm điểm)
+      const finalGradableTotalScore = gradableTotalScore > 0 ? gradableTotalScore : (Number(attempt.total_score) || 1);
       const updatedAttemptRes = await client.query(
         `UPDATE quiz_attempts
          SET score = $1,
-             correct_count = $2,
-             duration_seconds = $3,
+             total_score = $2,
+             correct_count = $3,
+             duration_seconds = $4,
              status = 'SUBMITTED',
              completed_at = CURRENT_TIMESTAMP
-         WHERE id = $4
+         WHERE id = $5
          RETURNING *`,
-        [totalAwardedScore, correctCount, serverDurationSeconds, attemptId]
+        [totalAwardedScore, finalGradableTotalScore, correctCount, serverDurationSeconds, attemptId]
       );
 
       const finalAttempt = updatedAttemptRes.rows[0];
@@ -451,7 +455,7 @@ export class QuizService {
               q.type as question_type, q.score as question_max_score
        FROM quiz_attempt_answers qaa
        JOIN questions q ON q.id = qaa.question_id
-       WHERE qaa.attempt_id = $1 AND qaa.is_correct = false
+       WHERE qaa.attempt_id = $1 AND qaa.is_correct = false AND q.type != 'ESSAY'
        ORDER BY qaa.id ASC`,
       [attemptId]
     );

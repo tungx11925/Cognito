@@ -335,8 +335,99 @@ export async function runPhase11Tests() {
       assert(err.response?.status === 403, 'User 2 bị từ chối với HTTP 403 khi gắn document riêng tư của User 1');
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 7: Real-time Pagehide / Beforeunload SendBeacon Interrupt
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n--- SUITE 7: Pagehide / Beforeunload SendBeacon Interrupt ---');
+
+    // 7.1 Bắt đầu phiên tập trung mới
+    const startBeacon = await axios.post(
+      `${API_BASE}/focus/start`,
+      { target_duration_seconds: 1500 },
+      { headers: authHeaders1 }
+    );
+    const beaconSessionId = startBeacon.data.id;
+    assert(startBeacon.status === 201, 'POST /api/focus/start trả về 201 Created');
+
+    // Kiểm tra activeSession tồn tại
+    const activeBeforeUnload = await axios.get(`${API_BASE}/focus/active`, { headers: authHeaders1 });
+    assert(activeBeforeUnload.data.activeSession?.id === beaconSessionId, 'activeSession trả về đúng session vừa tạo');
+
+    // 7.2 Giả lập browser đóng tab/cửa sổ gửi navigator.sendBeacon kèm ?token=...
+    const beaconUrl = `${API_BASE}/focus/${beaconSessionId}/interrupt?token=${encodeURIComponent(testUser1Token)}`;
+    const beaconRes = await axios.post(
+      beaconUrl,
+      { actual_duration_seconds: 420 },
+      { headers: { 'Content-Type': 'application/json' } } // sendBeacon gửi dạng JSON blob không có Authorization header
+    );
+    assert(beaconRes.status === 200, 'Endpoint /:id/interrupt (sendBeacon) phản hồi HTTP 200 OK');
+    assert(beaconRes.data.summary.status === 'INTERRUPTED', 'Phiên được đánh dấu INTERRUPTED ngay lập tức khi đóng tab');
+    assert(beaconRes.data.summary.actualFocusSeconds === 420, 'actualFocusSeconds ghi nhận đúng 420s lúc đóng tab');
+
+    // 7.3 Xác nhận không còn phiên active nào bị treo
+    const activeAfterUnload = await axios.get(`${API_BASE}/focus/active`, { headers: authHeaders1 });
+    assert(activeAfterUnload.data.activeSession === null, 'Sau khi đóng tab, activeSession = null ngay lập tức (không bị treo)');
+
+    // 7.4 Kiểm tra sự kiện xao nhãng PAGE_HIDDEN do unload được ghi vào DB
+    const beaconEventCheck = await db.query(
+      `SELECT * FROM focus_distraction_events WHERE session_id = $1 AND event_type = 'PAGE_HIDDEN'`,
+      [beaconSessionId]
+    );
+    assert(beaconEventCheck.rows.length >= 1, 'Sự kiện xao nhãng PAGE_HIDDEN được ghi nhận thành công từ sendBeacon');
+
+    // ─────────────────────────────────────────────────────────────
+    // SUITE 8: Non-overlapping Time Guarantee (read_doc vs focus_session)
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n--- SUITE 8: Non-overlapping Time Guarantee (read_doc vs focus_session) ---');
+
+    // 8.1 Tạo tài liệu mới cho User 1 để test
+    const testDocOverlap = await db.query(
+      `INSERT INTO documents (user_id, title, file_type, doc_url, status)
+       VALUES ($1, 'Overlap Doc Test', 'pdf', 'https://example.com/overlap.pdf', 'READY')
+       RETURNING id`,
+      [testUser1Id]
+    );
+    const overlapDocId = testDocOverlap.rows[0].id;
+
+    // Lấy thời gian học ban đầu
+    const summaryBeforeOverlap = await axios.get(`${API_BASE}/progress/summary`, { headers: authHeaders1 });
+    const initialMinutes = summaryBeforeOverlap.data.total_study_minutes;
+
+    // 8.2 User mở tài liệu và tạo phiên đọc tài liệu 10 phút (600s)
+    await axios.post(
+      `${API_BASE}/study-sessions`,
+      { document_id: overlapDocId, duration_seconds: 600 },
+      { headers: authHeaders1 }
+    );
+
+    // 8.3 Ngay sau đó, user bấm nút "Tập trung" trên viewer -> Bắt đầu Focus Session 25 phút (1500s) cho tài liệu đó
+    const startFocusOverlap = await axios.post(
+      `${API_BASE}/focus/start`,
+      { target_duration_seconds: 1500, document_id: overlapDocId },
+      { headers: authHeaders1 }
+    );
+    const focusOverlapId = startFocusOverlap.data.id;
+
+    // Hoàn thành phiên Focus 25 phút (1500s)
+    await axios.post(
+      `${API_BASE}/focus/${focusOverlapId}/finish`,
+      { status: 'COMPLETED', actual_duration_seconds: 1500 },
+      { headers: authHeaders1 }
+    );
+
+    // 8.4 Kiểm tra tổng số phút học trong /progress/summary:
+    // Hệ thống chống tính trùng: Phiên focus_session cho tài liệu đó thay thế phiên read_doc bị trùng
+    // Thời gian tăng thêm PHẢI là đúng 25 phút (1500s / 60), TUYỆT ĐỐI KHÔNG BỊ CỘNG DỒN THÀNH 35 phút (10 + 25)
+    const summaryAfterOverlap = await axios.get(`${API_BASE}/progress/summary`, { headers: authHeaders1 });
+    const addedMinutes = summaryAfterOverlap.data.total_study_minutes - initialMinutes;
+
+    assert(
+      addedMinutes === 25,
+      `Chống tính trùng thành công: thời gian tăng thêm là đúng 25 phút (thực tế: ${addedMinutes}m, không bị cộng dồn thành 35m)`
+    );
+
     console.log('\n========================================================');
-    console.log('    ✅ ALL PHASE 11 INTEGRATION TESTS PASSED (6/6)     ');
+    console.log('    ✅ ALL PHASE 11 INTEGRATION TESTS PASSED (8/8)     ');
     console.log('========================================================\n');
   } catch (err: any) {
     console.error('\x1b[31m[ERROR IN PHASE 11 TEST EXECUTION]:\x1b[0m', err.response?.data || err.message || err);

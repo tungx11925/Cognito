@@ -306,10 +306,37 @@ function FocusContent() {
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('focus', handleWindowFocus);
 
+    // Pagehide / Beforeunload handler (using sendBeacon to immediately mark session INTERRUPTED on tab close)
+    const handlePageUnload = () => {
+      if (!activeSession || isPaused) return;
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const url = `${apiBase}/focus/${activeSession.id}/interrupt?token=${encodeURIComponent(token)}`;
+      const payload = JSON.stringify({ actual_duration_seconds: secondsElapsed });
+
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
+      } else {
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+
+    window.addEventListener('pagehide', handlePageUnload);
+    window.addEventListener('beforeunload', handlePageUnload);
+
     // Initial idle reset
     resetIdleTimer();
 
     return () => {
+      window.removeEventListener('pagehide', handlePageUnload);
+      window.removeEventListener('beforeunload', handlePageUnload);
+
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('focus', handleWindowFocus);

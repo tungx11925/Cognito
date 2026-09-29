@@ -11,6 +11,9 @@ import * as FocusController from '../controllers/focus.controller';
 
 const router = Router();
 
+// Route ngắt quãng hỗ trợ cả token từ header lẫn token từ query string/body cho sendBeacon
+router.post('/:id/interrupt', FocusController.interruptSession);
+
 router.use(authenticate);
 
 router.post('/start', validate(startFocusSessionSchema), FocusController.startSession);

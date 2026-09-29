@@ -48,6 +48,18 @@ export class StudyService {
   }
 
   async createStudySession(userId: number, documentId: number, durationSeconds: number) {
+    // 1. Kiểm tra xem người dùng có đang có phiên Focus nào đang chạy cho tài liệu này không
+    // Nếu có, thời lượng được quản lý bởi Focus Session, không tạo phiên read_doc độc lập trùng lặp
+    const activeFocus = await db.query(
+      `SELECT id FROM study_sessions 
+       WHERE user_id = $1 AND document_id = $2 AND status = 'IN_PROGRESS' 
+       ORDER BY started_at DESC LIMIT 1`,
+      [userId, documentId]
+    );
+    if (activeFocus.rows.length > 0) {
+      return activeFocus.rows[0];
+    }
+
     const result = await db.query(
       'INSERT INTO study_sessions (user_id, document_id, duration_seconds) VALUES ($1, $2, $3) RETURNING *',
       [userId, documentId, durationSeconds]

@@ -114,6 +114,20 @@ export const focusService = {
     return data;
   },
 
+  async interruptSession(
+    id: number,
+    actualDurationSeconds?: number
+  ): Promise<{ session: FocusSession; summary: FocusSummary }> {
+    const res = await fetch(`${API_BASE_URL}/focus/${id}/interrupt`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ actual_duration_seconds: actualDurationSeconds }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi khi ngắt phiên tập trung');
+    return data;
+  },
+
   async getSessionSummary(id: number): Promise<{
     session: FocusSession;
     events: any[];

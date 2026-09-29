@@ -1,5 +1,6 @@
 import { db } from '../db';
 import { getVietnamDateString } from '../utils/date.util';
+import { AppError } from '../utils/AppError';
 
 export interface LogActivityParams {
   activityType: 'read_doc' | 'take_quiz' | 'study_flashcards' | 'focus_session' | 'create_note' | 'question_practice' | 'community_study' | string;
@@ -28,6 +29,19 @@ export class LearningActivityService {
       idempotencyKey = null,
       createdAt,
     } = params;
+
+    // Chặn khai khống thời gian (> 4 giờ cho 1 hoạt động đơn lẻ)
+    if (durationSeconds < 0 || durationSeconds > 14400) {
+      throw new AppError('Thời lượng hoạt động không hợp lệ hoặc vượt quá giới hạn tối đa 4 giờ (14400 giây)', 400);
+    }
+
+    // Chặn khai khống phiên tập trung hoặc bài thi từ client trực tiếp
+    if (activityType === 'focus_session' && !idempotencyKey?.startsWith('focus_session:')) {
+      throw new AppError('Hoạt động phiên tập trung (focus_session) chỉ được ghi nhận thông qua Focus Engine (/api/focus)', 403);
+    }
+    if (activityType === 'take_quiz' && !idempotencyKey?.startsWith('quiz_attempt:')) {
+      throw new AppError('Hoạt động làm bài thi (take_quiz) chỉ được ghi nhận thông qua nộp bài kiểm tra (/api/quizzes/submit)', 403);
+    }
 
     const insertRes = await db.query(
       `INSERT INTO learning_activities (

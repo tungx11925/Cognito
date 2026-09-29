@@ -1577,24 +1577,78 @@ Status: DONE
 ---
 
 ### 5. Kết quả Kiểm thử & Đảm bảo Chất lượng
+
+#### A. Xác nhận & Bằng chứng giải quyết 3 mục tiền điều kiện (Prerequisite Review Items)
+1. **Mục 1: Mindmap không ghi đè bản vẽ tay thủ công & loại bỏ unique constraint toàn cục**:
+   - **Hiện trạng xử lý**: CSDL sử dụng migration `1790600000000_mindmap_source_and_partial_unique.js`, phân tách rõ ràng cột `source` ('ai' | 'manual'). Thay thế unique constraint toàn cục bằng Partial Unique Index `ON mindmaps(document_id, user_id) WHERE source = 'ai'`. Nhờ đó, người dùng có thể tạo không giới hạn các bản đồ tư duy vẽ tay/thủ công cho cùng một tài liệu, và AI Mindmap Cache khi sinh/cập nhật chỉ upsert vào bản ghi `source = 'ai'`, tuyệt đối không ghi đè bất kỳ bản vẽ tay nào của người dùng.
+   - **Bằng chứng kiểm thử**: Đã được kiểm chứng nghiêm ngặt trong `scripts/test-phase9.ts` (Suite 3: 3.7 & 3.8). Cả 2 bản vẽ tay thủ công vẫn giữ nguyên toàn bộ nội dung sau khi AI Cache được lưu và cập nhật lần 2.
+
+2. **Mục 2: Chấm điểm câu tự luận & Loại bỏ khỏi /mistakes**:
+   - **Hiện trạng xử lý**: 
+     - Trong `backend/src/services/quiz.service.ts`: Endpoint `GET /api/quizzes/attempts/:id/mistakes` và chế độ làm lại câu sai `isRetryMistakes = true` đã được lọc thêm điều kiện `AND q.type != 'ESSAY'`. Nhờ đó, các câu tự luận (chưa thể tự động chấm đúng/sai khách quan) không bị coi là câu sai và không xuất hiện trong danh sách ôn tập câu sai.
+     - Khi nộp bài thi (`submitQuiz`), mẫu số tính điểm `total_score` trong bảng `quiz_attempts` và công thức phần trăm `percentage` được chuẩn hóa thành `finalGradableTotalScore` (chỉ tính tổng điểm các câu hỏi khách quan có đáp án chấm được). Người học làm đúng toàn bộ câu trắc nghiệm sẽ nhận đúng 100% điểm khách quan, không bị câu tự luận làm sai lệch mẫu số.
+   - **Bằng chứng kiểm thử**: Đã được kiểm chứng trong `scripts/test-phase8.ts` (Suite 5, Suite 9, Suite 10): 
+     - Suite 5: Học viên làm đúng 3 câu khách quan (7.5đ), câu tự luận gõ văn bản vô nghĩa được đánh dấu `is_correct = null`, `score_awarded = 0`. Điểm đạt 7.5 / 7.5 (100% accuracy), không bị kéo tụt tỷ lệ phần trăm.
+     - Suite 9: `GET /attempts/:id/mistakes` trả về `totalMistakes = 0` (câu tự luận không bị lọt vào mistakes).
+     - Suite 10: Chế độ làm lại câu sai chỉ khởi tạo duy nhất câu trắc nghiệm bị sai, hoàn toàn không chứa câu tự luận.
+
+3. **Mục 3: Chặn client tự khai khống `duration_seconds` và hoạt động qua `POST /learning-activities`**:
+   - **Hiện trạng xử lý**:
+     - Schema Zod `backend/src/schemas/progress.schema.ts` và Service `backend/src/services/learning-activity.service.ts` thiết lập chặn cứng `duration_seconds`: giới hạn từ `0` đến `14400` giây (tối đa 4 giờ cho một hoạt động). Mọi yêu cầu vượt quá ngưỡng này bị từ chối ngay lập tức với mã `HTTP 400 Bad Request`.
+     - Phân quyền nguồn gốc hoạt động: Chặn client gửi trực tiếp `activity_type: 'focus_session'` hoặc `activity_type: 'take_quiz'` thông qua endpoint `POST /learning-activities` nếu không có idempotency token hợp lệ từ server (`HTTP 403 Forbidden`). Các hoạt động này bắt buộc phải sinh tự động từ Focus Engine (`/api/focus`) và Submit Quiz (`/api/quizzes/submit`).
+   - **Bằng chứng kiểm thử**: Đã được kiểm chứng trong `scripts/test-phase10.ts` (Suite 2): Client gửi `duration_seconds = 999999` bị từ chối với HTTP 400; gửi `focus_session` trực tiếp bị từ chối với HTTP 403.
+
+---
+
+#### B. Xác nhận & Bằng chứng 2 mục trọng yếu Phase 11 (Critical 🔴 Requirements)
+1. **Mục 🔴 1: Bắt sự kiện `pagehide` / `beforeunload` dùng `sendBeacon` đánh dấu INTERRUPTED tức thời**:
+   - **Hiện trạng xử lý**:
+     - Phía Frontend (`frontend/src/app/focus/page.tsx`): Đã đăng ký cả 2 sự kiện `pagehide` và `beforeunload`. Khi người dùng đóng tab, đóng cửa sổ trình duyệt hoặc chuyển trang đột ngột, hàm `handleUnload` tự động kích hoạt `navigator.sendBeacon` gửi dữ liệu ngắt quãng `{ actual_duration_seconds }` đến endpoint `POST /api/focus/:id/interrupt?token=...`. Sử dụng URL query param token vì `sendBeacon` không hỗ trợ tùy biến HTTP Header.
+     - Phía Backend (`backend/src/controllers/focus.controller.ts` & `backend/src/services/focus.service.ts`): Endpoint `POST /api/focus/:id/interrupt` hỗ trợ xác thực JWT token từ cả Header lẫn Query String. Khi nhận tín hiệu, server lập tức:
+       - Cập nhật trạng thái phiên thành `INTERRUPTED` và ghi nhận thời lượng thực tế đã học.
+       - Ghi nhận sự kiện xao nhãng `PAGE_HIDDEN` vào bảng `focus_distraction_events`.
+       - Ngay lập tức giải phóng phiên: `GET /api/focus/active` trả về `null`, không để phiên bị treo `IN_PROGRESS` chờ dọn dẹp mồ côi.
+   - **Bằng chứng kiểm thử**: Đã kiểm thử thành công trong `scripts/test-phase11.ts` (**Suite 7**):
+     - `Endpoint /:id/interrupt (sendBeacon) phản hồi HTTP 200 OK`
+     - `Phiên được đánh dấu INTERRUPTED ngay lập tức khi đóng tab`
+     - `actualFocusSeconds ghi nhận đúng 420s lúc đóng tab`
+     - `Sau khi đóng tab, activeSession = null ngay lập tức (không bị treo)`
+     - `Sự kiện xao nhãng PAGE_HIDDEN được ghi nhận thành công từ sendBeacon`
+
+2. **Mục 🔴 2: Triệt tiêu nguy cơ tính trùng thời gian giữa `read_doc` (Phase 10) và `focus_session` (Phase 11)**:
+   - **Hiện trạng xử lý**:
+     - Trong `backend/src/services/study.service.ts`: Khi `createStudySession` được gọi cho một tài liệu, hệ thống kiểm tra nếu đang có phiên Focus `IN_PROGRESS` cho tài liệu đó thì trả về phiên Focus hiện tại thay vì tạo phiên đọc tài liệu song song.
+     - Trong `backend/src/services/focus.service.ts`: Khi kết thúc phiên Focus (`finishSession`), hệ thống kích hoạt cơ chế khử trùng lặp (Anti-Double Counting Mechanism): Tự động dọn dẹp các bản ghi `read_doc` cho cùng `document_id` phát sinh trong khoảng thời gian phiên Focus đang hoạt động (`created_at >= session.started_at`).
+     - Đảm bảo tính toán thời gian trong `/progress/summary` và `/progress/streak` chỉ phản ánh thời gian học tập thực tế duy nhất, không bị nhân đôi.
+   - **Bằng chứng kiểm thử**: Đã kiểm thử thành công trong `scripts/test-phase11.ts` (**Suite 8**):
+     - Kịch bản: Người dùng mở tài liệu đọc 10 phút (`read_doc`), sau đó bấm "Tập trung" 25 phút (`focus_session`) cho tài liệu đó $\rightarrow$ Sau khi hoàn thành, kiểm tra tổng phút trong `/progress/summary`.
+     - Kết quả test: `addedMinutes === 25` $\rightarrow$ `Chống tính trùng thành công: thời gian tăng thêm là đúng 25 phút (thực tế: 25m, không bị cộng dồn thành 35m)`.
+
+---
+
+#### C. Tổng hợp Kiểm thử Tích hợp & Hồi quy Toàn diện
 1. **Kiểm thử chuyên sâu Phase 11 (`scripts/test-phase11.ts`)**:
-   - Đã thực thi và vượt qua **6/6 Suites (100%)**:
+   - Đã thực thi và vượt qua **8/8 Suites (100%)**:
      - *Suite 1 (Standalone Focus Session Lifecycle)*: Start $\rightarrow$ activeSession $\rightarrow$ ping $\rightarrow$ finish $\rightarrow$ summary $\rightarrow$ activeSession null.
      - *Suite 2 (Entry Points Integration)*: Bắt đầu Focus từ Document và Quiz gắn kết chính xác `document_id` và `quiz_id`.
      - *Suite 3 (Distraction Detection & Focus Score Penalty)*: Ghi nhận sự kiện `TAB_SWITCH`, `PAGE_BLUR`, `PAGE_HIDDEN` $\rightarrow$ `distractionCount` tăng chính xác = 3 $\rightarrow$ Focus Score bị trừ tương ứng từ 100 xuống 85 điểm.
      - *Suite 4 (Interrupted & Cancelled States)*: Phiên CANCELLED có điểm = 0. Phiên mồ côi cũ tự động đánh dấu thành INTERRUPTED khi mở phiên mới.
      - *Suite 5 (Auto-Logging to learning_activities & Streak Sync)*: Tự động ghi nhận đúng 1 bản ghi `learning_activities` (`activity_type: 'focus_session'`) và cập nhật `studiedToday = true`, tăng chuỗi Streak.
      - *Suite 6 (IDOR Protection & Authorization)*: Chặn người dùng khác can thiệp, kết thúc, xem summary hay gắn tài liệu riêng tư của người khác với mã HTTP 403/404.
+     - *Suite 7 (Pagehide / Beforeunload SendBeacon Interrupt)*: Đánh dấu INTERRUPTED tức thì khi đóng tab qua sendBeacon, activeSession giải phóng ngay lập tức.
+     - *Suite 8 (Non-overlapping Time Guarantee)*: Khử trùng lặp giữa read_doc và focus_session, thời gian học tăng chuẩn xác 25 phút.
+
 2. **Kiểm thử Hồi quy Toàn diện (`npm run test:fast`)**:
    - Đã thực thi đồng thời toàn bộ 7 modules từ Phase 3 đến Phase 11:
-     - **Phase 3**: PASS (Auth & User System) — 2.59s
-     - **Phase 4**: PASS (Document Processing Pipeline & Chunks) — 3.71s
-     - **Phase 7**: PASS (Exam & Question Bank Management) — 2.49s
-     - **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 2.29s
-     - **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 2.83s
-     - **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.61s
-     - **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 2.06s
+     - **Phase 3**: PASS (Auth & User System) — 1.86s
+     - **Phase 4**: PASS (Document Processing Pipeline & Chunks) — 3.18s
+     - **Phase 7**: PASS (Exam & Question Bank Management) — 2.73s
+     - **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 2.00s
+     - **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 3.27s
+     - **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.03s
+     - **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 1.85s
      - $\rightarrow$ **7/7 PHASES PASSED (100%), ZERO REGRESSION**.
+
 3. **3 Gate Checks Nghiêm ngặt (Mục 0.1.3)**:
    - **Gate Check 1 (Backend TypeScript Build)**: `npm run build` (`tsc`) $\rightarrow$ **PASSED (0 errors)**.
    - **Gate Check 2 (Frontend TypeScript Typecheck)**: `npx tsc --noEmit` $\rightarrow$ **PASSED (0 errors)**.
@@ -1603,7 +1657,8 @@ Status: DONE
 ---
 
 ### Tuân thủ Rule 0.1.1
-- Toàn bộ tính năng thuộc Phase 11 đã được triển khai, kiểm thử, hồi quy và build production hoàn tất.
+- Toàn bộ 3 mục tiền điều kiện đã được xác nhận, bổ sung và kiểm chứng bằng test tự động.
+- Toàn bộ 2 mục trọng yếu 🔴 của Phase 11 (`sendBeacon` unload interrupt và chống tính trùng thời gian) đã được triển khai và kiểm thử thực tế.
 - **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 12**.
 - Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, phản hồi hoặc nghiệm thu chính thức.
 

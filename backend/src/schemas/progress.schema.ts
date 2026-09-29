@@ -5,10 +5,16 @@ export const logActivitySchema = z.object({
     activity_type: z.string({ message: 'activity_type là bắt buộc' }).min(1),
     entity_type: z.string().optional(),
     entity_id: z.number().int().optional(),
-    duration_seconds: z.number().nonnegative().optional().default(0),
-    subject: z.string().optional(),
+    duration_seconds: z
+      .number({ message: 'Thời lượng (duration_seconds) phải là số' })
+      .int('Thời lượng phải là số nguyên')
+      .nonnegative('Thời lượng không được âm')
+      .max(14400, 'Thời lượng hoạt động không được vượt quá 4 giờ (14400 giây)')
+      .optional()
+      .default(0),
+    subject: z.string().max(100).optional(),
     details: z.record(z.string(), z.any()).optional().default({}),
-    idempotency_key: z.string().optional(),
+    idempotency_key: z.string().max(255).optional(),
   }),
 });
 
