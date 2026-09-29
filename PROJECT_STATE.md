@@ -1469,219 +1469,363 @@ Status: COMPLETED (WAITING FOR USER ACCEPTANCE)
 
 ---
 
-## PHASE 11 — FOCUS MODE & DISTRACTION DETECTION ENGINE — 2026-09-29
+    ## PHASE 11 — FOCUS MODE & DISTRACTION DETECTION ENGINE — 2026-09-29
+    Status: DONE
+
+    ### Gate Baseline Checks (Mục 0.1.3):
+    - **Gate Check 1 (Backend TypeScript Build)**: `npm run build` (`tsc`) $\rightarrow$ **PASSED (0 errors)**.
+    - **Gate Check 2 (Frontend TypeScript Typecheck)**: `npx tsc --noEmit` $\rightarrow$ **PASSED (0 errors)**.
+    - **Gate Check 3 (Frontend Production Build)**: `npm run build` (`next build`) $\rightarrow$ **PASSED (0 errors)**. Toàn bộ 23/23 static pages biên dịch thành công, bao gồm route mới `/focus`.
+
+    ---
+
+    ### 1. Kiến trúc Cốt lõi Chế độ Tập trung (Focus Architecture)
+    - **Bản chất chế độ học**: Focus Mode không phải là một module cô lập mà là một chế độ học (Mode) xuyên suốt, liên kết chặt chẽ với Thư viện tài liệu (`/viewer/[id]`), Đề thi trắc nghiệm (`/quiz/[testSetId]`) và Bảng tiến độ học tập (`/progress`).
+    - **Đa cổng truy cập (Multi-Entry Points)**:
+      1. `/focus`: Trang chế độ tập trung chuyên biệt (hỗ trợ chọn mục tiêu thời gian, tùy chỉnh phút học, chọn tài liệu/đề thi liên kết).
+      2. Từ Trình đọc tài liệu (`/viewer/[id]`): Nút "Tập trung" trên thanh công cụ điều hướng trực tiếp sang `/focus?documentId=${docId}`.
+      3. Từ Phòng thi trắc nghiệm (`/quiz/[testSetId]`): Nút "Tập trung" trên thanh trạng thái điều hướng trực tiếp sang `/focus?quizId=${testSetId}`.
+      4. Từ Không gian tự học (`/study-sessions`): Thẻ công cụ "Chế độ tập trung (Focus Mode)".
+      5. Từ Menu điều hướng (`Navbar.tsx`): Menu Desktop và Menu Profile.
+    - **Phát hiện sao nhãng thuần sự kiện trình duyệt (Browser-Only Signals)**:
+      - Chỉ bắt các sự kiện chuẩn Web APIs: `visibilitychange` (`PAGE_HIDDEN`), `window.blur` (`PAGE_BLUR`), `window.focus` (`RETURNED`), `idle` không tương tác chuột/phím quá 60s (`IDLE`).
+      - **Tuyệt đối tuân thủ cam kết quyền riêng tư**: Không Camera, không Microphone, không phân tích cảm xúc, không đánh giá tâm lý hay tình trạng sức khỏe.
+    - **Không bao giờ là ngõ cụt (Never a Dead End)**:
+      - Khi hoàn thành hoặc dừng phiên: Hiển thị bảng tổng kết rõ ràng (thời gian thực tế, thời gian mục tiêu, số lần xao nhãng, điểm Focus Score, chuỗi ngày học).
+      - Cung cấp ngay 2 hướng hành động tiếp theo:
+        1. **Nghỉ giải lao Pomodoro (Break Timer)**: Đếm ngược 5 phút nghỉ ngơi kèm bài tập thở thư giãn 4-4-4.
+        2. **Tiếp tục học tập (Continue Learning)**: Nút bấm trực tiếp quay lại đọc tài liệu (`/viewer/${documentId}`), quay lại làm đề thi (`/quiz/${quizId}`), mở thư viện (`/library`), luyện đề (`/ai-test`), hoặc xem bảng tiến độ (`/progress`).
+
+    ---
+
+    ### 2. CSDL & Dữ liệu Cấu trúc (Database Schema)
+    - Migration: `backend/migrations/1790800000000_phase11_focus_mode.js`.
+    - Bảng `study_sessions`:
+      - Cho phép `document_id DROP NOT NULL` để hỗ trợ phiên tập trung tự do (không bắt buộc gắn tài liệu).
+      - Bổ sung các trường:
+        * `quiz_id (int, FK -> test_sets.id ON DELETE SET NULL)`: Liên kết bài kiểm tra.
+        * `learning_goal_id (int, FK -> learning_goals.id ON DELETE SET NULL)`: Liên kết mục tiêu học tập.
+        * `target_duration_seconds (int, DEFAULT 1500)`: Thời gian mục tiêu (15m, 25m, 45m, 60m,...).
+        * `actual_duration_seconds (int, DEFAULT 0)`: Thời gian tập trung thực tế.
+        * `status ('IN_PROGRESS' | 'COMPLETED' | 'INTERRUPTED' | 'CANCELLED')`: Trạng thái phiên.
+        * `ended_at (TIMESTAMPTZ)`: Thời điểm kết thúc phiên.
+        * `focus_score (int, DEFAULT 100)`: Điểm tập trung (0-100).
+    - Bảng mới `focus_distraction_events`:
+      - `id (SERIAL PK)`
+      - `session_id (int, FK -> study_sessions.id ON DELETE CASCADE)`
+      - `event_type ('TAB_SWITCH' | 'PAGE_BLUR' | 'PAGE_HIDDEN' | 'IDLE' | 'RETURNED')`
+      - `occurred_at (TIMESTAMPTZ)`
+      - `duration_seconds (int)`
+      - `details (JSONB)`
+
+    ---
+
+    ### 3. Backend Services & APIs
+    - **Zod Schema (`focus.schema.ts`)**: Kiểm thực chặt chẽ đầu vào cho `startFocusSessionSchema`, `recordDistractionEventSchema`, `finishFocusSessionSchema`, `focusPingSchema`.
+    - **Dịch vụ nghiệp vụ (`focus.service.ts`)**:
+      - `startSession`: Kiểm tra quyền sở hữu IDOR trên document_id / quiz_id. Đánh dấu các phiên mồ côi trước đó thành `INTERRUPTED`. Khởi tạo phiên mới với trạng thái `IN_PROGRESS`.
+      - `getActiveSession`: Lấy phiên đang chạy của người dùng kèm thông tin tài liệu / đề thi đính kèm.
+      - `recordDistraction`: Ghi nhận sự kiện xao nhãng vào `focus_distraction_events` và tự động tăng bộ đếm `distraction_count` của session.
+      - `pingActive`: Heartbeat định kỳ 15 giây cập nhật `actual_duration_seconds`.
+      - `finishSession`: Tính toán điểm Focus Score theo công thức:
+        $$\text{Base Score} = \min\left(100, \text{round}\left(\frac{\text{actualDuration}}{\text{targetDuration}} \times 100\right)\right)$$
+        $$\text{Penalty} = \min(40, \text{distractionCount} \times 5)$$
+        $$\text{Focus Score} = \max(0, \text{Base Score} - \text{Penalty}) \quad (\text{nếu CANCELLED } \rightarrow 0)$$
+        Tự động ghi nhận vào `learning_activities` (`activity_type: 'focus_session'`, `idempotency_key: focus_session:${sessionId}`) và cập nhật StudyStreak trong ngày theo múi giờ UTC+7.
+      - `getSessionSummary`: Trả về báo cáo tổng hợp chi tiết và lịch sử các sự kiện xao nhãng.
+    - **Controllers & Routes (`focus.controller.ts`, `focus.routes.ts`)**:
+      - `POST /api/focus/start`: Bắt đầu phiên.
+      - `GET /api/focus/active`: Lấy phiên đang chạy.
+      - `POST /api/focus/:id/distraction`: Ghi nhận sự kiện chuyển tab/cửa sổ.
+      - `POST /api/focus/:id/ping`: Ping nhịp tim thời gian học.
+      - `POST /api/focus/:id/finish`: Kết thúc phiên tập trung.
+      - `GET /api/focus/:id/summary`: Lấy bảng tổng kết phiên.
+
+    ---
+
+    ### 4. Giao diện Người dùng (Frontend Implementation)
+    - **Trang Chế độ Tập trung Chuyên biệt (`frontend/src/app/focus/page.tsx`)**:
+      - **Trạng thái Thiết lập (SETUP)**:
+        * Lựa chọn mốc thời gian: 15 phút (Khởi động), 25 phút (Pomodoro chuẩn), 45 phút (Chuyên sâu), 60 phút (Bứt phá) hoặc nhập số phút tùy chỉnh.
+        * Bộ chọn nội dung liên kết: Học tự do, Gắn với tài liệu từ Thư viện, Gắn với bộ đề thi trắc nghiệm.
+        * Thông báo minh bạch cam kết bảo mật & quyền riêng tư (không camera, không micro).
+      - **Trạng thái Tập trung Cao độ (ACTIVE)**:
+        * Giao diện đắm chìm (Atmospheric Immersive) tone xanh ngọc thẫm sang trọng (`#0B1B15`).
+        * Đồng hồ đếm ngược vòng tròn SVG hiệu ứng mượt mà.
+        * Huy hiệu đếm số lần rời trang trực tiếp (Live Distraction Counter).
+        * Bật/tắt chế độ toàn màn hình (Fullscreen toggle).
+        * Tạm dừng / Tiếp tục, Hủy phiên với modal xác nhận an toàn.
+        * Thanh điều hướng nhanh tới tài liệu / bài kiểm tra liên kết.
+      - **Trạng thái Tổng kết Phiên (SUMMARY)**:
+        * Thẻ chúc mừng kèm Điểm tập trung (Focus Score) và xếp loại (Xuất sắc, Rất tốt, Khá, Cần cải thiện).
+        * Lưới chỉ số trực quan: Thời gian thực tế vs Mục tiêu, Số lần rời trang, Cộng dồn chuỗi StudyStreak.
+        * Danh sách lịch sử các lần chuyển tab kèm nhãn thời gian thực tế.
+        * **Actionable Next Steps**:
+          - Nút bắt đầu nghỉ giải lao 5 phút (Pomodoro Break).
+          - Nút quay lại tài liệu / bài thi liên kết.
+          - Nút khám phá kho tài liệu, luyện đề thi hoặc xem Bảng tiến độ.
+      - **Trạng thái Giờ nghỉ (BREAK)**:
+        * Đồng hồ đếm ngược 5 phút với thanh tiến trình thư giãn.
+        * Hướng dẫn bài tập thở 4-4-4 nhịp nhàng (Hít vào - Giữ hơi - Thở ra).
+        * Nút kết thúc nghỉ để bắt đầu phiên học mới ngay lập tức.
+    - **Tích hợp các điểm truy cập**:
+      - `frontend/src/app/viewer/[id]/page.tsx`: Nút "Tập trung" trên thanh công cụ xem tài liệu.
+      - `frontend/src/app/quiz/[testSetId]/page.tsx`: Nút "Tập trung" trên thanh làm bài thi.
+      - `frontend/src/app/study-sessions/page.tsx`: Thẻ "Chế độ tập trung (Focus Mode)".
+      - `frontend/src/components/landing/Navbar.tsx`: Menu "Tập trung" trên Desktop và Profile dropdown.
+
+    ---
+
+    ### 5. Kết quả Kiểm thử & Đảm bảo Chất lượng
+
+    #### A. Xác nhận & Bằng chứng giải quyết 3 mục tiền điều kiện (Prerequisite Review Items)
+    1. **Mục 1: Mindmap không ghi đè bản vẽ tay thủ công & loại bỏ unique constraint toàn cục**:
+      - **Hiện trạng xử lý**: CSDL sử dụng migration `1790600000000_mindmap_source_and_partial_unique.js`, phân tách rõ ràng cột `source` ('ai' | 'manual'). Thay thế unique constraint toàn cục bằng Partial Unique Index `ON mindmaps(document_id, user_id) WHERE source = 'ai'`. Nhờ đó, người dùng có thể tạo không giới hạn các bản đồ tư duy vẽ tay/thủ công cho cùng một tài liệu, và AI Mindmap Cache khi sinh/cập nhật chỉ upsert vào bản ghi `source = 'ai'`, tuyệt đối không ghi đè bất kỳ bản vẽ tay nào của người dùng.
+      - **Bằng chứng kiểm thử**: Đã được kiểm chứng nghiêm ngặt trong `scripts/test-phase9.ts` (Suite 3: 3.7 & 3.8). Cả 2 bản vẽ tay thủ công vẫn giữ nguyên toàn bộ nội dung sau khi AI Cache được lưu và cập nhật lần 2.
+
+    2. **Mục 2: Chấm điểm câu tự luận & Loại bỏ khỏi /mistakes**:
+      - **Hiện trạng xử lý**: 
+        - Trong `backend/src/services/quiz.service.ts`: Endpoint `GET /api/quizzes/attempts/:id/mistakes` và chế độ làm lại câu sai `isRetryMistakes = true` đã được lọc thêm điều kiện `AND q.type != 'ESSAY'`. Nhờ đó, các câu tự luận (chưa thể tự động chấm đúng/sai khách quan) không bị coi là câu sai và không xuất hiện trong danh sách ôn tập câu sai.
+        - Khi nộp bài thi (`submitQuiz`), mẫu số tính điểm `total_score` trong bảng `quiz_attempts` và công thức phần trăm `percentage` được chuẩn hóa thành `finalGradableTotalScore` (chỉ tính tổng điểm các câu hỏi khách quan có đáp án chấm được). Người học làm đúng toàn bộ câu trắc nghiệm sẽ nhận đúng 100% điểm khách quan, không bị câu tự luận làm sai lệch mẫu số.
+      - **Bằng chứng kiểm thử**: Đã được kiểm chứng trong `scripts/test-phase8.ts` (Suite 5, Suite 9, Suite 10): 
+        - Suite 5: Học viên làm đúng 3 câu khách quan (7.5đ), câu tự luận gõ văn bản vô nghĩa được đánh dấu `is_correct = null`, `score_awarded = 0`. Điểm đạt 7.5 / 7.5 (100% accuracy), không bị kéo tụt tỷ lệ phần trăm.
+        - Suite 9: `GET /attempts/:id/mistakes` trả về `totalMistakes = 0` (câu tự luận không bị lọt vào mistakes).
+        - Suite 10: Chế độ làm lại câu sai chỉ khởi tạo duy nhất câu trắc nghiệm bị sai, hoàn toàn không chứa câu tự luận.
+
+    3. **Mục 3: Chặn client tự khai khống `duration_seconds` và hoạt động qua `POST /learning-activities`**:
+      - **Hiện trạng xử lý**:
+        - Schema Zod `backend/src/schemas/progress.schema.ts` và Service `backend/src/services/learning-activity.service.ts` thiết lập chặn cứng `duration_seconds`: giới hạn từ `0` đến `14400` giây (tối đa 4 giờ cho một hoạt động). Mọi yêu cầu vượt quá ngưỡng này bị từ chối ngay lập tức với mã `HTTP 400 Bad Request`.
+        - Phân quyền nguồn gốc hoạt động: Chặn client gửi trực tiếp `activity_type: 'focus_session'` hoặc `activity_type: 'take_quiz'` thông qua endpoint `POST /learning-activities` nếu không có idempotency token hợp lệ từ server (`HTTP 403 Forbidden`). Các hoạt động này bắt buộc phải sinh tự động từ Focus Engine (`/api/focus`) và Submit Quiz (`/api/quizzes/submit`).
+      - **Bằng chứng kiểm thử**: Đã được kiểm chứng trong `scripts/test-phase10.ts` (Suite 2): Client gửi `duration_seconds = 999999` bị từ chối với HTTP 400; gửi `focus_session` trực tiếp bị từ chối với HTTP 403.
+
+    ---
+
+    #### B. Xác nhận & Bằng chứng các mục trọng yếu Phase 11 & Khắc phục Lỗ hổng Bảo mật
+    1. **Mục 🔴 1: Bắt sự kiện `pagehide` / `beforeunload` dùng `sendBeacon` đánh dấu INTERRUPTED tức thời & Khắc phục Lỗ hổng Sensitive Data Exposure (Token JWT trong URL)**:
+      - **Lỗ hổng được phát hiện**: Trước đó, `sendBeacon` truyền JWT qua URL query string `POST /api/focus/:id/interrupt?token=...`, vi phạm nghiêm trọng nguyên tắc bảo mật (bị ghi lại trong access log, reverse proxy/CDN log, browser history, referer headers).
+      - **Kiến trúc khắc phục triệt để (Session-Scoped Capability Token)**:
+        - **Database Migration (`1790800000000_phase11_focus_mode.js`)**: Bổ sung cột `interrupt_token VARCHAR(128)` kèm partial index `idx_study_sessions_interrupt_token` vào bảng `study_sessions`.
+        - **Phát mã ngắn hạn dùng 1 lần (`startSession`)**: Khi tạo phiên, server sinh mã ngẫu nhiên 64 ký tự hex (`crypto.randomBytes(32).toString('hex')`) lưu vào database và trả về client trong payload `interrupt_token`. Mã này hoàn toàn tách biệt với JWT của người dùng, chỉ có hiệu lực cho đúng phiên đó.
+        - **Client `sendBeacon` qua POST Body sạch sẽ (`page.tsx`)**: Đổi sang URL hoàn toàn sạch: `POST /api/focus/:id/interrupt` (không chứa bất kỳ query param hay token nào). Gói payload `{ interrupt_token, actual_duration_seconds }` vào `Blob` JSON gửi qua `navigator.sendBeacon`.
+        - **Single-Use & Ngay lập tức vô hiệu hóa (`interruptSession`)**: Khi nhận mã, server đối chiếu `session.interrupt_token === interruptToken` và **ngay lập tức** cập nhật `interrupt_token = NULL` để chống replay attack.
+        - **Loại bỏ token khỏi URL toàn hệ thống**: Xóa bỏ hoàn toàn fallback `req.query?.token` trong `auth.middleware.ts` và controller.
+      - **Xác nhận phòng chống IDOR trên `/interrupt`**:
+        - Endpoint kiểm tra chặt chẽ:
+          * Nếu xác thực qua JWT (`Authorization: Bearer`): Kiểm tra `session.user_id === userId` (chặn người dùng khác can thiệp bằng HTTP 403).
+          * Nếu xác thực qua `interrupt_token`: Chỉ chấp nhận token khớp chính xác với phiên `id` đang active (`session.interrupt_token === interruptToken`).
+          * Nếu dùng token giả mạo, token của phiên khác, hoặc token đã bị thu hồi $\rightarrow$ HTTP 403 Forbidden.
+          * Nếu không có cả JWT lẫn `interrupt_token` $\rightarrow$ HTTP 401 Unauthorized.
+      - **Bằng chứng kiểm thử**: Đã kiểm thử tự động trong `scripts/test-phase11.ts` (**Suite 7**):
+        - `URL sendBeacon hoàn toàn sạch: không chứa query param token (?token=)`
+        - `Chặn IDOR: User 2 dùng token của User 1 bị từ chối với HTTP 403 Forbidden`
+        - `Chặn token giả mạo: interrupt_token không đúng bị từ chối với HTTP 403 Forbidden`
+        - `Chặn request không xác thực: thiếu token bị từ chối với HTTP 401 Unauthorized`
+        - `sendBeacon với interrupt_token qua body JSON thành công (HTTP 200 OK)`
+        - `Single-use: Dùng lại interrupt_token lần 2 bị từ chối ngay lập tức (HTTP 403 Forbidden)`
+        - `activeSession giải phóng ngay lập tức (null), distraction PAGE_HIDDEN ghi nhận chuẩn xác`
+
+    2. **Mục 🔴 2: Triệt tiêu nguy cơ tính trùng thời gian giữa `read_doc` (Phase 10) và `focus_session` (Phase 11)**:
+      - **Hiện trạng xử lý**:
+        - Trong `backend/src/services/study.service.ts`: Khi `createStudySession` được gọi cho một tài liệu, hệ thống kiểm tra nếu đang có phiên Focus `IN_PROGRESS` cho tài liệu đó thì trả về phiên Focus hiện tại thay vì tạo phiên đọc tài liệu song song.
+        - Trong `backend/src/services/focus.service.ts`: Khi kết thúc phiên Focus (`finishSession`), hệ thống kích hoạt cơ chế khử trùng lặp (Anti-Double Counting Mechanism): Tự động dọn dẹp các bản ghi `read_doc` cho cùng `document_id` phát sinh trong khoảng thời gian phiên Focus đang hoạt động (`created_at >= session.started_at` và `entity_id = $2`).
+        - Đảm bảo tính toán thời gian trong `/progress/summary` và `/progress/streak` chỉ phản ánh thời gian học tập thực tế duy nhất, không bị nhân đôi.
+      - **Bằng chứng kiểm thử**: Đã kiểm thử thành công trong `scripts/test-phase11.ts` (**Suite 8**):
+        - Kịch bản: Người dùng mở tài liệu đọc 10 phút (`read_doc`), sau đó bấm "Tập trung" 25 phút (`focus_session`) cho tài liệu đó $\rightarrow$ Sau khi hoàn thành, kiểm tra tổng phút trong `/progress/summary`.
+        - Kết quả test: `addedMinutes === 25` $\rightarrow$ `Chống tính trùng thành công: thời gian tăng thêm là đúng 25 phút (thực tế: 25m, không bị cộng dồn thành 35m)`.
+
+    3. **Mục 🟡 3: Xác nhận phạm vi dọn dẹp `read_doc` không xóa nhầm dữ liệu của tài liệu khác (Cross-Document Preservation Guarantee)**:
+      - **Hiện trạng xử lý**: Câu truy vấn khử trùng lặp trong `finishSession` sử dụng điều kiện nghiêm ngặt:
+        `DELETE FROM learning_activities WHERE user_id = $1 AND entity_id = $2 AND activity_type = 'read_doc' AND created_at >= $3`
+        Trong đó `$2` là `session.document_id`. Điều kiện này chỉ khoanh vùng đúng tài liệu đang Focus, tuyệt đối không ảnh hưởng tới bất kỳ tài liệu nào khác.
+      - **Bằng chứng kiểm thử mới**: Đã bổ sung kịch bản kiểm thử tường minh trong `scripts/test-phase11.ts` (**Suite 9**):
+        - Kịch bản: Người dùng mở đọc Tài liệu C (15 phút `read_doc`), sau đó chuyển sang mở phiên Focus cho Tài liệu B (25 phút `focus_session`).
+        - Kết quả kiểm chứng tự động:
+          * Bản ghi `read_doc` của Tài liệu C vẫn **nguyên vẹn 100%** trong database, không bị xóa.
+          * Tổng thời gian học trong `/progress/summary` cộng dồn chuẩn xác 40 phút (15 phút Tài liệu C + 25 phút Focus Tài liệu B).
+          * $\rightarrow$ Xác nhận tường minh: Thao tác xóa `read_doc` đúng phạm vi, tuyệt đối không xóa nhầm tài liệu khác.
+
+    ---
+
+    #### C. Tổng hợp Kiểm thử Tích hợp & Hồi quy Toàn diện
+    1. **Kiểm thử chuyên sâu Phase 11 (`scripts/test-phase11.ts`)**:
+      - Đã thực thi và vượt qua **9/9 Suites (100%)**:
+        - *Suite 1 (Standalone Focus Session Lifecycle)*: Start $\rightarrow$ activeSession $\rightarrow$ ping $\rightarrow$ finish $\rightarrow$ summary $\rightarrow$ activeSession null.
+        - *Suite 2 (Entry Points Integration)*: Bắt đầu Focus từ Document và Quiz gắn kết chính xác `document_id` và `quiz_id`.
+        - *Suite 3 (Distraction Detection & Focus Score Penalty)*: Ghi nhận sự kiện `TAB_SWITCH`, `PAGE_BLUR`, `PAGE_HIDDEN` $\rightarrow$ `distractionCount` tăng chính xác = 3 $\rightarrow$ Focus Score bị trừ tương ứng từ 100 xuống 85 điểm.
+        - *Suite 4 (Interrupted & Cancelled States)*: Phiên CANCELLED có điểm = 0. Phiên mồ côi cũ tự động đánh dấu thành INTERRUPTED khi mở phiên mới.
+        - *Suite 5 (Auto-Logging to learning_activities & Streak Sync)*: Tự động ghi nhận đúng 1 bản ghi `learning_activities` (`activity_type: 'focus_session'`) và cập nhật `studiedToday = true`, tăng chuỗi Streak.
+        - *Suite 6 (IDOR Protection & Authorization)*: Chặn người dùng khác can thiệp, kết thúc, xem summary hay gắn tài liệu riêng tư của người khác với mã HTTP 403/404.
+        - *Suite 7 (Pagehide / Beforeunload SendBeacon Security & IDOR)*: URL sạch không token; chặn IDOR; chặn token giả; chặn replay; dọn dẹp activeSession tức thì.
+        - *Suite 8 (Non-overlapping Time Guarantee)*: Khử trùng lặp giữa read_doc và focus_session trên cùng tài liệu, thời gian học tăng chuẩn xác 25 phút.
+        - *Suite 9 (Cross-Document Preservation Guarantee)*: Xác nhận `read_doc` của tài liệu khác không bị xóa nhầm, cộng dồn đủ 40 phút.
+
+    2. **Kiểm thử Hồi quy Toàn diện (`npm run test:fast`)**:
+      - Đã thực thi đồng thời toàn bộ 7 modules từ Phase 3 đến Phase 11:
+        - **Phase 3**: PASS (Auth & User System) — 1.86s
+        - **Phase 4**: PASS (Document Processing Pipeline & Chunks) — 3.18s
+        - **Phase 7**: PASS (Exam & Question Bank Management) — 2.73s
+        - **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 2.00s
+        - **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 3.27s
+        - **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.03s
+        - **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 1.85s
+        - $\rightarrow$ **7/7 PHASES PASSED (100%), ZERO REGRESSION**.
+
+    3. **3 Gate Checks Nghiêm ngặt (Mục 0.1.3)**:
+      - **Gate Check 1 (Backend TypeScript Build)**: `npm run build` (`tsc`) $\rightarrow$ **PASSED (0 errors)**.
+      - **Gate Check 2 (Frontend TypeScript Typecheck)**: `npx tsc --noEmit` $\rightarrow$ **PASSED (0 errors)**.
+      - **Gate Check 3 (Frontend Production Build)**: `npm run build` (`next build`) $\rightarrow$ **PASSED (0 errors)**. Toàn bộ 23/23 static pages biên dịch thành công, bao gồm route mới `/focus`.
+
+    ---
+
+    ### Tuân thủ Rule 0.1.1
+    - Toàn bộ 3 mục tiền điều kiện đã được xác nhận, bổ sung và kiểm chứng bằng test tự động.
+    - Toàn bộ 2 mục trọng yếu 🔴 của Phase 11 (`sendBeacon` unload interrupt và chống tính trùng thời gian) đã được triển khai và kiểm thử thực tế.
+    - Đã được người dùng xác nhận nghiệm thu và kích hoạt chuyển bước: "xcs nhan buoc tiep".
+
+---
+
+## PHASE 12 — COMMUNITY ECOSYSTEM & RESOURCE EXCHANGE — 2026-09-29
 Status: DONE
 
 ### Gate Baseline Checks (Mục 0.1.3):
-- **Gate Check 1 (Backend TypeScript Build)**: `npm run build` (`tsc`) $\rightarrow$ **PASSED (0 errors)**.
-- **Gate Check 2 (Frontend TypeScript Typecheck)**: `npx tsc --noEmit` $\rightarrow$ **PASSED (0 errors)**.
-- **Gate Check 3 (Frontend Production Build)**: `npm run build` (`next build`) $\rightarrow$ **PASSED (0 errors)**. Toàn bộ 23/23 static pages biên dịch thành công, bao gồm route mới `/focus`.
+- **Backend TypeScript Build (`npm run build`)**: PASSED (0 errors)
+- **Frontend TypeScript Typecheck (`npx tsc --noEmit`)**: PASSED (0 errors)
+- **Frontend Production Build (`npm run build`)**: PASSED (0 errors, 23/23 routes generated tĩnh/động thành công, `/community` 10.1 kB)
+- **Phase 12 Dedicated Test Suite (`scripts/test-phase12.ts`)**: PASSED 65/65 assertions (8/8 Suites, 100% success rate)
+- **Full Regression Test Suite (`npm run test:fast`)**: PASSED 8/8 Modules (Phase 3, 4, 7, 8, 9, 10, 11, 12 — 100% Zero Regression)
 
 ---
 
-### 1. Kiến trúc Cốt lõi Chế độ Tập trung (Focus Architecture)
-- **Bản chất chế độ học**: Focus Mode không phải là một module cô lập mà là một chế độ học (Mode) xuyên suốt, liên kết chặt chẽ với Thư viện tài liệu (`/viewer/[id]`), Đề thi trắc nghiệm (`/quiz/[testSetId]`) và Bảng tiến độ học tập (`/progress`).
-- **Đa cổng truy cập (Multi-Entry Points)**:
-  1. `/focus`: Trang chế độ tập trung chuyên biệt (hỗ trợ chọn mục tiêu thời gian, tùy chỉnh phút học, chọn tài liệu/đề thi liên kết).
-  2. Từ Trình đọc tài liệu (`/viewer/[id]`): Nút "Tập trung" trên thanh công cụ điều hướng trực tiếp sang `/focus?documentId=${docId}`.
-  3. Từ Phòng thi trắc nghiệm (`/quiz/[testSetId]`): Nút "Tập trung" trên thanh trạng thái điều hướng trực tiếp sang `/focus?quizId=${testSetId}`.
-  4. Từ Không gian tự học (`/study-sessions`): Thẻ công cụ "Chế độ tập trung (Focus Mode)".
-  5. Từ Menu điều hướng (`Navbar.tsx`): Menu Desktop và Menu Profile.
-- **Phát hiện sao nhãng thuần sự kiện trình duyệt (Browser-Only Signals)**:
-  - Chỉ bắt các sự kiện chuẩn Web APIs: `visibilitychange` (`PAGE_HIDDEN`), `window.blur` (`PAGE_BLUR`), `window.focus` (`RETURNED`), `idle` không tương tác chuột/phím quá 60s (`IDLE`).
-  - **Tuyệt đối tuân thủ cam kết quyền riêng tư**: Không Camera, không Microphone, không phân tích cảm xúc, không đánh giá tâm lý hay tình trạng sức khỏe.
-- **Không bao giờ là ngõ cụt (Never a Dead End)**:
-  - Khi hoàn thành hoặc dừng phiên: Hiển thị bảng tổng kết rõ ràng (thời gian thực tế, thời gian mục tiêu, số lần xao nhãng, điểm Focus Score, chuỗi ngày học).
-  - Cung cấp ngay 2 hướng hành động tiếp theo:
-    1. **Nghỉ giải lao Pomodoro (Break Timer)**: Đếm ngược 5 phút nghỉ ngơi kèm bài tập thở thư giãn 4-4-4.
-    2. **Tiếp tục học tập (Continue Learning)**: Nút bấm trực tiếp quay lại đọc tài liệu (`/viewer/${documentId}`), quay lại làm đề thi (`/quiz/${quizId}`), mở thư viện (`/library`), luyện đề (`/ai-test`), hoặc xem bảng tiến độ (`/progress`).
+### 1. Phạm vi & Kiến trúc Kỹ thuật Phase 12
+
+#### A. Trừu tượng hóa Tài nguyên Độc lập (Community Resource Abstraction)
+- `CommunityResource` đóng vai trò là một lớp độc lập trung gian (`community_resources`), liên kết tới 4 loại tài nguyên học tập:
+  1. `document` (`documents`): Đọc và phân tích tài liệu văn bản / PDF.
+  2. `test_set` (`test_sets`): Bộ đề thi trắc nghiệm AI hoặc giáo viên nhập.
+  3. `mindmap` (`mindmaps`): Sơ đồ tư duy trực quan hóa kiến thức.
+  4. `flashcard_deck` (`flashcard_decks`): Bộ thẻ ghi nhớ lặp lại ngắt quãng (SRS).
+- Lưu trữ đầy đủ metadata: `title`, `description`, `category`, `tags`, `visibility` (PUBLIC / PRIVATE), chỉ số tương tác (`views`, `likes`, `forks` / saves, `comment_count`).
+- Cơ chế Reshare: Hỗ trợ chia sẻ lại bài đăng với `is_reshare`, `original_resource_id`, `original_author_id`, `reshare_note` bảo toàn quyền tác giả gốc.
+
+#### B. Nguyên tắc "PUBLIC ≠ PUBLISHED" (Rule Enforced)
+- Một tài nguyên cá nhân có `visibility = 'public'` KHÔNG đồng nghĩa với việc tự động xuất hiện trên Bảng tin Cộng đồng.
+- Chỉ khi người dùng thực hiện hành động xuất bản rõ ràng (`POST /api/community/publish`), bản ghi trừu tượng trong `community_resources` mới được khởi tạo và cờ `is_community_published` trên tài nguyên gốc mới được đánh dấu `true`.
+
+#### C. Bảng tin Cộng đồng (Community Feed Engine)
+- Hỗ trợ các tab và bộ lọc:
+  * **Tab `recent` (Mới nhất)**: Sắp xếp theo `created_at DESC`.
+  * **Tab `popular` (Phổ biến)**: Sắp xếp theo thuật toán trọng số tương tác:
+    $$\text{Engagement Score} = (\text{likes} \times 3) + (\text{saves} \times 5) + \text{views}$$
+  * **Tab `saved` (Đã lưu)**: Trả về danh sách tài nguyên người dùng đã lưu tham chiếu.
+  * **Bộ lọc `category`**: Lọc theo lĩnh vực (Công nghệ thông tin, Ngoại ngữ, Kinh tế, Y dược, Toán học...).
+  * **Bộ lọc `resourceType`**: Lọc theo dạng học liệu (`document`, `test_set`, `mindmap`, `flashcard_deck`).
+  * **Tìm kiếm toàn văn (`search`)**: Tìm kiếm theo tiêu đề, danh mục, từ khóa và mô tả.
+- **Tuân thủ quy định master prompt về Following**:
+  * "Following chỉ làm nếu hệ thống đã có Follow implementation. Không tạo Follow chỉ để làm menu đẹp."
+  * Kiểm toán toàn bộ hệ thống xác nhận Cognito hiện tại chưa xây dựng quan hệ Follow người dùng $\rightarrow$ Tuyệt đối KHÔNG tạo tab/menu giả Following để làm cảnh.
+
+#### D. Luồng Học tập Trực tiếp (Study Flow & Direct Target Routing)
+- Từ thẻ tài nguyên trên cộng đồng, nút "Học ngay" điều hướng chính xác tới không gian học tương ứng:
+  * `document` $\rightarrow$ `/viewer/[id]`
+  * `test_set` $\rightarrow$ `/quiz/[id]`
+  * `mindmap` $\rightarrow$ `/mindmap?id=[id]`
+  * `flashcard_deck` $\rightarrow$ `/flashcards/[id]`
+- Mỗi lượt mở xem chi tiết qua `GET /api/community/resources/:id` tự động gia tăng chỉ số `views` (`UPDATE community_resources SET view_count = view_count + 1`).
+
+#### E. Lưu Tham chiếu & Triệt tiêu Trùng lặp Dữ liệu (Zero Data Duplication)
+- Khi bấm "Lưu" (`POST /api/community/resources/:id/save`), hệ thống chỉ ghi nhận quan hệ tham chiếu `(user_id, resource_id)` vào bảng `community_saves`.
+- **Tuyệt đối không nhân bản (zero duplication)**: Không tạo bản sao tài liệu, quiz hay mindmap vào thư viện cá nhân, tiết kiệm tài nguyên lưu trữ và đảm bảo tính nhất quán dữ liệu.
+- Cho phép toggle bỏ lưu (bỏ bookmark) mượt mà.
+
+#### F. Xử lý Duyên dáng khi Tài nguyên Gốc Bị Xóa (UNAVAILABLE Policy)
+- Nếu tác giả xóa tài liệu, đề thi, mindmap hay bộ flashcard gốc sau khi đã publish:
+  * Hàm `checkUnderlyingAvailability` kiểm tra sự tồn tại của bản ghi gốc.
+  * Nếu không tìm thấy, hệ thống gán cờ `is_available = false` và `availability_status = 'UNAVAILABLE'`.
+  * Endpoint `GET /api/community/feed` và `GET /api/community/resources/:id` **tuyệt đối không bị văng lỗi 500**.
+  * Phía giao diện hiển thị nhãn cảnh báo "Tài nguyên gốc không còn khả dụng", vô hiệu hóa nút "Học ngay" và ngăn chặn người dùng điều hướng vào trang 404.
+
+#### G. Chia sẻ Lại với Thuộc tính Tác giả Gốc (Reshare with Strict Attribution)
+- Khi chia sẻ lại (`POST /api/community/resources/:id/reshare`):
+  * `author_name`: Tên người dùng thực hiện chia sẻ lại.
+  * `original_author_name`: Tên tác giả nguyên thủy của bài viết.
+  * `original_resource_id`: ID của bài đăng gốc.
+  * `reshare_note`: Trích dẫn ghi chú/cảm nghĩ của người chia sẻ lại.
+  * Ngăn chặn người dùng chia sẻ lại trùng lặp cùng 1 tài nguyên nhiều lần.
+
+#### H. Hệ thống Bình luận Phân cấp (Threaded Comments)
+- Bảng `community_comments` hỗ trợ `parent_id` cho phép trả lời lồng nhau (nested replies).
+- Cập nhật tự động biến đếm `comment_count` trên bảng `community_resources`.
+- Phân quyền xóa bình luận: Chỉ tác giả bình luận hoặc Admin mới có quyền xóa.
+
+#### I. Bảo mật & Kiểm soát Quyền truy cập (IDOR & Authorization)
+- Chỉ chủ sở hữu tài nguyên cá nhân mới có quyền đăng (`publish`) tài nguyên đó lên cộng đồng (chặn IDOR giả mạo tài sản của người khác bằng HTTP 403).
+- Chỉ người đăng bài hoặc Admin mới có quyền gỡ (`unpublish`) bài viết khỏi cộng đồng.
+- Khi gỡ bài viết, trường `is_community_published` trên tài nguyên gốc được tự động cập nhật về `false`.
+- Các hành động Tương tác (Like, Save, Reshare, Comment, Publish) bắt buộc người dùng đã xác thực (HTTP 401 nếu chưa đăng nhập). Khách vãng lai vẫn được phép duyệt Feed công khai và xem chi tiết.
+
+#### J. Giao diện Người dùng Cộng đồng Hiện đại (`frontend/src/app/community/page.tsx`)
+- Tái cấu trúc hoàn toàn trang `/community`:
+  * Thanh tiêu đề sinh thái (Cognito Ecosystem Header) hiển thị tổng số tài nguyên chia sẻ.
+  * Tab chuyển đổi trực quan: Mới nhất, Phổ biến nhất, Đã lưu (Tham chiếu).
+  * Thanh công cụ lọc: Tìm kiếm tức thời có debounce, bộ lọc loại tài nguyên (Tài liệu, Đề trắc nghiệm, Sơ đồ tư duy, Thẻ ghi nhớ) kèm biểu tượng và màu sắc nhận diện đặc trưng.
+  * Bộ lọc chủ đề dạng chip cuộn mượt mà (Công nghệ thông tin, Ngoại ngữ, Kinh tế, Y dược...).
+  * Thẻ tài nguyên tinh xảo: Reshare banner trích dẫn tác giả gốc, thẻ phân loại, trích đoạn mô tả, danh sách tags, avatar tác giả, ngày đăng.
+  * Hàng nút tương tác: Like (trái tim đỏ rực khi active), Save (bookmark xanh khi active), Bình luận (mở drawer), Lượt xem, Reshare.
+  * Nút "Học ngay" với chỉ dẫn rõ ràng trạng thái khả dụng. Nút "Gỡ bài" cho chính chủ bài đăng.
+  * **Modal Đăng tài liệu**: Tự động tải học liệu cá nhân của người dùng qua API `/community/my-resources` theo 4 loại, điền sẵn tiêu đề và cho phép nhập danh mục, mô tả, tags.
+  * **Modal Reshare**: Hiển thị bản xem trước bài viết gốc, tác giả gốc và ô nhập cảm nghĩ.
+  * **Drawer Bình luận**: Hiển thị luồng bình luận dạng phân cấp lồng nhau, ô trả lời theo tên người dùng (`@username`), nút xóa cho chủ bình luận/admin.
 
 ---
 
-### 2. CSDL & Dữ liệu Cấu trúc (Database Schema)
-- Migration: `backend/migrations/1790800000000_phase11_focus_mode.js`.
-- Bảng `study_sessions`:
-  - Cho phép `document_id DROP NOT NULL` để hỗ trợ phiên tập trung tự do (không bắt buộc gắn tài liệu).
-  - Bổ sung các trường:
-    * `quiz_id (int, FK -> test_sets.id ON DELETE SET NULL)`: Liên kết bài kiểm tra.
-    * `learning_goal_id (int, FK -> learning_goals.id ON DELETE SET NULL)`: Liên kết mục tiêu học tập.
-    * `target_duration_seconds (int, DEFAULT 1500)`: Thời gian mục tiêu (15m, 25m, 45m, 60m,...).
-    * `actual_duration_seconds (int, DEFAULT 0)`: Thời gian tập trung thực tế.
-    * `status ('IN_PROGRESS' | 'COMPLETED' | 'INTERRUPTED' | 'CANCELLED')`: Trạng thái phiên.
-    * `ended_at (TIMESTAMPTZ)`: Thời điểm kết thúc phiên.
-    * `focus_score (int, DEFAULT 100)`: Điểm tập trung (0-100).
-- Bảng mới `focus_distraction_events`:
-  - `id (SERIAL PK)`
-  - `session_id (int, FK -> study_sessions.id ON DELETE CASCADE)`
-  - `event_type ('TAB_SWITCH' | 'PAGE_BLUR' | 'PAGE_HIDDEN' | 'IDLE' | 'RETURNED')`
-  - `occurred_at (TIMESTAMPTZ)`
-  - `duration_seconds (int)`
-  - `details (JSONB)`
+### 2. Chi tiết Database Migration Phase 12
+- File migration: `backend/migrations/1790900000000_phase12_community.js` (áp dụng thành công qua `npm run migrate:up`).
+- Bổ sung các cột vào bảng `community_resources`:
+  * `category VARCHAR(100)`
+  * `is_reshare BOOLEAN NOT NULL DEFAULT false`
+  * `original_resource_id INTEGER REFERENCES community_resources(id) ON DELETE SET NULL`
+  * `original_author_id INTEGER REFERENCES users(id) ON DELETE SET NULL`
+  * `reshare_note TEXT`
+- Thiết lập chỉ mục hiệu năng (Indices):
+  * `idx_community_resources_category` ON `community_resources (category)`
+  * `idx_community_resources_feed_recent` ON `community_resources (is_public, created_at DESC)`
+  * `idx_community_resources_feed_popular` ON `community_resources (is_public, like_count DESC, save_count DESC, view_count DESC)`
+  * `idx_community_resources_original` ON `community_resources (original_resource_id)`
+  * `idx_community_saves_user` ON `community_saves (user_id, resource_id)`
 
 ---
 
-### 3. Backend Services & APIs
-- **Zod Schema (`focus.schema.ts`)**: Kiểm thực chặt chẽ đầu vào cho `startFocusSessionSchema`, `recordDistractionEventSchema`, `finishFocusSessionSchema`, `focusPingSchema`.
-- **Dịch vụ nghiệp vụ (`focus.service.ts`)**:
-  - `startSession`: Kiểm tra quyền sở hữu IDOR trên document_id / quiz_id. Đánh dấu các phiên mồ côi trước đó thành `INTERRUPTED`. Khởi tạo phiên mới với trạng thái `IN_PROGRESS`.
-  - `getActiveSession`: Lấy phiên đang chạy của người dùng kèm thông tin tài liệu / đề thi đính kèm.
-  - `recordDistraction`: Ghi nhận sự kiện xao nhãng vào `focus_distraction_events` và tự động tăng bộ đếm `distraction_count` của session.
-  - `pingActive`: Heartbeat định kỳ 15 giây cập nhật `actual_duration_seconds`.
-  - `finishSession`: Tính toán điểm Focus Score theo công thức:
-    $$\text{Base Score} = \min\left(100, \text{round}\left(\frac{\text{actualDuration}}{\text{targetDuration}} \times 100\right)\right)$$
-    $$\text{Penalty} = \min(40, \text{distractionCount} \times 5)$$
-    $$\text{Focus Score} = \max(0, \text{Base Score} - \text{Penalty}) \quad (\text{nếu CANCELLED } \rightarrow 0)$$
-    Tự động ghi nhận vào `learning_activities` (`activity_type: 'focus_session'`, `idempotency_key: focus_session:${sessionId}`) và cập nhật StudyStreak trong ngày theo múi giờ UTC+7.
-  - `getSessionSummary`: Trả về báo cáo tổng hợp chi tiết và lịch sử các sự kiện xao nhãng.
-- **Controllers & Routes (`focus.controller.ts`, `focus.routes.ts`)**:
-  - `POST /api/focus/start`: Bắt đầu phiên.
-  - `GET /api/focus/active`: Lấy phiên đang chạy.
-  - `POST /api/focus/:id/distraction`: Ghi nhận sự kiện chuyển tab/cửa sổ.
-  - `POST /api/focus/:id/ping`: Ping nhịp tim thời gian học.
-  - `POST /api/focus/:id/finish`: Kết thúc phiên tập trung.
-  - `GET /api/focus/:id/summary`: Lấy bảng tổng kết phiên.
+### 3. Kết quả Kiểm thử Toàn diện & Hồi quy
 
----
+#### A. Kiểm thử Chuyên sâu Phase 12 (`scripts/test-phase12.ts` — 65/65 Assertions)
+1. **Suite 1: Multi-Type Resource Publishing & Community Abstraction**: Đăng thành công 4 loại tài nguyên (Document, Quiz, Mindmap, Flashcard Deck), kiểm tra đúng `resource_type`, `resource_id`, `category`, tự động chuyển `visibility = public` và `is_community_published = true`.
+2. **Suite 2: Isolation between PUBLIC and PUBLISHED**: Xác nhận tài liệu `visibility = public` tuyệt đối không tự ý lọt vào bảng tin cộng đồng khi chưa được đăng.
+3. **Suite 3: Community Feed Querying & Filters**: Kiểm tra feed tab `recent`, tab `popular`, lọc `resourceType`, lọc `category`, và tìm kiếm từ khóa.
+4. **Suite 4: Study Flow & Direct Target Routing**: Kiểm tra `study_url` cho Document (`/viewer/:id`), Quiz (`/quiz/:id`), Mindmap (`/mindmap?id=:id`), tăng lượt xem `views`, thích/bỏ thích `likes`, gửi bình luận và trả lời lồng nhau (`parent_id`).
+5. **Suite 5: Save Reference & Zero Data Duplication**: Kiểm tra lưu tài nguyên, tăng `forks`, xác nhận không nhân bản dữ liệu vào bảng `documents`, bản ghi tham chiếu nằm trong `community_saves`, hiển thị trong tab `saved`.
+6. **Suite 6: Graceful Handling of Deleted Original Resources (UNAVAILABLE Policy)**: Xóa tài liệu gốc, kiểm tra endpoint không bị crash, trả về `is_available = false`, `status = UNAVAILABLE`, `study_url = null`.
+7. **Suite 7: Reshare with Strict Attribution**: Chia sẻ lại bài đăng, xác nhận `is_reshare = true`, `author_name` là người chia sẻ, `original_author_name` là tác giả gốc, `original_resource_id` liên kết chính xác, ghi chú chia sẻ được lưu nguyên vẹn, chặn chia sẻ lại trùng lặp.
+8. **Suite 8: IDOR & Authorization Controls**: Chặn User 2 đăng tài liệu của User 1 (403), chặn User 2 gỡ bài của User 1 (403), chặn khách vãng lai đăng bài (401), chủ bài gỡ bài thành công (200), tự động gỡ cờ `is_community_published = false`.
 
-### 4. Giao diện Người dùng (Frontend Implementation)
-- **Trang Chế độ Tập trung Chuyên biệt (`frontend/src/app/focus/page.tsx`)**:
-  - **Trạng thái Thiết lập (SETUP)**:
-    * Lựa chọn mốc thời gian: 15 phút (Khởi động), 25 phút (Pomodoro chuẩn), 45 phút (Chuyên sâu), 60 phút (Bứt phá) hoặc nhập số phút tùy chỉnh.
-    * Bộ chọn nội dung liên kết: Học tự do, Gắn với tài liệu từ Thư viện, Gắn với bộ đề thi trắc nghiệm.
-    * Thông báo minh bạch cam kết bảo mật & quyền riêng tư (không camera, không micro).
-  - **Trạng thái Tập trung Cao độ (ACTIVE)**:
-    * Giao diện đắm chìm (Atmospheric Immersive) tone xanh ngọc thẫm sang trọng (`#0B1B15`).
-    * Đồng hồ đếm ngược vòng tròn SVG hiệu ứng mượt mà.
-    * Huy hiệu đếm số lần rời trang trực tiếp (Live Distraction Counter).
-    * Bật/tắt chế độ toàn màn hình (Fullscreen toggle).
-    * Tạm dừng / Tiếp tục, Hủy phiên với modal xác nhận an toàn.
-    * Thanh điều hướng nhanh tới tài liệu / bài kiểm tra liên kết.
-  - **Trạng thái Tổng kết Phiên (SUMMARY)**:
-    * Thẻ chúc mừng kèm Điểm tập trung (Focus Score) và xếp loại (Xuất sắc, Rất tốt, Khá, Cần cải thiện).
-    * Lưới chỉ số trực quan: Thời gian thực tế vs Mục tiêu, Số lần rời trang, Cộng dồn chuỗi StudyStreak.
-    * Danh sách lịch sử các lần chuyển tab kèm nhãn thời gian thực tế.
-    * **Actionable Next Steps**:
-      - Nút bắt đầu nghỉ giải lao 5 phút (Pomodoro Break).
-      - Nút quay lại tài liệu / bài thi liên kết.
-      - Nút khám phá kho tài liệu, luyện đề thi hoặc xem Bảng tiến độ.
-  - **Trạng thái Giờ nghỉ (BREAK)**:
-    * Đồng hồ đếm ngược 5 phút với thanh tiến trình thư giãn.
-    * Hướng dẫn bài tập thở 4-4-4 nhịp nhàng (Hít vào - Giữ hơi - Thở ra).
-    * Nút kết thúc nghỉ để bắt đầu phiên học mới ngay lập tức.
-- **Tích hợp các điểm truy cập**:
-  - `frontend/src/app/viewer/[id]/page.tsx`: Nút "Tập trung" trên thanh công cụ xem tài liệu.
-  - `frontend/src/app/quiz/[testSetId]/page.tsx`: Nút "Tập trung" trên thanh làm bài thi.
-  - `frontend/src/app/study-sessions/page.tsx`: Thẻ "Chế độ tập trung (Focus Mode)".
-  - `frontend/src/components/landing/Navbar.tsx`: Menu "Tập trung" trên Desktop và Profile dropdown.
-
----
-
-### 5. Kết quả Kiểm thử & Đảm bảo Chất lượng
-
-#### A. Xác nhận & Bằng chứng giải quyết 3 mục tiền điều kiện (Prerequisite Review Items)
-1. **Mục 1: Mindmap không ghi đè bản vẽ tay thủ công & loại bỏ unique constraint toàn cục**:
-   - **Hiện trạng xử lý**: CSDL sử dụng migration `1790600000000_mindmap_source_and_partial_unique.js`, phân tách rõ ràng cột `source` ('ai' | 'manual'). Thay thế unique constraint toàn cục bằng Partial Unique Index `ON mindmaps(document_id, user_id) WHERE source = 'ai'`. Nhờ đó, người dùng có thể tạo không giới hạn các bản đồ tư duy vẽ tay/thủ công cho cùng một tài liệu, và AI Mindmap Cache khi sinh/cập nhật chỉ upsert vào bản ghi `source = 'ai'`, tuyệt đối không ghi đè bất kỳ bản vẽ tay nào của người dùng.
-   - **Bằng chứng kiểm thử**: Đã được kiểm chứng nghiêm ngặt trong `scripts/test-phase9.ts` (Suite 3: 3.7 & 3.8). Cả 2 bản vẽ tay thủ công vẫn giữ nguyên toàn bộ nội dung sau khi AI Cache được lưu và cập nhật lần 2.
-
-2. **Mục 2: Chấm điểm câu tự luận & Loại bỏ khỏi /mistakes**:
-   - **Hiện trạng xử lý**: 
-     - Trong `backend/src/services/quiz.service.ts`: Endpoint `GET /api/quizzes/attempts/:id/mistakes` và chế độ làm lại câu sai `isRetryMistakes = true` đã được lọc thêm điều kiện `AND q.type != 'ESSAY'`. Nhờ đó, các câu tự luận (chưa thể tự động chấm đúng/sai khách quan) không bị coi là câu sai và không xuất hiện trong danh sách ôn tập câu sai.
-     - Khi nộp bài thi (`submitQuiz`), mẫu số tính điểm `total_score` trong bảng `quiz_attempts` và công thức phần trăm `percentage` được chuẩn hóa thành `finalGradableTotalScore` (chỉ tính tổng điểm các câu hỏi khách quan có đáp án chấm được). Người học làm đúng toàn bộ câu trắc nghiệm sẽ nhận đúng 100% điểm khách quan, không bị câu tự luận làm sai lệch mẫu số.
-   - **Bằng chứng kiểm thử**: Đã được kiểm chứng trong `scripts/test-phase8.ts` (Suite 5, Suite 9, Suite 10): 
-     - Suite 5: Học viên làm đúng 3 câu khách quan (7.5đ), câu tự luận gõ văn bản vô nghĩa được đánh dấu `is_correct = null`, `score_awarded = 0`. Điểm đạt 7.5 / 7.5 (100% accuracy), không bị kéo tụt tỷ lệ phần trăm.
-     - Suite 9: `GET /attempts/:id/mistakes` trả về `totalMistakes = 0` (câu tự luận không bị lọt vào mistakes).
-     - Suite 10: Chế độ làm lại câu sai chỉ khởi tạo duy nhất câu trắc nghiệm bị sai, hoàn toàn không chứa câu tự luận.
-
-3. **Mục 3: Chặn client tự khai khống `duration_seconds` và hoạt động qua `POST /learning-activities`**:
-   - **Hiện trạng xử lý**:
-     - Schema Zod `backend/src/schemas/progress.schema.ts` và Service `backend/src/services/learning-activity.service.ts` thiết lập chặn cứng `duration_seconds`: giới hạn từ `0` đến `14400` giây (tối đa 4 giờ cho một hoạt động). Mọi yêu cầu vượt quá ngưỡng này bị từ chối ngay lập tức với mã `HTTP 400 Bad Request`.
-     - Phân quyền nguồn gốc hoạt động: Chặn client gửi trực tiếp `activity_type: 'focus_session'` hoặc `activity_type: 'take_quiz'` thông qua endpoint `POST /learning-activities` nếu không có idempotency token hợp lệ từ server (`HTTP 403 Forbidden`). Các hoạt động này bắt buộc phải sinh tự động từ Focus Engine (`/api/focus`) và Submit Quiz (`/api/quizzes/submit`).
-   - **Bằng chứng kiểm thử**: Đã được kiểm chứng trong `scripts/test-phase10.ts` (Suite 2): Client gửi `duration_seconds = 999999` bị từ chối với HTTP 400; gửi `focus_session` trực tiếp bị từ chối với HTTP 403.
-
----
-
-#### B. Xác nhận & Bằng chứng các mục trọng yếu Phase 11 & Khắc phục Lỗ hổng Bảo mật
-1. **Mục 🔴 1: Bắt sự kiện `pagehide` / `beforeunload` dùng `sendBeacon` đánh dấu INTERRUPTED tức thời & Khắc phục Lỗ hổng Sensitive Data Exposure (Token JWT trong URL)**:
-   - **Lỗ hổng được phát hiện**: Trước đó, `sendBeacon` truyền JWT qua URL query string `POST /api/focus/:id/interrupt?token=...`, vi phạm nghiêm trọng nguyên tắc bảo mật (bị ghi lại trong access log, reverse proxy/CDN log, browser history, referer headers).
-   - **Kiến trúc khắc phục triệt để (Session-Scoped Capability Token)**:
-     - **Database Migration (`1790800000000_phase11_focus_mode.js`)**: Bổ sung cột `interrupt_token VARCHAR(128)` kèm partial index `idx_study_sessions_interrupt_token` vào bảng `study_sessions`.
-     - **Phát mã ngắn hạn dùng 1 lần (`startSession`)**: Khi tạo phiên, server sinh mã ngẫu nhiên 64 ký tự hex (`crypto.randomBytes(32).toString('hex')`) lưu vào database và trả về client trong payload `interrupt_token`. Mã này hoàn toàn tách biệt với JWT của người dùng, chỉ có hiệu lực cho đúng phiên đó.
-     - **Client `sendBeacon` qua POST Body sạch sẽ (`page.tsx`)**: Đổi sang URL hoàn toàn sạch: `POST /api/focus/:id/interrupt` (không chứa bất kỳ query param hay token nào). Gói payload `{ interrupt_token, actual_duration_seconds }` vào `Blob` JSON gửi qua `navigator.sendBeacon`.
-     - **Single-Use & Ngay lập tức vô hiệu hóa (`interruptSession`)**: Khi nhận mã, server đối chiếu `session.interrupt_token === interruptToken` và **ngay lập tức** cập nhật `interrupt_token = NULL` để chống replay attack.
-     - **Loại bỏ token khỏi URL toàn hệ thống**: Xóa bỏ hoàn toàn fallback `req.query?.token` trong `auth.middleware.ts` và controller.
-   - **Xác nhận phòng chống IDOR trên `/interrupt`**:
-     - Endpoint kiểm tra chặt chẽ:
-       * Nếu xác thực qua JWT (`Authorization: Bearer`): Kiểm tra `session.user_id === userId` (chặn người dùng khác can thiệp bằng HTTP 403).
-       * Nếu xác thực qua `interrupt_token`: Chỉ chấp nhận token khớp chính xác với phiên `id` đang active (`session.interrupt_token === interruptToken`).
-       * Nếu dùng token giả mạo, token của phiên khác, hoặc token đã bị thu hồi $\rightarrow$ HTTP 403 Forbidden.
-       * Nếu không có cả JWT lẫn `interrupt_token` $\rightarrow$ HTTP 401 Unauthorized.
-   - **Bằng chứng kiểm thử**: Đã kiểm thử tự động trong `scripts/test-phase11.ts` (**Suite 7**):
-     - `URL sendBeacon hoàn toàn sạch: không chứa query param token (?token=)`
-     - `Chặn IDOR: User 2 dùng token của User 1 bị từ chối với HTTP 403 Forbidden`
-     - `Chặn token giả mạo: interrupt_token không đúng bị từ chối với HTTP 403 Forbidden`
-     - `Chặn request không xác thực: thiếu token bị từ chối với HTTP 401 Unauthorized`
-     - `sendBeacon với interrupt_token qua body JSON thành công (HTTP 200 OK)`
-     - `Single-use: Dùng lại interrupt_token lần 2 bị từ chối ngay lập tức (HTTP 403 Forbidden)`
-     - `activeSession giải phóng ngay lập tức (null), distraction PAGE_HIDDEN ghi nhận chuẩn xác`
-
-2. **Mục 🔴 2: Triệt tiêu nguy cơ tính trùng thời gian giữa `read_doc` (Phase 10) và `focus_session` (Phase 11)**:
-   - **Hiện trạng xử lý**:
-     - Trong `backend/src/services/study.service.ts`: Khi `createStudySession` được gọi cho một tài liệu, hệ thống kiểm tra nếu đang có phiên Focus `IN_PROGRESS` cho tài liệu đó thì trả về phiên Focus hiện tại thay vì tạo phiên đọc tài liệu song song.
-     - Trong `backend/src/services/focus.service.ts`: Khi kết thúc phiên Focus (`finishSession`), hệ thống kích hoạt cơ chế khử trùng lặp (Anti-Double Counting Mechanism): Tự động dọn dẹp các bản ghi `read_doc` cho cùng `document_id` phát sinh trong khoảng thời gian phiên Focus đang hoạt động (`created_at >= session.started_at` và `entity_id = $2`).
-     - Đảm bảo tính toán thời gian trong `/progress/summary` và `/progress/streak` chỉ phản ánh thời gian học tập thực tế duy nhất, không bị nhân đôi.
-   - **Bằng chứng kiểm thử**: Đã kiểm thử thành công trong `scripts/test-phase11.ts` (**Suite 8**):
-     - Kịch bản: Người dùng mở tài liệu đọc 10 phút (`read_doc`), sau đó bấm "Tập trung" 25 phút (`focus_session`) cho tài liệu đó $\rightarrow$ Sau khi hoàn thành, kiểm tra tổng phút trong `/progress/summary`.
-     - Kết quả test: `addedMinutes === 25` $\rightarrow$ `Chống tính trùng thành công: thời gian tăng thêm là đúng 25 phút (thực tế: 25m, không bị cộng dồn thành 35m)`.
-
-3. **Mục 🟡 3: Xác nhận phạm vi dọn dẹp `read_doc` không xóa nhầm dữ liệu của tài liệu khác (Cross-Document Preservation Guarantee)**:
-   - **Hiện trạng xử lý**: Câu truy vấn khử trùng lặp trong `finishSession` sử dụng điều kiện nghiêm ngặt:
-     `DELETE FROM learning_activities WHERE user_id = $1 AND entity_id = $2 AND activity_type = 'read_doc' AND created_at >= $3`
-     Trong đó `$2` là `session.document_id`. Điều kiện này chỉ khoanh vùng đúng tài liệu đang Focus, tuyệt đối không ảnh hưởng tới bất kỳ tài liệu nào khác.
-   - **Bằng chứng kiểm thử mới**: Đã bổ sung kịch bản kiểm thử tường minh trong `scripts/test-phase11.ts` (**Suite 9**):
-     - Kịch bản: Người dùng mở đọc Tài liệu C (15 phút `read_doc`), sau đó chuyển sang mở phiên Focus cho Tài liệu B (25 phút `focus_session`).
-     - Kết quả kiểm chứng tự động:
-       * Bản ghi `read_doc` của Tài liệu C vẫn **nguyên vẹn 100%** trong database, không bị xóa.
-       * Tổng thời gian học trong `/progress/summary` cộng dồn chuẩn xác 40 phút (15 phút Tài liệu C + 25 phút Focus Tài liệu B).
-       * $\rightarrow$ Xác nhận tường minh: Thao tác xóa `read_doc` đúng phạm vi, tuyệt đối không xóa nhầm tài liệu khác.
-
----
-
-#### C. Tổng hợp Kiểm thử Tích hợp & Hồi quy Toàn diện
-1. **Kiểm thử chuyên sâu Phase 11 (`scripts/test-phase11.ts`)**:
-   - Đã thực thi và vượt qua **9/9 Suites (100%)**:
-     - *Suite 1 (Standalone Focus Session Lifecycle)*: Start $\rightarrow$ activeSession $\rightarrow$ ping $\rightarrow$ finish $\rightarrow$ summary $\rightarrow$ activeSession null.
-     - *Suite 2 (Entry Points Integration)*: Bắt đầu Focus từ Document và Quiz gắn kết chính xác `document_id` và `quiz_id`.
-     - *Suite 3 (Distraction Detection & Focus Score Penalty)*: Ghi nhận sự kiện `TAB_SWITCH`, `PAGE_BLUR`, `PAGE_HIDDEN` $\rightarrow$ `distractionCount` tăng chính xác = 3 $\rightarrow$ Focus Score bị trừ tương ứng từ 100 xuống 85 điểm.
-     - *Suite 4 (Interrupted & Cancelled States)*: Phiên CANCELLED có điểm = 0. Phiên mồ côi cũ tự động đánh dấu thành INTERRUPTED khi mở phiên mới.
-     - *Suite 5 (Auto-Logging to learning_activities & Streak Sync)*: Tự động ghi nhận đúng 1 bản ghi `learning_activities` (`activity_type: 'focus_session'`) và cập nhật `studiedToday = true`, tăng chuỗi Streak.
-     - *Suite 6 (IDOR Protection & Authorization)*: Chặn người dùng khác can thiệp, kết thúc, xem summary hay gắn tài liệu riêng tư của người khác với mã HTTP 403/404.
-     - *Suite 7 (Pagehide / Beforeunload SendBeacon Security & IDOR)*: URL sạch không token; chặn IDOR; chặn token giả; chặn replay; dọn dẹp activeSession tức thì.
-     - *Suite 8 (Non-overlapping Time Guarantee)*: Khử trùng lặp giữa read_doc và focus_session trên cùng tài liệu, thời gian học tăng chuẩn xác 25 phút.
-     - *Suite 9 (Cross-Document Preservation Guarantee)*: Xác nhận `read_doc` của tài liệu khác không bị xóa nhầm, cộng dồn đủ 40 phút.
-
-2. **Kiểm thử Hồi quy Toàn diện (`npm run test:fast`)**:
-   - Đã thực thi đồng thời toàn bộ 7 modules từ Phase 3 đến Phase 11:
-     - **Phase 3**: PASS (Auth & User System) — 1.86s
-     - **Phase 4**: PASS (Document Processing Pipeline & Chunks) — 3.18s
-     - **Phase 7**: PASS (Exam & Question Bank Management) — 2.73s
-     - **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 2.00s
-     - **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 3.27s
-     - **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.03s
-     - **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 1.85s
-     - $\rightarrow$ **7/7 PHASES PASSED (100%), ZERO REGRESSION**.
-
-3. **3 Gate Checks Nghiêm ngặt (Mục 0.1.3)**:
-   - **Gate Check 1 (Backend TypeScript Build)**: `npm run build` (`tsc`) $\rightarrow$ **PASSED (0 errors)**.
-   - **Gate Check 2 (Frontend TypeScript Typecheck)**: `npx tsc --noEmit` $\rightarrow$ **PASSED (0 errors)**.
-   - **Gate Check 3 (Frontend Production Build)**: `npm run build` (`next build`) $\rightarrow$ **PASSED (0 errors)**. Toàn bộ 23/23 static pages biên dịch thành công, bao gồm route mới `/focus`.
+#### B. Kiểm thử Hồi quy 8 Giai đoạn (`npm run test:fast`)
+- **Phase 3**: PASS (Auth & User System) — 2.16s
+- **Phase 4**: PASS (Document Processing Pipeline & Chunks) — 3.47s
+- **Phase 7**: PASS (Exam & Question Bank Management) — 2.26s
+- **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 2.10s
+- **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 2.96s
+- **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.69s
+- **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 2.60s
+- **Phase 12**: PASS (Community Ecosystem & Resource Exchange) — 2.33s
+- $\rightarrow$ **8/8 PHASES PASSED (100%), ZERO REGRESSION DETECTED**.
 
 ---
 
 ### Tuân thủ Rule 0.1.1
-- Toàn bộ 3 mục tiền điều kiện đã được xác nhận, bổ sung và kiểm chứng bằng test tự động.
-- Toàn bộ 2 mục trọng yếu 🔴 của Phase 11 (`sendBeacon` unload interrupt và chống tính trùng thời gian) đã được triển khai và kiểm thử thực tế.
-- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 12**.
-- Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, phản hồi hoặc nghiệm thu chính thức.
+- Phase 12 đã hoàn thành 100% các tiêu chí kỹ thuật, giao diện và bảo mật theo master prompt.
+- Toàn bộ 3 Gate Checks của Rule 0.1.3 đều đạt chuẩn.
+- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 13 (Community Safety & Content Moderation)**.
+- Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, nghiệm thu trước khi tiếp tục.
+
 
 
 
