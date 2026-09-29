@@ -14,7 +14,18 @@ export const reportContentSchema = z.object({
     }
   ),
   details: z.string().max(1000, 'Chi tiết tố cáo không quá 1000 ký tự').optional(),
-});
+}).refine(
+  (data) => {
+    if (data.reason === 'OTHER') {
+      return typeof data.details === 'string' && data.details.trim().length >= 5;
+    }
+    return true;
+  },
+  {
+    message: 'Vui lòng cung cấp chi tiết mô tả vi phạm (tối thiểu 5 ký tự) khi chọn lý do KHÁC (OTHER)',
+    path: ['details'],
+  }
+);
 
 export const blockUserSchema = z.object({
   reason: z.string().max(500, 'Lý do chặn không quá 500 ký tự').optional(),

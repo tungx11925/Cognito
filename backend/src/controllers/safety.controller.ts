@@ -19,8 +19,9 @@ export const blockUser = async (req: AuthRequest, res: Response) => {
     const result = await safetyService.blockUser(blockerId, targetUserId, validatedBody.reason);
     return res.status(200).json(result);
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ error: error.errors[0]?.message || 'Dữ liệu không hợp lệ' });
+    if (error.name === 'ZodError' || error.issues) {
+      const msg = error.errors?.[0]?.message || error.issues?.[0]?.message || error.message || 'Dữ liệu không hợp lệ';
+      return res.status(400).json({ error: msg });
     }
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi khi chặn người dùng' });
   }
@@ -57,8 +58,9 @@ export const reportContent = async (req: AuthRequest, res: Response) => {
     const result = await safetyService.reportContent(reporterId, validatedBody);
     return res.status(201).json(result);
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ error: error.errors[0]?.message || 'Dữ liệu báo cáo không hợp lệ' });
+    if (error.name === 'ZodError' || error.issues) {
+      const msg = error.errors?.[0]?.message || error.issues?.[0]?.message || error.message || 'Dữ liệu báo cáo không hợp lệ';
+      return res.status(400).json({ error: msg });
     }
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi khi gửi báo cáo' });
   }
@@ -83,8 +85,9 @@ export const getModerationReports = async (req: AuthRequest, res: Response) => {
     const result = await safetyService.listReports(validatedQuery);
     return res.status(200).json(result);
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ error: error.errors[0]?.message || 'Dữ liệu truy vấn không hợp lệ' });
+    if (error.name === 'ZodError' || error.issues) {
+      const msg = error.errors?.[0]?.message || error.issues?.[0]?.message || error.message || 'Dữ liệu truy vấn không hợp lệ';
+      return res.status(400).json({ error: msg });
     }
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi tải danh sách báo cáo' });
   }
@@ -101,8 +104,9 @@ export const applyModerationAction = async (req: AuthRequest, res: Response) => 
     const result = await safetyService.applyModerationAction(adminId, reportId, validatedBody);
     return res.status(200).json(result);
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ error: error.errors[0]?.message || 'Dữ liệu xử lý không hợp lệ' });
+    if (error.name === 'ZodError' || error.issues) {
+      const msg = error.errors?.[0]?.message || error.issues?.[0]?.message || error.message || 'Dữ liệu xử lý không hợp lệ';
+      return res.status(400).json({ error: msg });
     }
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi xử lý kiểm duyệt' });
   }

@@ -199,13 +199,24 @@ export class SafetyService {
 
     // Increment report counter on target and auto-hide if report_count >= 5
     if (input.targetType === 'resource') {
-      await db.query(
+      const updateRes = await db.query(
         `UPDATE community_resources 
          SET report_count = report_count + 1,
-             is_hidden = CASE WHEN report_count + 1 >= 5 THEN true ELSE is_hidden END
-         WHERE id = $1`,
+             is_hidden = CASE WHEN report_count + 1 >= 5 THEN true ELSE is_hidden END,
+             is_public = CASE WHEN report_count + 1 >= 5 THEN false ELSE is_public END
+         WHERE id = $1
+         RETURNING resource_type, resource_id, is_reshare, is_hidden`,
         [input.targetId]
       );
+      if (updateRes.rows.length > 0 && updateRes.rows[0].is_hidden) {
+        const { resource_type, resource_id, is_reshare } = updateRes.rows[0];
+        if (!is_reshare && resource_type === 'document') {
+          await db.query(
+            `UPDATE documents SET is_community_published = false WHERE id = $1`,
+            [resource_id]
+          );
+        }
+      }
     } else if (input.targetType === 'comment') {
       await db.query(
         `UPDATE community_comments 
@@ -365,12 +376,25 @@ export class SafetyService {
         break;
 
       case 'HIDE':
-        // Soft hide content from feed & public lists
+        // Soft hide content from feed & public lists and sync with original resource
         if (report.target_type === 'resource') {
-          await db.query(
-            `UPDATE community_resources SET is_hidden = true, is_public = false WHERE id = $1`,
+          const commRes = await db.query(
+            'SELECT resource_type, resource_id, is_reshare FROM community_resources WHERE id = $1',
             [report.target_id]
           );
+          if (commRes.rows.length > 0) {
+            const { resource_type, resource_id, is_reshare } = commRes.rows[0];
+            await db.query(
+              `UPDATE community_resources SET is_hidden = true, is_public = false WHERE id = $1`,
+              [report.target_id]
+            );
+            if (!is_reshare && resource_type === 'document') {
+              await db.query(
+                `UPDATE documents SET is_community_published = false WHERE id = $1`,
+                [resource_id]
+              );
+            }
+          }
         } else if (report.target_type === 'comment') {
           await db.query(
             `UPDATE community_comments SET is_hidden = true WHERE id = $1`,
@@ -380,11 +404,38 @@ export class SafetyService {
         break;
 
       case 'REMOVE':
-        // Permanently remove content
+        // Permanently remove content from Community ONLY (NEVER deletes original assets in documents/test_sets)
         if (report.target_type === 'resource') {
-          await db.query('DELETE FROM community_resources WHERE id = $1', [report.target_id]);
+          const commRes = await db.query(
+            'SELECT resource_type, resource_id, is_reshare FROM community_resources WHERE id = $1',
+            [report.target_id]
+          );
+          if (commRes.rows.length > 0) {
+            const { resource_type, resource_id, is_reshare } = commRes.rows[0];
+            // 1. Delete from community_resources only
+            await db.query('DELETE FROM community_resources WHERE id = $1', [report.target_id]);
+            // 2. Sync is_community_published = false on primary document
+            if (!is_reshare && resource_type === 'document') {
+              await db.query(
+                `UPDATE documents SET is_community_published = false WHERE id = $1`,
+                [resource_id]
+              );
+            }
+          }
         } else if (report.target_type === 'comment') {
-          await db.query('DELETE FROM community_comments WHERE id = $1', [report.target_id]);
+          const commRes = await db.query(
+            'SELECT resource_id FROM community_comments WHERE id = $1',
+            [report.target_id]
+          );
+          if (commRes.rows.length > 0) {
+            const resId = commRes.rows[0].resource_id;
+            await db.query('DELETE FROM community_comments WHERE id = $1', [report.target_id]);
+            // Decrement comment_count on the target resource
+            await db.query(
+              'UPDATE community_resources SET comment_count = GREATEST(0, comment_count - 1) WHERE id = $1',
+              [resId]
+            );
+          }
         }
         break;
 
@@ -408,16 +459,33 @@ export class SafetyService {
 
       case 'SUSPEND':
         if (targetUserId) {
-          // Suspend user and hide all their published resources
+          // 1. Suspend user account
           await db.query(
             `UPDATE users 
              SET is_suspended = true, status = 'SUSPENDED', suspension_reason = $1 
              WHERE id = $2`,
             [reason, targetUserId]
           );
+          // 2. Sync is_community_published = false on all this user's primary published documents
+          await db.query(
+            `UPDATE documents SET is_community_published = false 
+             WHERE id IN (
+               SELECT resource_id FROM community_resources 
+               WHERE user_id = $1 AND resource_type = 'document' AND is_reshare = false
+             )`,
+            [targetUserId]
+          );
+          // 3. Hide all published community resources by this user
           await db.query(
             `UPDATE community_resources 
              SET is_hidden = true, is_public = false 
+             WHERE user_id = $1`,
+            [targetUserId]
+          );
+          // 4. Hide all comments posted by this user
+          await db.query(
+            `UPDATE community_comments 
+             SET is_hidden = true 
              WHERE user_id = $1`,
             [targetUserId]
           );
@@ -484,6 +552,7 @@ export class SafetyService {
       throw new AppError('Không thể đình chỉ tài khoản Quản trị viên', 400);
     }
 
+    // 1. Suspend user
     await db.query(
       `UPDATE users 
        SET is_suspended = true, status = 'SUSPENDED', suspension_reason = $1 
@@ -491,9 +560,28 @@ export class SafetyService {
       [reason, targetUserId]
     );
 
+    // 2. Sync is_community_published = false on all this user's primary published documents
+    await db.query(
+      `UPDATE documents SET is_community_published = false 
+       WHERE id IN (
+         SELECT resource_id FROM community_resources 
+         WHERE user_id = $1 AND resource_type = 'document' AND is_reshare = false
+       )`,
+      [targetUserId]
+    );
+
+    // 3. Hide all published community resources
     await db.query(
       `UPDATE community_resources 
        SET is_hidden = true, is_public = false 
+       WHERE user_id = $1`,
+      [targetUserId]
+    );
+
+    // 4. Hide all comments posted by this user
+    await db.query(
+      `UPDATE community_comments 
+       SET is_hidden = true 
        WHERE user_id = $1`,
       [targetUserId]
     );

@@ -116,6 +116,8 @@ export async function runPhase13Tests() {
     console.log('--- SUITE 2: Bi-directional Block Effect on Feed & Comments ---');
     let postA_Id: number;
     let postB_Id: number;
+    let docA_Id: number;
+    let docB_Id: number;
     let commentA_Id: number;
     {
       // Create Document & Publish for User A
@@ -124,6 +126,7 @@ export async function runPhase13Tests() {
          VALUES ($1, 'P13 Doc by User A', 'Tài liệu A', 'Công nghệ', 'public', true, 'READY') RETURNING id`,
         [userA.id]
       );
+      docA_Id = docARes.rows[0].id;
       const pubARes = await axios.post(
         `${API_BASE}/community/publish`,
         { resourceType: 'document', resourceId: docARes.rows[0].id, title: 'Bài viết công nghệ của User A' },
@@ -138,6 +141,7 @@ export async function runPhase13Tests() {
          VALUES ($1, 'P13 Doc by User B', 'Tài liệu B', 'Khoa học', 'public', true, 'READY') RETURNING id`,
         [userB.id]
       );
+      docB_Id = docBRes.rows[0].id;
       const pubBRes = await axios.post(
         `${API_BASE}/community/publish`,
         { resourceType: 'document', resourceId: docBRes.rows[0].id, title: 'Bài viết khoa học của User B' },
@@ -322,6 +326,23 @@ export async function runPhase13Tests() {
       assert(repUser.status === 201, 'User C reported User A account (201 Created)');
       reportUser_Id = repUser.data.report.id;
 
+      // 4.5b Validate that reason = 'OTHER' requires details >= 5 chars
+      try {
+        await axios.post(
+          `${API_BASE}/community/reports`,
+          {
+            targetType: 'user',
+            targetId: userB.id,
+            reason: 'OTHER',
+            details: 'ngan',
+          },
+          { headers: userC.headers }
+        );
+        assert(false, 'Reporting with reason OTHER and short details should fail');
+      } catch (err: any) {
+        assert(err.response?.status === 400, 'Reporting with reason OTHER and short details returns 400 Bad Request');
+      }
+
       // 4.6 User C views their submitted reports
       const myReports = await axios.get(`${API_BASE}/community/my-reports`, { headers: userC.headers });
       assert(myReports.status === 200, 'Fetched user submitted reports (200 OK)');
@@ -339,6 +360,8 @@ export async function runPhase13Tests() {
       const postAfter5Reports = await db.query('SELECT is_hidden, report_count FROM community_resources WHERE id = $1', [postA_Id]);
       assert(postAfter5Reports.rows[0].report_count === 5, 'Resource report count reached 5');
       assert(postAfter5Reports.rows[0].is_hidden === true, 'Resource is automatically hidden when report_count >= 5');
+      const docAAfterAutoHide = await db.query('SELECT is_community_published FROM documents WHERE id = $1', [docA_Id]);
+      assert(docAAfterAutoHide.rows[0].is_community_published === false, 'Document is_community_published synchronized to false upon auto-hide');
       console.log('  Content reporting lifecycle & auto-flag threshold validated.\n');
     }
 
@@ -448,6 +471,33 @@ export async function runPhase13Tests() {
       const commentCheck = await db.query('SELECT is_hidden FROM community_comments WHERE id = $1', [commentA_Id]);
       assert(commentCheck.rows[0].is_hidden === true, 'Comment is_hidden set to true');
 
+      // 6.4b Action HIDE on resource report: soft-hides resource and sets documents.is_community_published = false
+      const docHide = await db.query(
+        `INSERT INTO documents (user_id, title, description, category, visibility, is_community_published, status)
+         VALUES ($1, 'Doc to be hidden', 'Desc', 'Chung', 'public', true, 'READY') RETURNING id`,
+        [userB.id]
+      );
+      const postHideRes = await axios.post(
+        `${API_BASE}/community/publish`,
+        { resourceType: 'document', resourceId: docHide.rows[0].id, title: 'Bài viết sẽ bị ẩn' },
+        { headers: userB.headers }
+      );
+      const repResourceHide = await db.query(
+        `INSERT INTO content_reports (reporter_id, target_type, target_id, reason, status)
+         VALUES ($1, 'resource', $2, 'INAPPROPRIATE', 'PENDING') RETURNING id`,
+        [userC.id, postHideRes.data.resource.id]
+      );
+      const hideResourceRes = await axios.post(
+        `${API_BASE}/admin/moderation/reports/${repResourceHide.rows[0].id}/action`,
+        { action: 'HIDE', reason: 'Tài nguyên vi phạm tiêu chuẩn hiển thị' },
+        { headers: admin.headers }
+      );
+      assert(hideResourceRes.status === 200, 'Admin applied HIDE action on resource (200 OK)');
+      const checkHiddenRes = await db.query('SELECT is_hidden, is_public FROM community_resources WHERE id = $1', [postHideRes.data.resource.id]);
+      assert(checkHiddenRes.rows[0].is_hidden === true && checkHiddenRes.rows[0].is_public === false, 'Community resource is_hidden=true, is_public=false');
+      const checkHiddenDoc = await db.query('SELECT is_community_published FROM documents WHERE id = $1', [docHide.rows[0].id]);
+      assert(checkHiddenDoc.rows[0].is_community_published === false, 'Original document is_community_published synchronized to false upon HIDE');
+
       // 6.5 Action WARN on user report: increments warning_count, status WARNED
       const warnRes = await axios.post(
         `${API_BASE}/admin/moderation/reports/${reportUser_Id}/action`,
@@ -472,6 +522,14 @@ export async function runPhase13Tests() {
       assert(userASuspended.rows[0].is_suspended === true, 'User A is_suspended is true');
       assert(userASuspended.rows[0].status === 'SUSPENDED', 'User A status is SUSPENDED');
 
+      // 6.6b Verify bulk hiding of resources, comments, and unpublishing documents for suspended user
+      const userAResources = await db.query('SELECT is_hidden FROM community_resources WHERE user_id = $1', [userA.id]);
+      assert(userAResources.rows.length > 0 && userAResources.rows.every((r: any) => r.is_hidden === true), 'All community resources of suspended user are marked is_hidden = true');
+      const userAComments = await db.query('SELECT is_hidden FROM community_comments WHERE user_id = $1', [userA.id]);
+      assert(userAComments.rows.length > 0 && userAComments.rows.every((c: any) => c.is_hidden === true), 'All comments of suspended user are marked is_hidden = true');
+      const userADocs = await db.query('SELECT is_community_published FROM documents WHERE user_id = $1', [userA.id]);
+      assert(userADocs.rows.every((d: any) => d.is_community_published === false), 'All documents of suspended user have is_community_published = false');
+
       // 6.7 Suspended user is blocked from making authenticated requests -> 403 Forbidden
       try {
         await axios.get(`${API_BASE}/community/my-resources`, { headers: userA.headers });
@@ -491,12 +549,17 @@ export async function runPhase13Tests() {
       assert(userAActive.rows[0].is_suspended === false, 'User A is_suspended is false after unsuspension');
       assert(userAActive.rows[0].status === 'ACTIVE', 'User A status is ACTIVE');
 
-      // 6.9 Action REMOVE on newly created content report
+      // 6.9 Action REMOVE on comment report: decrements comment_count
+      const postBBefore = await db.query('SELECT comment_count FROM community_resources WHERE id = $1', [postB_Id]);
+      const initialCommentCount = postBBefore.rows[0].comment_count;
+
       // Create a test comment to remove
       const commTemp = await db.query(
         `INSERT INTO community_comments (resource_id, user_id, content) VALUES ($1, $2, 'Rác') RETURNING id`,
         [postB_Id, userC.id]
       );
+      await db.query('UPDATE community_resources SET comment_count = comment_count + 1 WHERE id = $1', [postB_Id]);
+
       const repTemp = await db.query(
         `INSERT INTO content_reports (reporter_id, target_type, target_id, reason, status)
          VALUES ($1, 'comment', $2, 'SPAM', 'PENDING') RETURNING id`,
@@ -510,6 +573,44 @@ export async function runPhase13Tests() {
       assert(removeRes.status === 200, 'Admin applied REMOVE action (200 OK)');
       const checkDeletedComm = await db.query('SELECT 1 FROM community_comments WHERE id = $1', [commTemp.rows[0].id]);
       assert(checkDeletedComm.rows.length === 0, 'Comment permanently removed from database');
+
+      // Verify comment_count decreased
+      const postBAfter = await db.query('SELECT comment_count FROM community_resources WHERE id = $1', [postB_Id]);
+      assert(postBAfter.rows[0].comment_count === initialCommentCount, 'Resource comment_count decremented accurately upon REMOVE comment');
+
+      // 6.10 Action REMOVE on resource report: deletes community_resources record, PRESERVES underlying document, syncs is_community_published = false
+      const docRemove = await db.query(
+        `INSERT INTO documents (user_id, title, description, category, visibility, is_community_published, status)
+         VALUES ($1, 'Doc personal asset preserved', 'Desc', 'Chung', 'public', true, 'READY') RETURNING id`,
+        [userC.id]
+      );
+      const postRemoveRes = await axios.post(
+        `${API_BASE}/community/publish`,
+        { resourceType: 'document', resourceId: docRemove.rows[0].id, title: 'Bài viết sẽ bị gỡ' },
+        { headers: userC.headers }
+      );
+      const postRemoveId = postRemoveRes.data.resource.id;
+
+      const repResourceRemove = await db.query(
+        `INSERT INTO content_reports (reporter_id, target_type, target_id, reason, status)
+         VALUES ($1, 'resource', $2, 'COPYRIGHT_VIOLATION', 'PENDING') RETURNING id`,
+        [userB.id, postRemoveId]
+      );
+      const removeResourceRes = await axios.post(
+        `${API_BASE}/admin/moderation/reports/${repResourceRemove.rows[0].id}/action`,
+        { action: 'REMOVE', reason: 'Vi phạm bản quyền nghiêm trọng, gỡ khỏi cộng đồng' },
+        { headers: admin.headers }
+      );
+      assert(removeResourceRes.status === 200, 'Admin applied REMOVE action on resource (200 OK)');
+
+      // Verify community_resources record is deleted
+      const checkCommResDeleted = await db.query('SELECT 1 FROM community_resources WHERE id = $1', [postRemoveId]);
+      assert(checkCommResDeleted.rows.length === 0, 'Resource removed from community_resources table');
+
+      // CRITICAL CHECK: Verify original user document in documents table is PRESERVED (NOT deleted!)
+      const checkDocPreserved = await db.query('SELECT id, is_community_published FROM documents WHERE id = $1', [docRemove.rows[0].id]);
+      assert(checkDocPreserved.rows.length === 1, 'CRITICAL: Original document is PRESERVED in documents table (not deleted)');
+      assert(checkDocPreserved.rows[0].is_community_published === false, 'Original document is_community_published synchronized to false upon REMOVE');
       console.log('  Admin moderation workflows and actions validated.\n');
     }
 

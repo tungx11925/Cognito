@@ -1945,32 +1945,58 @@ Status: DONE
 
 ### 3. Kết quả Kiểm thử Toàn diện & Hồi quy
 
-#### A. Kiểm thử Chuyên sâu Phase 13 (`scripts/test-phase13.ts` — 69/69 Assertions, 100% Pass)
+#### A. Kiểm thử Chuyên sâu Phase 13 (`scripts/test-phase13.ts` — 82/82 Assertions, 100% Pass)
 1. **Suite 1: User Blocking Lifecycle & Validation (8/8)**: Chặn tự chặn (400), chặn Admin (400), chặn thành công, lấy danh sách chặn, bỏ chặn, mở chặn user chưa bị chặn (404).
 2. **Suite 2: Bi-directional Block Effect on Feed & Comments (10/10)**: Lọc bảng tin 2 chiều (A không thấy B và B không thấy A), người thứ ba C trung lập thấy cả hai, chặn truy cập chi tiết (403), lọc bình luận 2 chiều.
 3. **Suite 3: Block Enforcement on Interactions (5/5)**: Chặn Like, Save, Reshare, Comment khi có quan hệ chặn (403 Forbidden cả 2 chiều).
-4. **Suite 4: Content Reporting Lifecycle & Anti-Spam Protections (10/10)**: Tự báo cáo bài của mình bị chặn (400), báo cáo tài nguyên, bình luận, người dùng; chặn báo cáo trùng lặp; tự động ẩn bài viết khi `report_count >= 5`.
+4. **Suite 4: Content Reporting Lifecycle & Anti-Spam Protections (12/12)**:
+   - Tự báo cáo bài của mình bị chặn (400), báo cáo tài nguyên, bình luận, người dùng.
+   - Chặn báo cáo trùng lặp khi chưa xử lý (400).
+   - **Xác thực lý do KHÁC (OTHER)**: Bắt buộc `details` có ít nhất 5 ký tự, nếu rỗng hoặc quá ngắn bị từ chối với HTTP 400 Bad Request.
+   - **Tự động ẩn nội dung (Auto-hide threshold)**: Khi `report_count >= 5`, bài đăng tự động gán `is_hidden = true, is_public = false`.
+   - **Đồng bộ trạng thái tài nguyên gốc khi Auto-hide**: Tài liệu gốc trong `documents` tự động được đồng bộ `is_community_published = false`.
 5. **Suite 5: Rate Limiting & Anti-Spam Protection (4/4)**: Comment cooldown <3s (429), bình luận lặp nội dung trong 60s (400), vượt ngưỡng xuất bản 5 bài / 10 phút (429).
-6. **Suite 6: Admin Content Moderation Queue & Action Execution (19/19)**: Lấy thống kê kiểm duyệt, duyệt hàng đợi, thực thi `KEEP` (DISMISSED), `HIDE` (is_hidden = true), `WARN` (warning_count + 1), `SUSPEND` (is_suspended = true, 403 khi gọi API), `UNSUSPEND`, `REMOVE` (xóa vĩnh viễn khỏi CSDL).
+6. **Suite 6: Admin Content Moderation Queue & Action Execution (26/26)**:
+   - Lấy thống kê kiểm duyệt, duyệt hàng đợi, thực thi `KEEP` (DISMISSED).
+   - **Hành động HIDE**: Ẩn bài đăng (`is_hidden = true, is_public = false`), đồng bộ ngược `is_community_published = false` trên tài liệu gốc trong `documents` (chuẩn hóa giống cơ chế unpublish Phase 12).
+   - **Hành động REMOVE trên Comment**: Xóa vĩnh viễn bình luận vi phạm khỏi CSDL, đồng thời **tự động giảm `comment_count`** trên tài nguyên tương ứng (`GREATEST(0, comment_count - 1)`).
+   - **Hành động REMOVE trên Resource (BẢO TOÀN DỮ LIỆU HỌC TẬP CÁ NHÂN)**: Chỉ xóa bản ghi `community_resources` khỏi Community, **TUYỆT ĐỐI KHÔNG XÓA tài liệu/quiz gốc trong bảng `documents`/`test_sets`** của người dùng, đồng thời đồng bộ `is_community_published = false`.
+   - **Hành động WARN**: Cảnh cáo người dùng (`warning_count + 1`, `status = WARNED`).
+   - **Đình chỉ tài khoản (SUSPEND - Cả Direct & Action)**:
+     * Khóa tài khoản (`is_suspended = true, status = 'SUSPENDED'`).
+     * **Ẩn hàng loạt toàn bộ bài đăng đã publish** của user đó (`UPDATE community_resources SET is_hidden = true, is_public = false`).
+     * **Ẩn hàng loạt toàn bộ bình luận** của user đó (`UPDATE community_comments SET is_hidden = true`).
+     * **Đồng bộ gỡ cờ publish** trên toàn bộ tài liệu gốc của user (`UPDATE documents SET is_community_published = false`).
+     * Chặn toàn bộ authenticated request tiếp theo của user bị khóa (HTTP 403 Forbidden).
+   - **Mở khóa tài khoản (UNSUSPEND)**: Khôi phục trạng thái `ACTIVE`, `is_suspended = false`.
 7. **Suite 7: Moderation History Audit Trail (7/7)**: Ghi nhận đầy đủ audit log cho mọi hành động với admin_name, target, lý do.
 8. **Suite 8: IDOR & Role-Based Access Control (6/6)**: Người dùng thông thường cố truy cập API Admin Moderation đều nhận HTTP 403 Forbidden.
 
 #### B. Kiểm thử Hồi quy Toàn bộ 9 Giai đoạn (`npm run test:fast`)
-- **Phase 3**: PASS (Auth & User System) — 2.43s
-- **Phase 4**: PASS (Document Management & Processing Pipeline) — 3.38s
-- **Phase 7**: PASS (Exam & Question Bank Management) — 2.21s
-- **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 2.04s
-- **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 2.83s
-- **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.51s
-- **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 2.28s
-- **Phase 12**: PASS (Community Ecosystem & Resource Exchange) — 2.35s
-- **Phase 13**: PASS (Community Safety & Content Moderation System) — 3.24s
+- **Phase 3**: PASS (Auth & User System) — 1.89s
+- **Phase 4**: PASS (Document Management & Processing Pipeline) — 3.30s
+- **Phase 7**: PASS (Exam & Question Bank Management) — 2.13s
+- **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 1.90s
+- **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 2.67s
+- **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.17s
+- **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 2.17s
+- **Phase 12**: PASS (Community Ecosystem & Resource Exchange) — 2.12s
+- **Phase 13**: PASS (Community Safety & Content Moderation System) — 2.76s
 - $\rightarrow$ **9/9 PHASES PASSED (100%), ZERO REGRESSION DETECTED**.
 
 ---
 
+### 4. Ghi nhận Backlog & Định hướng Cho Các Phase Sau
+1. **Chống Spam Report Ảo cho Auto-hide (Backlog)**:
+   - Hiện tại ngưỡng `report_count >= 5` giúp dọn sạch nội dung độc hại khẩn cấp.
+   - Backlog cải tiến: Xem xét giới hạn chỉ tính các report từ các tài khoản không có mối liên hệ bạn bè / khác IP / có độ tin cậy nhất định (trust score) để ngăn ngừa hành vi cố tình report dìm hàng lẫn nhau.
+2. **Tái sử dụng Bảng `user_blocks` cho Phase 15 (Direct Messaging)**:
+   - Bảng `user_blocks` và quan hệ chặn 2 chiều đã được thiết kế chuẩn mực. Khi thực hiện Phase 15 (Nhắn tin trực tiếp), hệ thống sẽ tái sử dụng trực tiếp bảng `user_blocks` này để chặn gửi/nhận tin nhắn giữa 2 người dùng bị chặn, không tạo thêm bảng block riêng biệt.
+
+---
+
 ### Tuân thủ Rule 0.1.1
-- Toàn bộ tính năng Phase 13 đã được triển khai hoàn chỉnh cả Backend và Frontend, xác minh qua 69/69 test assertions và 9/9 giai đoạn hồi quy.
+- Toàn bộ tính năng Phase 13 đã được triển khai hoàn chỉnh cả Backend và Frontend, xác minh qua 82/82 test assertions và 9/9 giai đoạn hồi quy.
 - Toàn bộ 3 Gate Checks của Rule 0.1.3 đều đạt chuẩn xuất sắc (TypeScript 0 errors, Next.js build pass, Fast regression pass).
 - **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 14 (User Profile & Public Profile)**.
 - Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, nghiệm thu trước khi tiếp tục.
