@@ -46,6 +46,7 @@ export default function ProgressPage() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ProgressSummary | null>(null);
 
   // Goal Creation Modal State
@@ -63,11 +64,14 @@ export default function ProgressPage() {
   const fetchProgress = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await progressService.getSummary();
       setSummary(data);
     } catch (err: any) {
       console.error('Error fetching progress summary:', err);
-      triggerMessage(err.message || 'Lỗi tải dữ liệu tiến độ', 'error');
+      const errMsg = err.message || 'Lỗi kết nối tới máy chủ khi tải tiến độ';
+      setError(errMsg);
+      triggerMessage(errMsg, 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -269,8 +273,81 @@ export default function ProgressPage() {
           </div>
         </div>
 
-        {/* Top 5 Metrics Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        {/* Unauthenticated Alert Banner */}
+        {!isAuthenticated && (
+          <div className="mb-8 p-6 bg-amber-50 border-2 border-amber-200 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <AlertCircle size={22} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-amber-900">Bạn chưa đăng nhập</h3>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Vui lòng đăng nhập để lưu trữ nhật ký học tập, theo dõi chuỗi ngày học liên tục và đồng bộ tiến độ mục tiêu cá nhân.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowLoginModal(true)}
+              className="px-5 py-2.5 rounded-xl bg-[#1a2e1c] text-white hover:bg-[#2d5a3d] text-xs font-bold shrink-0 transition-all shadow-sm"
+            >
+              Đăng nhập ngay
+            </button>
+          </div>
+        )}
+
+        {/* Error Alert Banner */}
+        {error && !summary && (
+          <div className="mb-8 p-6 bg-rose-50 border-2 border-rose-200 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                <AlertCircle size={22} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-rose-900">Không thể tải dữ liệu tiến độ</h3>
+                <p className="text-xs text-rose-700 mt-0.5">{error}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleRefresh}
+              className="px-5 py-2.5 rounded-xl bg-rose-700 text-white hover:bg-rose-800 text-xs font-bold shrink-0 transition-all shadow-sm flex items-center gap-2"
+            >
+              <RefreshCw size={14} />
+              Thử lại
+            </button>
+          </div>
+        )}
+
+        {/* Loading Skeleton */}
+        {loading && !summary ? (
+          <div className="space-y-8 animate-pulse">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-32 bg-white rounded-2xl border border-gray-200 p-5 flex flex-col justify-between">
+                  <div className="h-3 w-16 bg-gray-200 rounded" />
+                  <div className="h-8 w-24 bg-gray-200 rounded mt-2" />
+                </div>
+              ))}
+            </div>
+            <div className="h-48 bg-white rounded-3xl border border-gray-200 p-6 flex flex-col justify-between">
+              <div className="h-4 w-48 bg-gray-200 rounded" />
+              <div className="h-24 bg-gray-100 rounded-2xl" />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 h-72 bg-white rounded-3xl border border-gray-200 p-6">
+                <div className="h-4 w-56 bg-gray-200 rounded mb-4" />
+                <div className="h-48 bg-gray-100 rounded-2xl" />
+              </div>
+              <div className="h-72 bg-white rounded-3xl border border-gray-200 p-6">
+                <div className="h-4 w-40 bg-gray-200 rounded mb-4" />
+                <div className="h-48 bg-gray-100 rounded-2xl" />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Top 5 Metrics Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           {/* Streak Card */}
           <div className="col-span-2 sm:col-span-1 bg-white p-5 rounded-2xl border-2 border-orange-200 shadow-[3px_3px_0px_0px_rgba(249,115,22,0.15)] flex flex-col justify-between">
             <div className="flex items-center justify-between mb-3">
@@ -739,6 +816,8 @@ export default function ProgressPage() {
             </div>
           )}
         </div>
+          </>
+        )}
       </main>
 
       {/* Goal Creation Modal */}

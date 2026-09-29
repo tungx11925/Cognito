@@ -257,8 +257,162 @@ export async function runPhase10Tests() {
       `recent_activities ghi nhận chi tiết các hành động vừa thực hiện`
     );
 
+    console.log('\n--- SUITE 6: Cross-Module Real Activity Logging & Login Non-Mutation ---');
+
+    // 1. Study Session -> learning_activity
+    const docInsertRes = await db.query(
+      `INSERT INTO documents (user_id, title, doc_url, category, file_type)
+       VALUES ($1, 'Tài liệu Kiểm thử Phase 10', 'https://example.com/doc10.pdf', 'Toán học', 'pdf')
+       RETURNING id`,
+      [testUserId]
+    );
+    const testDocId = docInsertRes.rows[0].id;
+
+    const sessionRes = await axios.post(
+      `${API_BASE}/study-sessions`,
+      { document_id: testDocId, duration_seconds: 600 },
+      { headers: authHeaders }
+    );
+    assert(sessionRes.status === 201 || sessionRes.status === 200, `POST /api/study-sessions thành công`);
+    const sessionId = sessionRes.data.id || sessionRes.data.session?.id;
+
+    const sessionActRes = await db.query(
+      `SELECT * FROM learning_activities WHERE user_id = $1 AND idempotency_key = $2`,
+      [testUserId, `study_session:${sessionId}`]
+    );
+    assert(sessionActRes.rows.length === 1, `Study session tự động sinh duy nhất 1 learning_activity với idempotency_key`);
+    assert(sessionActRes.rows[0].activity_type === 'read_doc', `Activity type của study session là 'read_doc'`);
+    assert(sessionActRes.rows[0].duration_seconds === 600, `Duration của study session lưu đúng 600s`);
+
+    // 2. Flashcard Review -> learning_activity
+    const deckRes = await axios.post(
+      `${API_BASE}/flashcards/decks`,
+      { name: 'Bộ thẻ Phase 10 Test', description: 'Test Deck' },
+      { headers: authHeaders }
+    );
+    const deckId = deckRes.data.id;
+
+    const cardRes = await axios.post(
+      `${API_BASE}/flashcards`,
+      { deck_id: deckId, front: 'Question Phase 10?', back: 'Answer Phase 10' },
+      { headers: authHeaders }
+    );
+    const cardId = cardRes.data.id;
+
+    const reviewRes = await axios.post(
+      `${API_BASE}/flashcards/review/${cardId}`,
+      { difficulty: 'good' },
+      { headers: authHeaders }
+    );
+    assert(reviewRes.status === 200, `POST /flashcards/review/:id thành công`);
+
+    const flashcardActRes = await db.query(
+      `SELECT * FROM learning_activities WHERE user_id = $1 AND activity_type = 'study_flashcards' AND entity_id = $2`,
+      [testUserId, cardId]
+    );
+    assert(flashcardActRes.rows.length >= 1, `Flashcard review tự động sinh learning_activity ('study_flashcards')`);
+
+    // 3. Login must NOT create activity or streak (Zero Phantom Activity)
+    const idleEmail = `phase10_idle_${Date.now()}@example.com`;
+    const idleRegRes = await axios.post(`${API_BASE}/auth/register`, {
+      email: idleEmail,
+      password: 'Password123!',
+      name: 'Idle User',
+      phone: `0987${Math.floor(100000 + Math.random() * 900000)}`,
+    });
+    const idleUserId = idleRegRes.data.user.id;
+
+    // Login 3 lần liên tiếp
+    for (let i = 0; i < 3; i++) {
+      await axios.post(`${API_BASE}/auth/login`, {
+        email: idleEmail,
+        password: 'Password123!',
+      });
+    }
+
+    // Kiểm tra DB: Phải có ĐÚNG 0 activity và 0 study dates
+    const idleActRes = await db.query(`SELECT COUNT(*) as count FROM learning_activities WHERE user_id = $1`, [idleUserId]);
+    assert(parseInt(idleActRes.rows[0].count, 10) === 0, `Đăng nhập NHIỀU LẦN TUYỆT ĐỐI KHÔNG sinh activity (count = 0)`);
+
+    const idleDateRes = await db.query(`SELECT COUNT(*) as count FROM user_study_dates WHERE user_id = $1`, [idleUserId]);
+    assert(parseInt(idleDateRes.rows[0].count, 10) === 0, `Đăng nhập TUYỆT ĐỐI KHÔNG sinh ngày điểm danh trong user_study_dates (count = 0)`);
+
+    const idleSummaryRes = await axios.get(`${API_BASE}/progress/summary`, {
+      headers: { Authorization: `Bearer ${idleRegRes.data.accessToken || idleRegRes.data.token}` }
+    });
+    assert(idleSummaryRes.data.streak.currentStreak === 0, `User chỉ đăng nhập có streak = 0`);
+    assert(idleSummaryRes.data.streak.studiedToday === false, `User chỉ đăng nhập có studiedToday = false`);
+
+    await db.query(`DELETE FROM users WHERE id = $1`, [idleUserId]);
+
+    console.log('\n--- SUITE 7: Diverse Goal Periods (Weekly) & Target Types ---');
+
+    // 1. Weekly Goal (Số bài trắc nghiệm trong tuần)
+    const weeklyGoalRes = await axios.post(
+      `${API_BASE}/learning-goals`,
+      {
+        title: 'Mục tiêu tuần: 5 bài quiz',
+        target_type: 'quizzes_completed',
+        target_value: 5,
+        period: 'weekly',
+      },
+      { headers: authHeaders }
+    );
+    assert(weeklyGoalRes.status === 201, `Tạo mục tiêu tuần (period: weekly) thành công`);
+    const weeklyGoalId = weeklyGoalRes.data.id;
+
+    const listGoalsWeekRes = await axios.get(`${API_BASE}/learning-goals`, { headers: authHeaders });
+    const weeklyGoal = listGoalsWeekRes.data.find((g: any) => g.id === weeklyGoalId);
+    assert(weeklyGoal !== undefined, `Mục tiêu tuần hiển thị trong danh sách`);
+    assert(weeklyGoal.current_value >= 2, `Mục tiêu tuần tính đúng số bài quiz trong tuần (>= 2)`);
+    assert(weeklyGoal.period === 'weekly', `Chu kỳ đúng 'weekly'`);
+
+    // 2. Goal với loại Flashcards Reviewed
+    const flashcardGoalRes = await axios.post(
+      `${API_BASE}/learning-goals`,
+      {
+        title: 'Ôn 10 thẻ Flashcard hôm nay',
+        target_type: 'flashcards_reviewed',
+        target_value: 10,
+        period: 'daily',
+      },
+      { headers: authHeaders }
+    );
+    assert(flashcardGoalRes.status === 201, `Tạo mục tiêu theo thẻ flashcard thành công`);
+    const flashcardGoalId = flashcardGoalRes.data.id;
+
+    const listGoalsFcRes = await axios.get(`${API_BASE}/learning-goals`, { headers: authHeaders });
+    const fcGoal = listGoalsFcRes.data.find((g: any) => g.id === flashcardGoalId);
+    assert(fcGoal !== undefined, `Mục tiêu flashcard hiển thị trong danh sách`);
+    assert(fcGoal.target_type === 'flashcards_reviewed', `Target type đúng 'flashcards_reviewed'`);
+
+    // 3. Goal với loại Documents Read
+    const docGoalRes = await axios.post(
+      `${API_BASE}/learning-goals`,
+      {
+        title: 'Đọc 1 tài liệu hôm nay',
+        target_type: 'documents_read',
+        target_value: 1,
+        period: 'daily',
+      },
+      { headers: authHeaders }
+    );
+    assert(docGoalRes.status === 201, `Tạo mục tiêu đọc tài liệu thành công`);
+    const docGoalId = docGoalRes.data.id;
+
+    const listGoalsDocRes = await axios.get(`${API_BASE}/learning-goals`, { headers: authHeaders });
+    const docGoal = listGoalsDocRes.data.find((g: any) => g.id === docGoalId);
+    assert(docGoal !== undefined, `Mục tiêu đọc tài liệu hiển thị trong danh sách`);
+    assert(docGoal.current_value >= 1, `current_value đọc tài liệu tính chính xác >= 1`);
+    assert(docGoal.is_completed === true, `is_completed = true do đã đọc tài liệu ở Suite 6`);
+
+    // Cleanup goals
+    await axios.delete(`${API_BASE}/learning-goals/${weeklyGoalId}`, { headers: authHeaders });
+    await axios.delete(`${API_BASE}/learning-goals/${flashcardGoalId}`, { headers: authHeaders });
+    await axios.delete(`${API_BASE}/learning-goals/${docGoalId}`, { headers: authHeaders });
+
     console.log('\n========================================================');
-    console.log('    ✅ ALL PHASE 10 VERIFICATION SUITES PASSED (5/5)   ');
+    console.log('    ✅ ALL PHASE 10 VERIFICATION SUITES PASSED (7/7)   ');
     console.log('========================================================\n');
   } catch (err: any) {
     console.error('\x1b[31m[ERROR IN PHASE 10 TEST EXECUTION]:\x1b[0m', err.response?.data || err.message);

@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { 
   Layers, FileText, Network, BookOpen, 
-  HelpCircle, ArrowRight, Sparkles, CheckCircle2 
+  HelpCircle, ArrowRight, Sparkles, CheckCircle2, TrendingUp 
 } from 'lucide-react';
 
 export default function StudySessionsPage() {
@@ -53,6 +53,15 @@ export default function StudySessionsPage() {
       color: 'bg-purple-50 text-purple-800 border-purple-200',
       badge: 'Quiz Engine',
       actionText: 'Làm bài kiểm tra',
+    },
+    {
+      title: 'Tiến độ & Mục tiêu học tập',
+      description: 'Theo dõi chuỗi ngày học liên tục (Study Streak), hoàn thành các mục tiêu học tập cá nhân và xem nhật ký hoạt động thực tế 100%.',
+      href: '/progress',
+      icon: TrendingUp,
+      color: 'bg-orange-50 text-orange-800 border-orange-200',
+      badge: 'Streak & Goals',
+      actionText: 'Xem tiến độ học tập',
     },
   ];
 
