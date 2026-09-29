@@ -2,7 +2,7 @@ import rateLimit from 'express-rate-limit';
 
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development' ? 500 : 10,
+  max: process.env.NODE_ENV === 'production' ? 10 : 500,
   message: { error: 'Quá nhiều yêu cầu, vui lòng thử lại sau 15 phút' },
   standardHeaders: true,
   legacyHeaders: false,
