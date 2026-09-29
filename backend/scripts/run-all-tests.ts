@@ -17,6 +17,7 @@ const ALL_TESTS: PhaseTest[] = [
   { phase: 'Phase 8', name: 'Quiz / Test System & Anti-Cheat Grading', script: 'scripts/test-phase8.ts', isLiveAi: false },
   { phase: 'Phase 9', name: 'Notes, Mindmaps & Flashcards Workspace', script: 'scripts/test-phase9.ts', isLiveAi: false },
   { phase: 'Phase 10', name: 'Learning Activity, Learning Goals & StudyStreak', script: 'scripts/test-phase10.ts', isLiveAi: false },
+  { phase: 'Phase 11', name: 'Focus Mode & Distraction Detection Engine', script: 'scripts/test-phase11.ts', isLiveAi: false },
 ];
 
 async function runRegression() {

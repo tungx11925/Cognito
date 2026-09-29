@@ -4,11 +4,20 @@ import React from 'react';
 import Link from 'next/link';
 import { 
   Layers, FileText, Network, BookOpen, 
-  HelpCircle, ArrowRight, Sparkles, CheckCircle2, TrendingUp 
+  HelpCircle, ArrowRight, Sparkles, CheckCircle2, TrendingUp, Zap
 } from 'lucide-react';
 
 export default function StudySessionsPage() {
   const studyTools = [
+    {
+      title: 'Chế độ tập trung (Focus Mode)',
+      description: 'Không gian học sâu không phân tâm. Bấm giờ Pomodoro, phát hiện chuyển tab/cửa sổ và tự động đồng bộ chuỗi ngày học.',
+      href: '/focus',
+      icon: Zap,
+      color: 'bg-teal-50 text-teal-800 border-teal-200',
+      badge: 'Deep Focus & Pomodoro',
+      actionText: 'Vào chế độ tập trung',
+    },
     {
       title: 'Flashcards & Spaced Repetition',
       description: 'Luyện tập ghi nhớ chủ động với thuật toán lặp lại ngắt quãng SM-2, theo dõi tiến độ thẻ cần ôn và chuỗi ngày học.',

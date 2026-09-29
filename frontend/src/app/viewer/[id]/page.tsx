@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDocumentById } from '@/services/document.service';
-import { ArrowLeft, Share2, Download, AlertCircle, Send, Languages, PenLine, Loader2 } from 'lucide-react';
+import { ArrowLeft, Share2, Download, AlertCircle, Send, Languages, PenLine, Loader2, Zap } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Panel, Group, Separator } from 'react-resizable-panels';
@@ -199,6 +199,14 @@ export default function DocumentViewerPage() {
         </div>
         
         <div className="flex items-center gap-2.5 shrink-0">
+          <Link
+            href={`/focus?documentId=${docId}`}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded-lg transition-all font-bold shadow-sm"
+            title="Bắt đầu phiên học tập trung với tài liệu này"
+          >
+            <Zap size={14} className="text-emerald-600 fill-emerald-600" />
+            <span>Tập trung</span>
+          </Link>
           <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-[#0D2B24] border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded-lg transition-all font-semibold">
             <Share2 size={14} /> Chia sẻ
           </button>

@@ -33,6 +33,7 @@ import {
   FileQuestion,
   HelpCircle,
   Share2,
+  Zap,
 } from "lucide-react";
 
 export default function QuizPage() {
@@ -586,6 +587,16 @@ export default function QuizPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Focus Mode Link */}
+            <Link
+              href={`/focus?quizId=${testSetId}`}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl text-xs sm:text-sm font-bold border border-amber-200 transition-colors"
+              title="Chuyển sang Chế độ Tập trung chuyên sâu với đề thi này"
+            >
+              <Zap size={14} className="text-amber-600 fill-amber-600" />
+              <span>Tập trung</span>
+            </Link>
+
             {/* Live Timer */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 rounded-xl text-xs sm:text-sm font-black border border-emerald-200">
               <Clock size={16} className="text-emerald-600 animate-pulse" />

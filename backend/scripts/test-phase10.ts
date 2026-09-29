@@ -28,7 +28,7 @@ export async function runPhase10Tests() {
     const testEmail = 'phase10_student@example.com';
     const testPhone = '0987650010';
 
-    await db.query(`DELETE FROM users WHERE email = $1 OR phone = $2`, [testEmail, testPhone]);
+    await db.query(`DELETE FROM users WHERE email = $1 OR phone = $2 OR name = 'Phase 10 Learner'`, [testEmail, testPhone]);
 
     const regRes = await axios.post(`${API_BASE}/auth/register`, {
       email: testEmail,
@@ -317,7 +317,7 @@ export async function runPhase10Tests() {
     const idleRegRes = await axios.post(`${API_BASE}/auth/register`, {
       email: idleEmail,
       password: 'Password123!',
-      name: 'Idle User',
+      name: `Idle User ${Date.now()}`,
       phone: `0987${Math.floor(100000 + Math.random() * 900000)}`,
     });
     const idleUserId = idleRegRes.data.user.id;

@@ -1465,7 +1465,146 @@ Status: COMPLETED (WAITING FOR USER ACCEPTANCE)
 
 ### Tuân thủ Rule 0.1.1
 - Toàn bộ tính năng thuộc Phase 10 đã được triển khai, kiểm thử, hồi quy và build production hoàn tất.
-- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 11**.
+- Phase 10 đã được nghiệm thu chính thức và chuyển tiếp sang Phase 11.
+
+---
+
+## PHASE 11 — FOCUS MODE & DISTRACTION DETECTION ENGINE — 2026-09-29
+Status: DONE
+
+### Gate Baseline Checks (Mục 0.1.3):
+- **Gate Check 1 (Backend TypeScript Build)**: `npm run build` (`tsc`) $\rightarrow$ **PASSED (0 errors)**.
+- **Gate Check 2 (Frontend TypeScript Typecheck)**: `npx tsc --noEmit` $\rightarrow$ **PASSED (0 errors)**.
+- **Gate Check 3 (Frontend Production Build)**: `npm run build` (`next build`) $\rightarrow$ **PASSED (0 errors)**. Toàn bộ 23/23 static pages biên dịch thành công, bao gồm route mới `/focus`.
+
+---
+
+### 1. Kiến trúc Cốt lõi Chế độ Tập trung (Focus Architecture)
+- **Bản chất chế độ học**: Focus Mode không phải là một module cô lập mà là một chế độ học (Mode) xuyên suốt, liên kết chặt chẽ với Thư viện tài liệu (`/viewer/[id]`), Đề thi trắc nghiệm (`/quiz/[testSetId]`) và Bảng tiến độ học tập (`/progress`).
+- **Đa cổng truy cập (Multi-Entry Points)**:
+  1. `/focus`: Trang chế độ tập trung chuyên biệt (hỗ trợ chọn mục tiêu thời gian, tùy chỉnh phút học, chọn tài liệu/đề thi liên kết).
+  2. Từ Trình đọc tài liệu (`/viewer/[id]`): Nút "Tập trung" trên thanh công cụ điều hướng trực tiếp sang `/focus?documentId=${docId}`.
+  3. Từ Phòng thi trắc nghiệm (`/quiz/[testSetId]`): Nút "Tập trung" trên thanh trạng thái điều hướng trực tiếp sang `/focus?quizId=${testSetId}`.
+  4. Từ Không gian tự học (`/study-sessions`): Thẻ công cụ "Chế độ tập trung (Focus Mode)".
+  5. Từ Menu điều hướng (`Navbar.tsx`): Menu Desktop và Menu Profile.
+- **Phát hiện sao nhãng thuần sự kiện trình duyệt (Browser-Only Signals)**:
+  - Chỉ bắt các sự kiện chuẩn Web APIs: `visibilitychange` (`PAGE_HIDDEN`), `window.blur` (`PAGE_BLUR`), `window.focus` (`RETURNED`), `idle` không tương tác chuột/phím quá 60s (`IDLE`).
+  - **Tuyệt đối tuân thủ cam kết quyền riêng tư**: Không Camera, không Microphone, không phân tích cảm xúc, không đánh giá tâm lý hay tình trạng sức khỏe.
+- **Không bao giờ là ngõ cụt (Never a Dead End)**:
+  - Khi hoàn thành hoặc dừng phiên: Hiển thị bảng tổng kết rõ ràng (thời gian thực tế, thời gian mục tiêu, số lần xao nhãng, điểm Focus Score, chuỗi ngày học).
+  - Cung cấp ngay 2 hướng hành động tiếp theo:
+    1. **Nghỉ giải lao Pomodoro (Break Timer)**: Đếm ngược 5 phút nghỉ ngơi kèm bài tập thở thư giãn 4-4-4.
+    2. **Tiếp tục học tập (Continue Learning)**: Nút bấm trực tiếp quay lại đọc tài liệu (`/viewer/${documentId}`), quay lại làm đề thi (`/quiz/${quizId}`), mở thư viện (`/library`), luyện đề (`/ai-test`), hoặc xem bảng tiến độ (`/progress`).
+
+---
+
+### 2. CSDL & Dữ liệu Cấu trúc (Database Schema)
+- Migration: `backend/migrations/1790800000000_phase11_focus_mode.js`.
+- Bảng `study_sessions`:
+  - Cho phép `document_id DROP NOT NULL` để hỗ trợ phiên tập trung tự do (không bắt buộc gắn tài liệu).
+  - Bổ sung các trường:
+    * `quiz_id (int, FK -> test_sets.id ON DELETE SET NULL)`: Liên kết bài kiểm tra.
+    * `learning_goal_id (int, FK -> learning_goals.id ON DELETE SET NULL)`: Liên kết mục tiêu học tập.
+    * `target_duration_seconds (int, DEFAULT 1500)`: Thời gian mục tiêu (15m, 25m, 45m, 60m,...).
+    * `actual_duration_seconds (int, DEFAULT 0)`: Thời gian tập trung thực tế.
+    * `status ('IN_PROGRESS' | 'COMPLETED' | 'INTERRUPTED' | 'CANCELLED')`: Trạng thái phiên.
+    * `ended_at (TIMESTAMPTZ)`: Thời điểm kết thúc phiên.
+    * `focus_score (int, DEFAULT 100)`: Điểm tập trung (0-100).
+- Bảng mới `focus_distraction_events`:
+  - `id (SERIAL PK)`
+  - `session_id (int, FK -> study_sessions.id ON DELETE CASCADE)`
+  - `event_type ('TAB_SWITCH' | 'PAGE_BLUR' | 'PAGE_HIDDEN' | 'IDLE' | 'RETURNED')`
+  - `occurred_at (TIMESTAMPTZ)`
+  - `duration_seconds (int)`
+  - `details (JSONB)`
+
+---
+
+### 3. Backend Services & APIs
+- **Zod Schema (`focus.schema.ts`)**: Kiểm thực chặt chẽ đầu vào cho `startFocusSessionSchema`, `recordDistractionEventSchema`, `finishFocusSessionSchema`, `focusPingSchema`.
+- **Dịch vụ nghiệp vụ (`focus.service.ts`)**:
+  - `startSession`: Kiểm tra quyền sở hữu IDOR trên document_id / quiz_id. Đánh dấu các phiên mồ côi trước đó thành `INTERRUPTED`. Khởi tạo phiên mới với trạng thái `IN_PROGRESS`.
+  - `getActiveSession`: Lấy phiên đang chạy của người dùng kèm thông tin tài liệu / đề thi đính kèm.
+  - `recordDistraction`: Ghi nhận sự kiện xao nhãng vào `focus_distraction_events` và tự động tăng bộ đếm `distraction_count` của session.
+  - `pingActive`: Heartbeat định kỳ 15 giây cập nhật `actual_duration_seconds`.
+  - `finishSession`: Tính toán điểm Focus Score theo công thức:
+    $$\text{Base Score} = \min\left(100, \text{round}\left(\frac{\text{actualDuration}}{\text{targetDuration}} \times 100\right)\right)$$
+    $$\text{Penalty} = \min(40, \text{distractionCount} \times 5)$$
+    $$\text{Focus Score} = \max(0, \text{Base Score} - \text{Penalty}) \quad (\text{nếu CANCELLED } \rightarrow 0)$$
+    Tự động ghi nhận vào `learning_activities` (`activity_type: 'focus_session'`, `idempotency_key: focus_session:${sessionId}`) và cập nhật StudyStreak trong ngày theo múi giờ UTC+7.
+  - `getSessionSummary`: Trả về báo cáo tổng hợp chi tiết và lịch sử các sự kiện xao nhãng.
+- **Controllers & Routes (`focus.controller.ts`, `focus.routes.ts`)**:
+  - `POST /api/focus/start`: Bắt đầu phiên.
+  - `GET /api/focus/active`: Lấy phiên đang chạy.
+  - `POST /api/focus/:id/distraction`: Ghi nhận sự kiện chuyển tab/cửa sổ.
+  - `POST /api/focus/:id/ping`: Ping nhịp tim thời gian học.
+  - `POST /api/focus/:id/finish`: Kết thúc phiên tập trung.
+  - `GET /api/focus/:id/summary`: Lấy bảng tổng kết phiên.
+
+---
+
+### 4. Giao diện Người dùng (Frontend Implementation)
+- **Trang Chế độ Tập trung Chuyên biệt (`frontend/src/app/focus/page.tsx`)**:
+  - **Trạng thái Thiết lập (SETUP)**:
+    * Lựa chọn mốc thời gian: 15 phút (Khởi động), 25 phút (Pomodoro chuẩn), 45 phút (Chuyên sâu), 60 phút (Bứt phá) hoặc nhập số phút tùy chỉnh.
+    * Bộ chọn nội dung liên kết: Học tự do, Gắn với tài liệu từ Thư viện, Gắn với bộ đề thi trắc nghiệm.
+    * Thông báo minh bạch cam kết bảo mật & quyền riêng tư (không camera, không micro).
+  - **Trạng thái Tập trung Cao độ (ACTIVE)**:
+    * Giao diện đắm chìm (Atmospheric Immersive) tone xanh ngọc thẫm sang trọng (`#0B1B15`).
+    * Đồng hồ đếm ngược vòng tròn SVG hiệu ứng mượt mà.
+    * Huy hiệu đếm số lần rời trang trực tiếp (Live Distraction Counter).
+    * Bật/tắt chế độ toàn màn hình (Fullscreen toggle).
+    * Tạm dừng / Tiếp tục, Hủy phiên với modal xác nhận an toàn.
+    * Thanh điều hướng nhanh tới tài liệu / bài kiểm tra liên kết.
+  - **Trạng thái Tổng kết Phiên (SUMMARY)**:
+    * Thẻ chúc mừng kèm Điểm tập trung (Focus Score) và xếp loại (Xuất sắc, Rất tốt, Khá, Cần cải thiện).
+    * Lưới chỉ số trực quan: Thời gian thực tế vs Mục tiêu, Số lần rời trang, Cộng dồn chuỗi StudyStreak.
+    * Danh sách lịch sử các lần chuyển tab kèm nhãn thời gian thực tế.
+    * **Actionable Next Steps**:
+      - Nút bắt đầu nghỉ giải lao 5 phút (Pomodoro Break).
+      - Nút quay lại tài liệu / bài thi liên kết.
+      - Nút khám phá kho tài liệu, luyện đề thi hoặc xem Bảng tiến độ.
+  - **Trạng thái Giờ nghỉ (BREAK)**:
+    * Đồng hồ đếm ngược 5 phút với thanh tiến trình thư giãn.
+    * Hướng dẫn bài tập thở 4-4-4 nhịp nhàng (Hít vào - Giữ hơi - Thở ra).
+    * Nút kết thúc nghỉ để bắt đầu phiên học mới ngay lập tức.
+- **Tích hợp các điểm truy cập**:
+  - `frontend/src/app/viewer/[id]/page.tsx`: Nút "Tập trung" trên thanh công cụ xem tài liệu.
+  - `frontend/src/app/quiz/[testSetId]/page.tsx`: Nút "Tập trung" trên thanh làm bài thi.
+  - `frontend/src/app/study-sessions/page.tsx`: Thẻ "Chế độ tập trung (Focus Mode)".
+  - `frontend/src/components/landing/Navbar.tsx`: Menu "Tập trung" trên Desktop và Profile dropdown.
+
+---
+
+### 5. Kết quả Kiểm thử & Đảm bảo Chất lượng
+1. **Kiểm thử chuyên sâu Phase 11 (`scripts/test-phase11.ts`)**:
+   - Đã thực thi và vượt qua **6/6 Suites (100%)**:
+     - *Suite 1 (Standalone Focus Session Lifecycle)*: Start $\rightarrow$ activeSession $\rightarrow$ ping $\rightarrow$ finish $\rightarrow$ summary $\rightarrow$ activeSession null.
+     - *Suite 2 (Entry Points Integration)*: Bắt đầu Focus từ Document và Quiz gắn kết chính xác `document_id` và `quiz_id`.
+     - *Suite 3 (Distraction Detection & Focus Score Penalty)*: Ghi nhận sự kiện `TAB_SWITCH`, `PAGE_BLUR`, `PAGE_HIDDEN` $\rightarrow$ `distractionCount` tăng chính xác = 3 $\rightarrow$ Focus Score bị trừ tương ứng từ 100 xuống 85 điểm.
+     - *Suite 4 (Interrupted & Cancelled States)*: Phiên CANCELLED có điểm = 0. Phiên mồ côi cũ tự động đánh dấu thành INTERRUPTED khi mở phiên mới.
+     - *Suite 5 (Auto-Logging to learning_activities & Streak Sync)*: Tự động ghi nhận đúng 1 bản ghi `learning_activities` (`activity_type: 'focus_session'`) và cập nhật `studiedToday = true`, tăng chuỗi Streak.
+     - *Suite 6 (IDOR Protection & Authorization)*: Chặn người dùng khác can thiệp, kết thúc, xem summary hay gắn tài liệu riêng tư của người khác với mã HTTP 403/404.
+2. **Kiểm thử Hồi quy Toàn diện (`npm run test:fast`)**:
+   - Đã thực thi đồng thời toàn bộ 7 modules từ Phase 3 đến Phase 11:
+     - **Phase 3**: PASS (Auth & User System) — 2.59s
+     - **Phase 4**: PASS (Document Processing Pipeline & Chunks) — 3.71s
+     - **Phase 7**: PASS (Exam & Question Bank Management) — 2.49s
+     - **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 2.29s
+     - **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 2.83s
+     - **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.61s
+     - **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 2.06s
+     - $\rightarrow$ **7/7 PHASES PASSED (100%), ZERO REGRESSION**.
+3. **3 Gate Checks Nghiêm ngặt (Mục 0.1.3)**:
+   - **Gate Check 1 (Backend TypeScript Build)**: `npm run build` (`tsc`) $\rightarrow$ **PASSED (0 errors)**.
+   - **Gate Check 2 (Frontend TypeScript Typecheck)**: `npx tsc --noEmit` $\rightarrow$ **PASSED (0 errors)**.
+   - **Gate Check 3 (Frontend Production Build)**: `npm run build` (`next build`) $\rightarrow$ **PASSED (0 errors)**. Toàn bộ 23/23 static pages biên dịch thành công, bao gồm route mới `/focus`.
+
+---
+
+### Tuân thủ Rule 0.1.1
+- Toàn bộ tính năng thuộc Phase 11 đã được triển khai, kiểm thử, hồi quy và build production hoàn tất.
+- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 12**.
 - Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, phản hồi hoặc nghiệm thu chính thức.
 
 
