@@ -13,9 +13,12 @@ export class CommunityService {
       if (res.rows[0].user_id !== userId) throw new AppError('Bạn không có quyền đăng tài liệu của người khác', 403);
       return res.rows[0];
     } else if (resourceType === 'test_set') {
-      const res = await db.query('SELECT id, created_by as user_id, name as title FROM test_sets WHERE id = $1', [resourceId]);
+      const res = await db.query('SELECT id, created_by as user_id, name as title, status FROM test_sets WHERE id = $1', [resourceId]);
       if (res.rows.length === 0) throw new AppError('Không tìm thấy bộ đề thi gốc', 404);
       if (res.rows[0].user_id !== userId) throw new AppError('Bạn không có quyền đăng đề thi của người khác', 403);
+      if (res.rows[0].status !== 'APPROVED') {
+        throw new AppError('Chỉ bộ đề thi đã được duyệt (APPROVED) mới được phép xuất bản lên Cộng đồng', 400);
+      }
       return res.rows[0];
     } else if (resourceType === 'mindmap') {
       const res = await db.query('SELECT id, user_id, title FROM mindmaps WHERE id = $1', [resourceId]);
@@ -239,12 +242,18 @@ export class CommunityService {
     const items = await Promise.all(
       result.rows.map(async (row) => {
         const isAvailable = await this.checkUnderlyingAvailability(row.resource_type, row.resource_id);
+        const saveCount = Number(row.save_count ?? 0);
         return {
           ...row,
           has_liked: !!row.has_liked,
           has_saved: !!row.has_saved,
           is_available: isAvailable,
           status: isAvailable ? 'AVAILABLE' : 'UNAVAILABLE',
+          likes: Number(row.like_count ?? 0),
+          saves: saveCount,
+          save_count: saveCount,
+          forks: saveCount,
+          views: Number(row.view_count ?? 0),
         };
       })
     );
@@ -315,6 +324,13 @@ export class CommunityService {
       resource.unavailable_reason = 'Tài liệu gốc đã bị xóa hoặc ngừng chia sẻ bởi tác giả';
     }
 
+    const saveCount = Number(resource.save_count ?? 0);
+    resource.likes = Number(resource.like_count ?? 0);
+    resource.saves = saveCount;
+    resource.save_count = saveCount;
+    resource.forks = saveCount;
+    resource.views = Number(resource.view_count ?? 0);
+
     return resource;
   }
 
@@ -373,7 +389,8 @@ export class CommunityService {
     }
 
     const updated = await db.query('SELECT save_count FROM community_resources WHERE id = $1', [resourceId]);
-    return { saved, save_count: updated.rows[0].save_count };
+    const count = Number(updated.rows[0]?.save_count || 0);
+    return { saved, save_count: count, forks: count, saves: count };
   }
 
   /**
@@ -508,7 +525,7 @@ export class CommunityService {
   async getUserPersonalResources(userId: number) {
     const [docs, quizzes, mindmaps, decks] = await Promise.all([
       db.query(`SELECT id, title, description, category, created_at, 'document' as resource_type FROM documents WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`, [userId]),
-      db.query(`SELECT id, name as title, created_at, 'test_set' as resource_type FROM test_sets WHERE created_by = $1 ORDER BY created_at DESC LIMIT 50`, [userId]),
+      db.query(`SELECT id, name as title, created_at, 'test_set' as resource_type FROM test_sets WHERE created_by = $1 AND status = 'APPROVED' ORDER BY created_at DESC LIMIT 50`, [userId]),
       db.query(`SELECT id, title, created_at, 'mindmap' as resource_type FROM mindmaps WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`, [userId]),
       db.query(`SELECT id, name as title, description, created_at, 'flashcard_deck' as resource_type FROM flashcard_decks WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`, [userId]),
     ]);

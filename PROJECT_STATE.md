@@ -1797,31 +1797,60 @@ Status: DONE
 
 ### 3. Kết quả Kiểm thử Toàn diện & Hồi quy
 
-#### A. Kiểm thử Chuyên sâu Phase 12 (`scripts/test-phase12.ts` — 65/65 Assertions)
-1. **Suite 1: Multi-Type Resource Publishing & Community Abstraction**: Đăng thành công 4 loại tài nguyên (Document, Quiz, Mindmap, Flashcard Deck), kiểm tra đúng `resource_type`, `resource_id`, `category`, tự động chuyển `visibility = public` và `is_community_published = true`.
-2. **Suite 2: Isolation between PUBLIC and PUBLISHED**: Xác nhận tài liệu `visibility = public` tuyệt đối không tự ý lọt vào bảng tin cộng đồng khi chưa được đăng.
+#### A. Kiểm thử Chuyên sâu Phase 12 (`scripts/test-phase12.ts` — 80/80 Assertions, 100% Pass)
+1. **Suite 1: Multi-Type Resource Publishing & Abstraction (Kèm Chặn Quiz DRAFT - Mục 🔴)**:
+   - Đăng thành công 4 loại tài nguyên: Document, Quiz, Mindmap, Flashcard Deck.
+   - **Xác minh chặn Quiz DRAFT (APPROVED != public)**: Cố tình xuất bản bộ đề thi có `status = 'DRAFT'` $\rightarrow$ Bị chặn đứng với HTTP 400 Bad Request (`'Chỉ bộ đề thi đã được duyệt (APPROVED) mới được phép xuất bản lên Cộng đồng'`).
+   - Đảm bảo đề thi DRAFT không được ghi nhận vào `community_resources` hay xuất hiện trên Feed.
+   - API lấy học liệu cá nhân (`getUserPersonalResources`) tự động lọc chỉ trả về các bài quiz có `status = 'APPROVED'`.
+2. **Suite 2: Isolation between PUBLIC and PUBLISHED**: Xác nhận tài liệu `visibility = public` tuyệt đối không tự ý lọt vào bảng tin cộng đồng khi chưa được xuất bản chính thức.
 3. **Suite 3: Community Feed Querying & Filters**: Kiểm tra feed tab `recent`, tab `popular`, lọc `resourceType`, lọc `category`, và tìm kiếm từ khóa.
 4. **Suite 4: Study Flow & Direct Target Routing**: Kiểm tra `study_url` cho Document (`/viewer/:id`), Quiz (`/quiz/:id`), Mindmap (`/mindmap?id=:id`), tăng lượt xem `views`, thích/bỏ thích `likes`, gửi bình luận và trả lời lồng nhau (`parent_id`).
-5. **Suite 5: Save Reference & Zero Data Duplication**: Kiểm tra lưu tài nguyên, tăng `forks`, xác nhận không nhân bản dữ liệu vào bảng `documents`, bản ghi tham chiếu nằm trong `community_saves`, hiển thị trong tab `saved`.
+5. **Suite 5: Save Reference & Zero Data Duplication**: Kiểm tra lưu tài nguyên, tăng `save_count` / `forks`, xác nhận không nhân bản dữ liệu vào bảng `documents`, bản ghi tham chiếu nằm trong `community_saves`, hiển thị trong tab `saved`.
 6. **Suite 6: Graceful Handling of Deleted Original Resources (UNAVAILABLE Policy)**: Xóa tài liệu gốc, kiểm tra endpoint không bị crash, trả về `is_available = false`, `status = UNAVAILABLE`, `study_url = null`.
-7. **Suite 7: Reshare with Strict Attribution**: Chia sẻ lại bài đăng, xác nhận `is_reshare = true`, `author_name` là người chia sẻ, `original_author_name` là tác giả gốc, `original_resource_id` liên kết chính xác, ghi chú chia sẻ được lưu nguyên vẹn, chặn chia sẻ lại trùng lặp.
-8. **Suite 8: IDOR & Authorization Controls**: Chặn User 2 đăng tài liệu của User 1 (403), chặn User 2 gỡ bài của User 1 (403), chặn khách vãng lai đăng bài (401), chủ bài gỡ bài thành công (200), tự động gỡ cờ `is_community_published = false`.
+7. **Suite 7: Reshare with Strict Attribution & Chuỗi Reshare Nhiều Tầng (Mục 🟡)**:
+   - Chia sẻ lại bài đăng, xác nhận `is_reshare = true`, `author_name` là người chia sẻ, `original_author_name` là tác giả gốc, `original_resource_id` liên kết chính xác, ghi chú chia sẻ được lưu nguyên vẹn, chặn chia sẻ lại trùng lặp.
+   - **Chuỗi Reshare nhiều tầng (User A $\rightarrow$ User B $\rightarrow$ User C)**: Khi User C chia sẻ lại bài đã được User B chia sẻ từ User A, hệ thống bảo toàn `original_author_id` và `original_author_name` trỏ chính xác về User A (tác giả gốc thật sự), không bị trôi thành User B.
+8. **Suite 8: IDOR & Authorization Controls trên Cả 4 Loại Tài nguyên (Mục 🟡)**:
+   - Chặn IDOR Publish khi User 2 cố tình đăng tài sản của User 1:
+     * Document $\rightarrow$ HTTP 403 Forbidden.
+     * Test Set (Quiz) $\rightarrow$ HTTP 403 Forbidden.
+     * Mindmap $\rightarrow$ HTTP 403 Forbidden.
+     * Flashcard Deck $\rightarrow$ HTTP 403 Forbidden.
+   - Chặn IDOR Unpublish khi User 2 cố tình gỡ bài đăng của User 1:
+     * Unpublish Document $\rightarrow$ HTTP 403 Forbidden.
+     * Unpublish Quiz $\rightarrow$ HTTP 403 Forbidden.
+     * Unpublish Mindmap $\rightarrow$ HTTP 403 Forbidden.
+     * Unpublish Flashcard Deck $\rightarrow$ HTTP 403 Forbidden.
+   - Chặn khách vãng lai đăng bài (HTTP 401).
+   - Chủ bài gỡ bài thành công (HTTP 200), tự động gỡ cờ `is_community_published = false`.
 
 #### B. Kiểm thử Hồi quy 8 Giai đoạn (`npm run test:fast`)
-- **Phase 3**: PASS (Auth & User System) — 2.16s
-- **Phase 4**: PASS (Document Processing Pipeline & Chunks) — 3.47s
-- **Phase 7**: PASS (Exam & Question Bank Management) — 2.26s
-- **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 2.10s
-- **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 2.96s
-- **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.69s
-- **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 2.60s
-- **Phase 12**: PASS (Community Ecosystem & Resource Exchange) — 2.33s
+- **Phase 3**: PASS (Auth & User System) — 2.21s
+- **Phase 4**: PASS (Document Management & Processing Pipeline) — 3.27s
+- **Phase 7**: PASS (Exam & Question Bank Management) — 2.31s
+- **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading) — 2.15s
+- **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace) — 2.87s
+- **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak) — 2.26s
+- **Phase 11**: PASS (Focus Mode & Distraction Detection Engine) — 2.27s
+- **Phase 12**: PASS (Community Ecosystem & Resource Exchange) — 2.40s
 - $\rightarrow$ **8/8 PHASES PASSED (100%), ZERO REGRESSION DETECTED**.
 
 ---
 
+### 4. Thống nhất Thuật ngữ & Backlog Kế hoạch Tiếp theo (Mục 🟡)
+
+#### A. Thống nhất Đặt tên: `save_count` vs `forks`
+- Tên trường chuẩn mực trong CSDL và Backend Service là `save_count` (đồng bộ với bảng `community_saves`).
+- Để duy trì tính tương thích ngược với API Flashcards, trường `forks` và `saves` được trả về song song (alias) với giá trị bằng đúng `save_count`. Phía Frontend render trực quan với `save_count ?? forks ?? 0`.
+
+#### B. Backlog cho Phase 15 (Direct Messaging & Communication)
+- Ghi nhận vào kế hoạch Phase 15: Bổ sung cầu nối hành động trực tiếp **"Nhắn tin cho tác giả"** ngay tại Thẻ bình luận (Comment) và Trang hồ sơ tác giả (Author Profile) trên Community, giúp luồng trò chuyện mở thẳng vào Conversation với tác giả tài nguyên thay vì tồn tại như một module chat cô lập.
+
+---
+
 ### Tuân thủ Rule 0.1.1
-- Phase 12 đã hoàn thành 100% các tiêu chí kỹ thuật, giao diện và bảo mật theo master prompt.
+- Toàn bộ 1 điểm 🔴 và các điểm 🟡 của người dùng đã được giải quyết triệt để, cập nhật mã nguồn và kiểm chứng bằng 80/80 bài test tự động.
 - Toàn bộ 3 Gate Checks của Rule 0.1.3 đều đạt chuẩn.
 - **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 13 (Community Safety & Content Moderation)**.
 - Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, nghiệm thu trước khi tiếp tục.

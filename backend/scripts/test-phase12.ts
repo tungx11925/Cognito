@@ -122,7 +122,41 @@ async function runPhase12Tests() {
       assert(checkDoc.rows[0].visibility === 'public', 'Document visibility tự động chuyển thành public khi đăng cộng đồng');
       assert(checkDoc.rows[0].is_community_published === true, 'Document is_community_published = true');
 
-      // 1.2 Publish Quiz
+      // 1.2a Chặn xuất bản bộ đề thi còn ở trạng thái DRAFT (Nguyên tắc APPROVED != public)
+      const draftQuizRes = await db.query(
+        `INSERT INTO test_sets (created_by, name, status)
+         VALUES ($1, 'Đề thi nháp chưa duyệt React 19', 'DRAFT')
+         RETURNING id`,
+        [user1.id]
+      );
+      const draftQuizId = draftQuizRes.rows[0].id;
+
+      try {
+        await axios.post(
+          `${API_BASE}/community/publish`,
+          {
+            resourceType: 'test_set',
+            resourceId: draftQuizId,
+            title: 'Cố tình đăng đề thi nháp DRAFT',
+          },
+          { headers: user1.headers }
+        );
+        assert(false, 'Bộ đề thi DRAFT không được phép xuất bản lên Community');
+      } catch (err: any) {
+        assert(err.response?.status === 400, 'Chặn xuất bản quiz DRAFT: trả về HTTP 400 Bad Request');
+        assert(
+          (err.response?.data?.error || '').includes('APPROVED'),
+          'Thông báo lỗi chỉ rõ yêu cầu status = APPROVED'
+        );
+      }
+
+      const checkDraftInFeed = await db.query(
+        'SELECT id FROM community_resources WHERE resource_type = $1 AND resource_id = $2',
+        ['test_set', draftQuizId]
+      );
+      assert(checkDraftInFeed.rows.length === 0, 'Đề thi DRAFT tuyệt đối không được ghi nhận vào community_resources');
+
+      // 1.2b Xuất bản bộ đề thi đã duyệt (APPROVED) thành công
       const pubQuizRes = await axios.post(
         `${API_BASE}/community/publish`,
         {
@@ -389,35 +423,121 @@ async function runPhase12Tests() {
       } catch (err: any) {
         assert(err.response?.status === 400, 'Chia sẻ lại trùng lặp bị từ chối với HTTP 400 Bad Request');
       }
+
+      // Multi-tier Reshare Attribution Chain: User 1 (Original) -> User 2 (Reshare 1) -> User 3 (Reshare 2)
+      const user3 = await registerUser(`p12_resharer3_${timestamp}@cognito.test`, 'P12 Multi-tier Resharer (User 3)');
+      const multiReshareRes = await axios.post(
+        `${API_BASE}/community/resources/${reshareId}/reshare`,
+        { reshareNote: 'User 3 chia sẻ lại bài đã được User 2 chia sẻ' },
+        { headers: user3.headers }
+      );
+      assert(multiReshareRes.status === 201, 'User 3 chia sẻ lại một bài đã reshare thành công (HTTP 201 Created)');
+      const multiReshareId = multiReshareRes.data.resource.id;
+
+      // Verify detail of User 3's multi-tier reshare
+      const multiDetail = await axios.get(`${API_BASE}/community/resources/${multiReshareId}`, {
+        headers: user3.headers,
+      });
+      const multiData = multiDetail.data.resource;
+      assert(multiData.is_reshare === true, 'is_reshare = true cho bài đăng của User 3');
+      assert(multiData.author_name === user3.name, 'author_name thể hiện đúng User 3');
+      assert(
+        multiData.original_author_id === user1.id,
+        'original_author_id bảo toàn User 1 nguyên thủy (KHÔNG bị trôi thành User 2)'
+      );
+      assert(
+        multiData.original_author_name === user1.name,
+        'original_author_name bảo toàn User 1 nguyên thủy qua chuỗi nhiều tầng reshare'
+      );
+      assert(
+        multiData.original_resource_id === commDocId,
+        'original_resource_id trỏ chính xác về bài đăng gốc của User 1 (không trỏ về bài của User 2)'
+      );
     }
 
-    // ─── SUITE 8: IDOR & Authorization Controls ───
-    console.log('\n--- SUITE 8: IDOR & Authorization Controls ---');
+    // ─── SUITE 8: IDOR & Authorization Controls (All 4 Resource Types) ───
+    console.log('\n--- SUITE 8: IDOR & Authorization Controls (All 4 Resource Types) ---');
     {
-      // 8.1 User 2 attempts to publish User 1's document
+      // 8.1 Chặn IDOR Publish trên toàn bộ 4 loại tài nguyên: User 2 cố tình đăng tài sản của User 1
+      // 8.1.1 Document
       try {
         await axios.post(
           `${API_BASE}/community/publish`,
-          {
-            resourceType: 'document',
-            resourceId: docId,
-            title: 'Tài liệu chiếm quyền',
-          },
+          { resourceType: 'document', resourceId: docId, title: 'Hacked Doc' },
           { headers: user2.headers }
         );
-        assert(false, 'User 2 không được phép đăng tài liệu của User 1');
+        assert(false, 'User 2 không được phép đăng document của User 1');
       } catch (err: any) {
-        assert(err.response?.status === 403, 'Chặn IDOR: User 2 đăng tài liệu của User 1 bị từ chối với HTTP 403 Forbidden');
+        assert(err.response?.status === 403, 'Chặn IDOR Publish Document: User 2 bị từ chối với HTTP 403 Forbidden');
       }
 
-      // 8.2 User 2 attempts to unpublish User 1's post
+      // 8.1.2 Test Set (Quiz)
       try {
-        await axios.delete(`${API_BASE}/community/resources/${commDocId}`, {
-          headers: user2.headers,
-        });
-        assert(false, 'User 2 không được phép gỡ bài đăng của User 1');
+        await axios.post(
+          `${API_BASE}/community/publish`,
+          { resourceType: 'test_set', resourceId: quizId, title: 'Hacked Quiz' },
+          { headers: user2.headers }
+        );
+        assert(false, 'User 2 không được phép đăng quiz của User 1');
       } catch (err: any) {
-        assert(err.response?.status === 403, 'Chặn IDOR: User 2 gỡ bài của User 1 bị từ chối với HTTP 403 Forbidden');
+        assert(err.response?.status === 403, 'Chặn IDOR Publish Test Set: User 2 bị từ chối với HTTP 403 Forbidden');
+      }
+
+      // 8.1.3 Mindmap
+      try {
+        await axios.post(
+          `${API_BASE}/community/publish`,
+          { resourceType: 'mindmap', resourceId: mindmapId, title: 'Hacked Mindmap' },
+          { headers: user2.headers }
+        );
+        assert(false, 'User 2 không được phép đăng mindmap của User 1');
+      } catch (err: any) {
+        assert(err.response?.status === 403, 'Chặn IDOR Publish Mindmap: User 2 bị từ chối với HTTP 403 Forbidden');
+      }
+
+      // 8.1.4 Flashcard Deck
+      try {
+        await axios.post(
+          `${API_BASE}/community/publish`,
+          { resourceType: 'flashcard_deck', resourceId: deckId, title: 'Hacked Deck' },
+          { headers: user2.headers }
+        );
+        assert(false, 'User 2 không được phép đăng flashcard deck của User 1');
+      } catch (err: any) {
+        assert(err.response?.status === 403, 'Chặn IDOR Publish Flashcards: User 2 bị từ chối với HTTP 403 Forbidden');
+      }
+
+      // 8.2 Chặn IDOR Unpublish trên toàn bộ các tài nguyên cộng đồng đã đăng của User 1
+      // 8.2.1 Unpublish Document
+      try {
+        await axios.delete(`${API_BASE}/community/resources/${commDocId}`, { headers: user2.headers });
+        assert(false, 'User 2 không được phép gỡ Document của User 1');
+      } catch (err: any) {
+        assert(err.response?.status === 403, 'Chặn IDOR Unpublish Document: User 2 bị từ chối với HTTP 403 Forbidden');
+      }
+
+      // 8.2.2 Unpublish Quiz
+      try {
+        await axios.delete(`${API_BASE}/community/resources/${commQuizId}`, { headers: user2.headers });
+        assert(false, 'User 2 không được phép gỡ Quiz của User 1');
+      } catch (err: any) {
+        assert(err.response?.status === 403, 'Chặn IDOR Unpublish Quiz: User 2 bị từ chối với HTTP 403 Forbidden');
+      }
+
+      // 8.2.3 Unpublish Mindmap
+      try {
+        await axios.delete(`${API_BASE}/community/resources/${commMindmapId}`, { headers: user2.headers });
+        assert(false, 'User 2 không được phép gỡ Mindmap của User 1');
+      } catch (err: any) {
+        assert(err.response?.status === 403, 'Chặn IDOR Unpublish Mindmap: User 2 bị từ chối với HTTP 403 Forbidden');
+      }
+
+      // 8.2.4 Unpublish Flashcard Deck
+      try {
+        await axios.delete(`${API_BASE}/community/resources/${commDeckId}`, { headers: user2.headers });
+        assert(false, 'User 2 không được phép gỡ Flashcards của User 1');
+      } catch (err: any) {
+        assert(err.response?.status === 403, 'Chặn IDOR Unpublish Flashcards: User 2 bị từ chối với HTTP 403 Forbidden');
       }
 
       // 8.3 Unauthenticated publish attempt

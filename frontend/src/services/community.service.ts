@@ -21,6 +21,7 @@ export interface CommunityResourceItem {
   views: number;
   likes: number;
   forks: number;
+  save_count?: number;
   is_reshare: boolean;
   original_resource_id: number | null;
   original_author_id: number | null;

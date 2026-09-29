@@ -317,7 +317,8 @@ export default function CommunityPage() {
           ? {
               ...r,
               is_saved: !r.is_saved,
-              forks: r.is_saved ? Math.max(0, r.forks - 1) : r.forks + 1,
+              forks: r.is_saved ? Math.max(0, (r.save_count ?? r.forks ?? 0) - 1) : (r.save_count ?? r.forks ?? 0) + 1,
+              save_count: r.is_saved ? Math.max(0, (r.save_count ?? r.forks ?? 0) - 1) : (r.save_count ?? r.forks ?? 0) + 1,
             }
           : r
       )
@@ -839,7 +840,7 @@ export default function CommunityPage() {
                           title="Lưu tham chiếu (Zero data duplication)"
                         >
                           <Bookmark size={15} className={item.is_saved ? 'fill-blue-600' : ''} />
-                          <span>{item.forks}</span>
+                          <span>{item.save_count ?? item.forks ?? 0}</span>
                         </button>
 
                         <button
