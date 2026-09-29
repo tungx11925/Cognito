@@ -69,6 +69,7 @@ export const updateProfileSchema = z.object({
     bio: z.string().max(500, 'Tiểu sử tối đa 500 ký tự').nullable().optional(),
     headline: z.string().max(255, 'Tiêu đề tối đa 255 ký tự').nullable().optional(),
     avatar_url: z.string().nullable().optional(),
+    website: z.string().max(255, 'Địa chỉ website tối đa 255 ký tự').nullable().optional(),
   }),
 });
 

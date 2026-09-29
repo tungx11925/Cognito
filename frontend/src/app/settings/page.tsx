@@ -164,11 +164,12 @@ export default function SettingsPage() {
     }
     setSavingProfile(true);
     try {
-      // Save display name, privacy setting and bio to database
+      // Save display name, privacy setting, bio, and website to database
       const success = await updateProfile({
         name: displayName,
         privacy_setting: privacySetting,
         bio: bio,
+        website: website,
       });
 
       if (success) {

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middlewares/auth.middleware';
+import { authenticate, optionalAuthenticate } from '../middlewares/auth.middleware';
 import * as ActivityController from '../controllers/activity.controller';
 
 const router = Router();
@@ -14,6 +14,6 @@ router.post('/tasks/progress', authenticate, ActivityController.updateTaskProgre
 
 // Friends & Profile
 router.get('/friends', authenticate, ActivityController.getFriends);
-router.get('/users/:targetUserId/profile', authenticate, ActivityController.getProfile);
+router.get('/users/:targetUserId/profile', optionalAuthenticate, ActivityController.getProfile);
 
 export default router;

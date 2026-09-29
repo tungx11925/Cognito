@@ -40,7 +40,7 @@ export const getFriends = async (req: AuthRequest, res: Response, next: any) => 
 
 export const getProfile = async (req: AuthRequest, res: Response, next: any) => {
   try {
-    const viewerId = req.user!.id;
+    const viewerId = req.user?.id || null;
     const targetUserId = parseInt(req.params.targetUserId, 10);
     
     const profile = await profileService.getTargetUserProfile(viewerId, targetUserId);

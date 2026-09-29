@@ -8,7 +8,7 @@ class ProfileService {
     return await profileRepository.getFriends(userId);
   }
 
-  async getTargetUserProfile(viewerId: number, targetUserId: number) {
+  async getTargetUserProfile(viewerId: number | null, targetUserId: number) {
     if (isNaN(targetUserId)) {
       throw new AppError('Mã người dùng không hợp lệ', 400);
     }
@@ -18,13 +18,28 @@ class ProfileService {
       throw new AppError('Không tìm thấy người dùng', 404);
     }
 
+    // Check suspension status: suspended accounts cannot have their public profile viewed
+    if (targetUser.is_suspended) {
+      throw new AppError('Tài khoản này đã bị đình chỉ do vi phạm quy chuẩn cộng đồng', 403);
+    }
+
+    const isSelf = viewerId !== null && viewerId === targetUserId;
+
+    // Check bi-directional block relationship with viewer if logged in
+    if (viewerId && !isSelf) {
+      const isBlocked = await profileRepository.checkBlockRelationship(viewerId, targetUserId);
+      if (isBlocked) {
+        throw new AppError('Hồ sơ người dùng không khả dụng do quan hệ chặn', 403);
+      }
+    }
+
     let isAllowed = false;
-    if (viewerId === targetUserId) {
+    if (isSelf) {
       isAllowed = true;
     } else if (targetUser.privacy_setting === 'public') {
       isAllowed = true;
     } else if (targetUser.privacy_setting === 'friends') {
-      isAllowed = await profileRepository.checkFriendship(viewerId, targetUserId);
+      isAllowed = viewerId ? await profileRepository.checkFriendship(viewerId, targetUserId) : false;
     }
 
     if (!isAllowed) {
@@ -37,26 +52,56 @@ class ProfileService {
           avatar_url: targetUser.avatar_url,
           privacy_setting: targetUser.privacy_setting,
           bio: targetUser.bio,
-          headline: targetUser.headline
+          headline: targetUser.headline,
+          created_at: targetUser.created_at
         }
       };
     }
 
-    const isSelf = viewerId === targetUserId;
+    // Public community resources, quizzes, decks, and stats
+    const publicResources = await profileRepository.getPublicCommunityResources(targetUserId);
+    const publicQuizzes = await profileRepository.getPublicQuizzes(targetUserId);
+    const publicDecks = await profileRepository.getPublicDecks(targetUserId);
+    const publicStats = await profileRepository.getPublicStats(targetUserId);
 
-    // Private data protection: only the owner can see their detailed study dates / learning history
-    const studyDatesResult = isSelf ? await activityRepository.getStudyDates(targetUserId) : [];
-    const studyDates = studyDatesResult.map(row => getVietnamDateString(new Date(row.study_date)));
-    
-    const decks = await profileRepository.getPublicDecks(targetUserId);
-    // Private documents must NEVER be shown to other users
-    const documents = isSelf 
-      ? await profileRepository.getDocuments(targetUserId) 
-      : await profileRepository.getPublicDocuments(targetUserId);
-    const friends = await profileRepository.getMutualFriends(targetUserId);
+    if (isSelf) {
+      // Self viewing own profile: full private learning data + personal settings
+      const learningStats = await profileRepository.getUserPrivateLearningStats(targetUserId);
+      const studyDatesResult = await activityRepository.getStudyDates(targetUserId);
+      const studyDates = studyDatesResult.map(row => getVietnamDateString(new Date(row.study_date)));
+      const documents = await profileRepository.getDocuments(targetUserId);
+      const friends = await profileRepository.getMutualFriends(targetUserId);
 
-    // Strip personal private contact details if viewing another user's profile
-    const safeProfile = isSelf ? targetUser : {
+      return {
+        isRestricted: false,
+        isSelf: true,
+        user: {
+          ...targetUser,
+          study_dates: studyDates,
+          friends,
+          decks: publicDecks,
+          documents,
+          learning_stats: {
+            ...learningStats,
+            total_focus_minutes: Math.round(((learningStats.total_session_seconds || 0) + (learningStats.total_daily_active_seconds || 0)) / 60),
+            streak: targetUser.streak
+          },
+          public_resources: publicResources,
+          public_quizzes: publicQuizzes,
+          public_decks: publicDecks,
+          public_stats: {
+            ...publicStats,
+            streak: targetUser.streak,
+            join_date: targetUser.created_at
+          }
+        }
+      };
+    }
+
+    // Viewing another user's public profile:
+    // Strip personal private contact details (email, phone, address, education, wallet_balance, etc.)
+    // Strip private learning data (private documents, private notes, AI chats, quiz attempts, focus details)
+    const safeProfile = {
       id: targetUser.id,
       name: targetUser.name,
       avatar_url: targetUser.avatar_url,
@@ -67,16 +112,20 @@ class ProfileService {
       bio: targetUser.bio,
       headline: targetUser.headline,
       created_at: targetUser.created_at,
+      website: targetUser.website || null
     };
 
     return {
       isRestricted: false,
-      user: {
-        ...safeProfile,
-        study_dates: studyDates,
-        friends,
-        decks,
-        documents
+      isSelf: false,
+      user: safeProfile,
+      public_resources: publicResources,
+      public_quizzes: publicQuizzes,
+      public_decks: publicDecks,
+      public_stats: {
+        ...publicStats,
+        streak: targetUser.streak,
+        join_date: targetUser.created_at
       }
     };
   }

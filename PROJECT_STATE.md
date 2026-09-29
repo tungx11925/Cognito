@@ -1995,10 +1995,141 @@ Status: DONE
 
 ---
 
+## PHASE 14 — USER PROFILE + PUBLIC PROFILE SYSTEM — 2026-09-29
+Status: DONE
+
+### Gate Baseline Checks (Mục 0.1.3):
+- **Backend TypeScript Build (`npm run build`)**: PASSED (0 errors)
+- **Frontend TypeScript Check (`npx tsc --noEmit`)**: PASSED (0 errors)
+- **Next.js Production Build (`npm run build`)**: PASSED (23/23 static/dynamic routes compiled cleanly)
+- **Comprehensive Fast Regression Suite (`npm run test:fast`)**: 10/10 Suites PASSED (100%), Zero Regression.
+
+---
+
+### 1. Chi tiết Triển khai Tính năng (Features Implemented)
+
+#### A. Private Profile & Learning Analytics (Hồ sơ Riêng tư của Bản thân)
+- **Truy cập & Xác thực**: `GET /api/users/:targetUserId/profile` khi `viewerId === targetUserId` (hoặc qua `GET /api/auth/me`).
+- **Phản hồi hệ thống**: Trả về `isRestricted: false, isSelf: true`.
+- **Dữ liệu Cá nhân & Cài đặt**:
+  - Expose đầy đủ các trường thiết lập cá nhân: `id`, `name`, `email`, `phone`, `education`, `address`, `website`, `avatar_url`, `bio`, `headline`, `privacy_setting`, `role`, `is_premium`, `streak`, `created_at`.
+- **Dữ liệu Phân tích Học tập Cá nhân (`learning_stats`)**:
+  - `total_documents`: Tổng tài liệu cá nhân đã lưu trữ trong bảng `documents`.
+  - `total_decks`: Tổng bộ thẻ flashcard đã tạo trong bảng `flashcard_decks`.
+  - `total_quizzes`: Tổng bộ đề trắc nghiệm đã tạo trong bảng `test_sets` (`created_by = $1`).
+  - `total_notes`: Tổng ghi chú học tập trong bảng `notes`.
+  - `total_mindmaps`: Tổng sơ đồ tư duy trong bảng `mindmaps`.
+  - `total_study_sessions`: Tổng số phiên học tập đã thực hiện trong bảng `study_sessions`.
+  - `total_focus_minutes`: Tổng thời gian tập trung (phút) tổng hợp từ `study_sessions` và `user_daily_activity`.
+  - `study_dates`: Lịch sử các ngày điểm danh chuỗi học tập (streak calendar).
+  - `documents`: Danh sách tài liệu cá nhân (bao gồm cả tài liệu riêng tư).
+  - `friends`: Danh sách bạn bè tương hỗ.
+
+#### B. Cập nhật Thiết lập Hồ sơ (`PUT /api/auth/profile`)
+- **Schema & Validation**: `updateProfileSchema` kiểm tra chặt chẽ:
+  - `name`: Tối thiểu 2 ký tự, tự động trim.
+  - `phone`: Chuẩn hóa số điện thoại Việt Nam, kiểm tra định dạng regex.
+  - `education`, `address`, `bio` (max 500 ký tự), `headline` (max 255 ký tự), `avatar_url`.
+  - `website`: Chuẩn hóa URL trang cá nhân/danh mục (max 255 ký tự).
+  - `privacy_setting`: `z.enum(['public', 'friends', 'private'])`.
+- **Database & Xử lý Xung đột**:
+  - Lưu trữ trực tiếp vào bảng `users`.
+  - Bắt lỗi trùng số điện thoại (`users_phone_key`), trả về mã `400 Bad Request` với thông báo rõ ràng thay vì lỗi 500.
+
+#### C. Public Profile & Mô hình Bảo mật Chống Rò rỉ Dữ liệu Tuyệt đối (Strict Anti-Leak Protection)
+- **Hỗ trợ Khách Vãng lai (Guest Support)**:
+  - Định tuyến `/api/users/:targetUserId/profile` sử dụng middleware `optionalAuthenticate`.
+  - Khách chưa đăng nhập (`viewerId = null`) hoàn toàn có thể truy cập hồ sơ công khai của học viên mà không bị chặn mã `401 Unauthorized`.
+- **Kiểm tra Đình chỉ Tài khoản (Suspension Enforcement)**:
+  - Nếu `targetUser.is_suspended === true`, hệ thống lập tức từ chối với mã `403 Forbidden` (`"Tài khoản này đã bị đình chỉ do vi phạm quy chuẩn cộng đồng"`).
+- **Tích hợp Chặn 2 Chiều Phase 13 (Bi-directional Block Integration)**:
+  - Nếu giữa viewer và target user có quan hệ chặn active trong `user_blocks` (dù là người chặn hay người bị chặn), hệ thống từ chối với mã `403 Forbidden` (`"Hồ sơ người dùng không khả dụng do quan hệ chặn"`).
+  - Người thứ 3 trung lập vẫn xem hồ sơ bình thường.
+- **Thực thi Quyền Riêng tư (Privacy Setting Enforcement)**:
+  1. `privacy_setting === 'private'`:
+     - Trả về `isRestricted: true, privacy: 'private'`.
+     - Chỉ trả về thông tin danh tính tối giản: `id`, `name`, `avatar_url`, `bio`, `headline`, `privacy_setting`, `created_at`.
+     - Toàn bộ tài nguyên, bài trắc nghiệm, bộ flashcard và thống kê đều bị ẩn.
+  2. `privacy_setting === 'friends'`:
+     - Nếu viewer là bạn bè được chấp nhận (`status = 'accepted'` trong `friendships`): Hiển thị đầy đủ tài nguyên công khai.
+     - Nếu viewer không phải bạn bè hoặc là khách vãng lai: Trả về `isRestricted: true, privacy: 'friends'`.
+  3. `privacy_setting === 'public'`:
+     - Cho phép hiển thị tài nguyên công khai cho toàn bộ người dùng và khách vãng lai.
+- **DỮ LIỆU ĐƯỢC PHÉP HIỂN THỊ TRÊN PUBLIC PROFILE (ONLY EXPOSE)**:
+  - `Avatar`, `Display Name`, `Bio`, `Headline`, `Streak`, `Created At` (ngày tham gia), `Website`.
+  - `public_resources`: Các tài nguyên từ bảng `community_resources` với điều kiện `user_id = targetUserId, is_public = true, is_hidden = false, resource_type != 'test_set'`.
+  - `public_quizzes`: Các bài trắc nghiệm từ bảng `community_resources` với điều kiện `resource_type = 'test_set'`, liên kết `test_sets`.
+  - `public_decks`: Các bộ thẻ flashcard công khai từ bảng `flashcard_decks` với điều kiện `is_public = true`.
+  - `public_stats` (Thống kê công khai cơ bản):
+    - `total_published_resources`: Tổng tài nguyên công khai đã xuất bản.
+    - `total_public_quizzes`: Tổng bài trắc nghiệm công khai.
+    - `total_public_decks`: Tổng bộ thẻ flashcard công khai.
+    - `total_likes_received`: Tổng lượt thích nhận được từ cộng đồng.
+    - `total_saves_received`: Tổng lượt lưu tài nguyên từ cộng đồng.
+    - `streak`: Chuỗi ngày học tập.
+    - `join_date`: Ngày gia nhập hệ thống.
+- **DỮ LIỆU TUYỆT ĐỐI KHÔNG ĐƯỢC RÒ RỈ (CRITICAL ZERO-LEAK FILTER)**:
+  - ❌ `email`: KHÔNG hiển thị (undefined).
+  - ❌ `phone`: KHÔNG hiển thị (undefined).
+  - ❌ `address`: KHÔNG hiển thị (undefined).
+  - ❌ `education`: KHÔNG hiển thị (undefined).
+  - ❌ `wallet_balance`: KHÔNG hiển thị (undefined).
+  - ❌ `Private Documents`: Tuyệt đối không hiển thị tài liệu cá nhân chưa xuất bản.
+  - ❌ `Private Notes`: Không để lộ ghi chú cá nhân.
+  - ❌ `AI Chats / Conversations`: Không để lộ lịch sử chat AI.
+  - ❌ `Private Progress Details / Daily Tasks`: Không để lộ chi tiết nhiệm vụ và tiến độ hàng ngày.
+  - ❌ `Quiz Attempts`: Không để lộ điểm thi, đáp án làm bài, hay cảnh báo vi phạm tab.
+  - ❌ `Focus Details`: Không để lộ nhật ký phiên tập trung Pomodoro và sự kiện xao nhãng trình duyệt.
+
+#### D. Giao diện Frontend Public Profile (`frontend/src/app/profile/[userId]/page.tsx`)
+- Thiết kế chuẩn Neo-Brutalism & Modern Slate sang trọng, nhất quán với Cognito Design System:
+  - Thẻ thông tin cá nhân nổi bật với Avatar, Name, Role badge, Pro badge, Headline, Bio và Website link.
+  - 4 nút hành động thiết yếu trên Header:
+    1. **Nhắn tin**: Điều hướng trực tiếp tới `/messages?user=${user.id}` (cầu nối sẵn sàng cho Phase 15).
+    2. **Chia sẻ**: Sao chép liên kết hồ sơ vào clipboard kèm thông báo toast.
+    3. **Báo cáo (Report)**: Mở Modal báo cáo người dùng sử dụng API Phase 13 `safetyService.reportContent('user', user.id, reason, details)`.
+    4. **Chặn (Block)**: Mở Modal xác nhận chặn người dùng sử dụng API Phase 13 `safetyService.blockUser(user.id, reason)`.
+  - Thanh 6 chỉ số thống kê công khai dạng thẻ bento thu hút.
+  - 3 Tab chuyển đổi nội dung mượt mà:
+    - Tab **Tài nguyên học tập**: Danh sách tài liệu/bài giảng công khai kèm chỉ số view, like, save, comment.
+    - Tab **Bài trắc nghiệm**: Danh sách đề thi trắc nghiệm công khai kèm số câu hỏi, thời gian làm bài, điểm đạt và nút "Luyện tập ngay".
+    - Tab **Bộ thẻ Flashcard**: Danh sách bộ thẻ kèm nút "Lưu vào thư viện" (`forkDeck`).
+  - Giao diện hạn chế hiển thị (Restricted Card) đẹp mắt, trang nhã khi gặp thiết lập riêng tư hoặc chưa kết bạn.
+
+---
+
+### 2. Kết quả Kiểm thử & Xác minh (Verification & Quality Gates)
+
+#### Test Suite Phase 14 (`backend/scripts/test-phase14.ts`):
+- **Tổng số Assertions**: **99/99 Assertions PASSED (100%)**
+- Chi tiết 7 Suites kiểm thử:
+  1. **Suite 1: Private Profile & Self Learning Data** (18/18 PASS): Xác thực toàn vẹn dữ liệu cá nhân, email, phone, learning stats (docs, decks, quizzes, notes, mindmaps, study sessions, focus minutes, study dates).
+  2. **Suite 2: Profile Settings Update** (12/12 PASS): Xác thực cập nhật tên, trường học, địa chỉ, website, privacy_setting, bio, headline, bắt lỗi cài đặt riêng tư không hợp lệ.
+  3. **Suite 3: Public Profile Visibility & Strict Anti-Leak Protection** (35/35 PASS): Xác thực hiển thị chính xác avatar, tên, bio, headline, website, public resources, public quizzes, public decks, public stats; xác thực **100% KHÔNG RÒ RỈ** email, phone, education, address, wallet_balance, private documents, private study dates, quiz attempts, study sessions.
+  4. **Suite 4: Guest / Unauthenticated Access to Public Profile** (9/9 PASS): Xác thực khách vãng lai không token vẫn xem được hồ sơ công khai an toàn, trả về mã 404 cho user không tồn tại.
+  5. **Suite 5: Friends-Only Privacy Visibility with Accepted Friend** (5/5 PASS): Xác thực bạn bè đã kết nối xem được tài nguyên công khai, người ngoài bị hạn chế, email cá nhân vẫn được bảo vệ.
+  6. **Suite 6: Bi-directional Block Relationship (Phase 13 Integration)** (5/5 PASS): Xác thực người chặn bị trả về 403, người bị chặn bị trả về 403, người thứ 3 không bị ảnh hưởng, bỏ chặn truy cập lại bình thường.
+  7. **Suite 7: Suspended User Account Profile Access** (4/4 PASS): Xác thực tài khoản bị admin đình chỉ sẽ bị chặn truy cập hồ sơ (403 Forbidden) cho cả người dùng và khách vãng lai, mở đình chỉ truy cập lại bình thường.
+
+#### Báo cáo Kiểm thử Hồi quy Toàn diện (`npm run test:fast`):
+- **Phase 3**: PASS (Auth & User System — 2.20s)
+- **Phase 4**: PASS (Document Management & Processing Pipeline — 3.69s)
+- **Phase 7**: PASS (Exam & Question Bank Management — 2.44s)
+- **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading — 2.12s)
+- **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace — 3.07s)
+- **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak — 2.63s)
+- **Phase 11**: PASS (Focus Mode & Distraction Detection Engine — 2.36s)
+- **Phase 12**: PASS (Community Ecosystem & Resource Exchange — 2.36s)
+- **Phase 13**: PASS (Community Safety & Content Moderation System — 3.32s)
+- **Phase 14**: PASS (User Profile & Public Profile System — 2.35s)
+- $\rightarrow$ **10/10 PHASES PASSED (100%), ZERO REGRESSION DETECTED**.
+
+---
+
 ### Tuân thủ Rule 0.1.1
-- Toàn bộ tính năng Phase 13 đã được triển khai hoàn chỉnh cả Backend và Frontend, xác minh qua 82/82 test assertions và 9/9 giai đoạn hồi quy.
+- Toàn bộ tính năng Phase 14 đã được triển khai hoàn chỉnh cả Backend và Frontend, xác minh qua 99/99 test assertions và 10/10 giai đoạn hồi quy.
 - Toàn bộ 3 Gate Checks của Rule 0.1.3 đều đạt chuẩn xuất sắc (TypeScript 0 errors, Next.js build pass, Fast regression pass).
-- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 14 (User Profile & Public Profile)**.
+- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 15 (Direct Messaging / User-to-User Chat)**.
 - Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, nghiệm thu trước khi tiếp tục.
 
 

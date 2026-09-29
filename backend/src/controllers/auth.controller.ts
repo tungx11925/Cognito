@@ -317,7 +317,7 @@ export const updateAvatar = async (req: any, res: Response) => {
 export const updateProfile = async (req: any, res: Response) => {
   try {
     const userId = req.user.id;
-    const { name, phone, education, address, privacy_setting, bio, headline, avatar_url } = req.body;
+    const { name, phone, education, address, privacy_setting, bio, headline, avatar_url, website } = req.body;
 
     const user = await authService.updateProfile(userId, {
       name: name,
@@ -328,6 +328,7 @@ export const updateProfile = async (req: any, res: Response) => {
       bio: bio !== undefined ? bio : null,
       headline: headline !== undefined ? headline : null,
       avatar_url: avatar_url !== undefined ? avatar_url : null,
+      website: website !== undefined ? website : null,
     });
 
     res.status(200).json({
@@ -336,6 +337,9 @@ export const updateProfile = async (req: any, res: Response) => {
     });
   } catch (error: any) {
     console.error('Update profile error:', error);
+    if (error.code === '23505' && (error.constraint === 'users_phone_key' || error.detail?.includes('phone'))) {
+      return res.status(400).json({ error: 'Số điện thoại này đã được sử dụng bởi tài khoản khác' });
+    }
     res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
   }
 };
