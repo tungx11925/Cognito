@@ -2049,11 +2049,8 @@ Status: DONE
   1. `privacy_setting === 'private'`:
      - Trả về `isRestricted: true, privacy: 'private'`.
      - Chỉ trả về thông tin danh tính tối giản: `id`, `name`, `avatar_url`, `bio`, `headline`, `privacy_setting`, `created_at`.
-     - Toàn bộ tài nguyên, bài trắc nghiệm, bộ flashcard và thống kê đều bị ẩn.
-  2. `privacy_setting === 'friends'`:
-     - Nếu viewer là bạn bè được chấp nhận (`status = 'accepted'` trong `friendships`): Hiển thị đầy đủ tài nguyên công khai.
-     - Nếu viewer không phải bạn bè hoặc là khách vãng lai: Trả về `isRestricted: true, privacy: 'friends'`.
-  3. `privacy_setting === 'public'`:
+     - Toàn bộ tài nguyên, bài trắc nghiệm, bộ flashcard và thống kê đều bị ẩn đối với người xem khác.
+  2. `privacy_setting === 'public'`:
      - Cho phép hiển thị tài nguyên công khai cho toàn bộ người dùng và khách vãng lai.
 - **DỮ LIỆU ĐƯỢC PHÉP HIỂN THỊ TRÊN PUBLIC PROFILE (ONLY EXPOSE)**:
   - `Avatar`, `Display Name`, `Bio`, `Headline`, `Streak`, `Created At` (ngày tham gia), `Website`.
@@ -2101,34 +2098,37 @@ Status: DONE
 ### 2. Kết quả Kiểm thử & Xác minh (Verification & Quality Gates)
 
 #### Test Suite Phase 14 (`backend/scripts/test-phase14.ts`):
-- **Tổng số Assertions**: **99/99 Assertions PASSED (100%)**
+- **Tổng số Assertions**: **118/118 Assertions PASSED (100%)**
 - Chi tiết 7 Suites kiểm thử:
-  1. **Suite 1: Private Profile & Self Learning Data** (18/18 PASS): Xác thực toàn vẹn dữ liệu cá nhân, email, phone, learning stats (docs, decks, quizzes, notes, mindmaps, study sessions, focus minutes, study dates).
-  2. **Suite 2: Profile Settings Update** (12/12 PASS): Xác thực cập nhật tên, trường học, địa chỉ, website, privacy_setting, bio, headline, bắt lỗi cài đặt riêng tư không hợp lệ.
-  3. **Suite 3: Public Profile Visibility & Strict Anti-Leak Protection** (35/35 PASS): Xác thực hiển thị chính xác avatar, tên, bio, headline, website, public resources, public quizzes, public decks, public stats; xác thực **100% KHÔNG RÒ RỈ** email, phone, education, address, wallet_balance, private documents, private study dates, quiz attempts, study sessions.
-  4. **Suite 4: Guest / Unauthenticated Access to Public Profile** (9/9 PASS): Xác thực khách vãng lai không token vẫn xem được hồ sơ công khai an toàn, trả về mã 404 cho user không tồn tại.
-  5. **Suite 5: Friends-Only Privacy Visibility with Accepted Friend** (5/5 PASS): Xác thực bạn bè đã kết nối xem được tài nguyên công khai, người ngoài bị hạn chế, email cá nhân vẫn được bảo vệ.
-  6. **Suite 6: Bi-directional Block Relationship (Phase 13 Integration)** (5/5 PASS): Xác thực người chặn bị trả về 403, người bị chặn bị trả về 403, người thứ 3 không bị ảnh hưởng, bỏ chặn truy cập lại bình thường.
-  7. **Suite 7: Suspended User Account Profile Access** (4/4 PASS): Xác thực tài khoản bị admin đình chỉ sẽ bị chặn truy cập hồ sơ (403 Forbidden) cho cả người dùng và khách vãng lai, mở đình chỉ truy cập lại bình thường.
+  1. **Suite 1: Private Profile & Self Learning Data** (17/17 PASS): Xác thực toàn vẹn dữ liệu cá nhân khi tự xem: email, phone, learning stats (docs, decks, quizzes, notes, mindmaps, study sessions, focus minutes, study dates).
+  2. **Suite 2: Profile Settings Update** (13/13 PASS): Xác thực cập nhật tên, trường học, địa chỉ, website, privacy_setting (public/private), bio, headline; từ chối thiết lập không hợp lệ hoặc `friends` (400 Bad Request).
+  3. **Suite 3: Public Profile Visibility & Strict Anti-Leak Protection** (52/52 PASS): Kiểm tra 2 lớp anti-leak toàn diện:
+     - User Object whitelist: Khẳng định chỉ chứa đúng 9 trường được phép `[avatar_url, bio, created_at, headline, id, name, privacy_setting, streak, website]`.
+     - Tuyệt đối `undefined` cho: `role`, `is_premium`, `email`, `phone`, `education`, `address`, `wallet_balance`, `user.documents`, `res.data.documents`, `user.learning_stats`, `res.data.learning_stats`, `study_dates`, `quiz_attempts`, `study_sessions`.
+     - Xác nhận private document không bao giờ xuất hiện trong `public_resources`.
+  4. **Suite 4: Guest / Unauthenticated Access to Public Profile** (9/9 PASS): Khách vãng lai không token xem được hồ sơ công khai an toàn, 404 cho user không tồn tại.
+  5. **Suite 5: Dynamic Privacy Toggling & Self Profile Inspection** (13/13 PASS): Chuyển đổi qua lại giữa `public` và `private` có hiệu lực tức thì; xem chính mình thấy đầy đủ tài liệu cá nhân và thống kê học tập.
+  6. **Suite 6: Bi-directional Block Relationship (Phase 13 Integration)** (5/5 PASS): Chặn 2 chiều trả về 403 Forbidden, người thứ 3 không bị ảnh hưởng, bỏ chặn truy cập lại bình thường.
+  7. **Suite 7: Suspended User Account Profile Access** (4/4 PASS): Tài khoản bị đình chỉ trả về 403 Forbidden cho cả user và guest, mở đình chỉ truy cập lại bình thường.
 
 #### Báo cáo Kiểm thử Hồi quy Toàn diện (`npm run test:fast`):
-- **Phase 3**: PASS (Auth & User System — 2.20s)
-- **Phase 4**: PASS (Document Management & Processing Pipeline — 3.69s)
-- **Phase 7**: PASS (Exam & Question Bank Management — 2.44s)
-- **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading — 2.12s)
-- **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace — 3.07s)
-- **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak — 2.63s)
-- **Phase 11**: PASS (Focus Mode & Distraction Detection Engine — 2.36s)
-- **Phase 12**: PASS (Community Ecosystem & Resource Exchange — 2.36s)
-- **Phase 13**: PASS (Community Safety & Content Moderation System — 3.32s)
-- **Phase 14**: PASS (User Profile & Public Profile System — 2.35s)
+- **Phase 3**: PASS (Auth & User System — 2.15s)
+- **Phase 4**: PASS (Document Management & Processing Pipeline — 3.31s)
+- **Phase 7**: PASS (Exam & Question Bank Management — 2.96s)
+- **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading — 2.15s)
+- **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace — 2.82s)
+- **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak — 2.69s)
+- **Phase 11**: PASS (Focus Mode & Distraction Detection Engine — 2.32s)
+- **Phase 12**: PASS (Community Ecosystem & Resource Exchange — 2.46s)
+- **Phase 13**: PASS (Community Safety & Content Moderation System — 3.28s)
+- **Phase 14**: PASS (User Profile & Public Profile System — 2.48s)
 - $\rightarrow$ **10/10 PHASES PASSED (100%), ZERO REGRESSION DETECTED**.
 
 ---
 
 ### Tuân thủ Rule 0.1.1
-- Toàn bộ tính năng Phase 14 đã được triển khai hoàn chỉnh cả Backend và Frontend, xác minh qua 99/99 test assertions và 10/10 giai đoạn hồi quy.
-- Toàn bộ 3 Gate Checks của Rule 0.1.3 đều đạt chuẩn xuất sắc (TypeScript 0 errors, Next.js build pass, Fast regression pass).
+- Toàn bộ tính năng Phase 14 đã được triển khai hoàn chỉnh cả Backend và Frontend, xác minh qua 118/118 test assertions và 10/10 giai đoạn hồi quy.
+- Toàn bộ 3 Gate Checks của Rule 0.1.3 đều đạt chuẩn xuất sắc (TypeScript 0 errors trên cả FE & BE, Next.js build clean 23/23 routes, Fast regression pass).
 - **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 15 (Direct Messaging / User-to-User Chat)**.
 - Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, nghiệm thu trước khi tiếp tục.
 

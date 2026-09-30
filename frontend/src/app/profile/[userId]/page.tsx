@@ -7,7 +7,7 @@ import {
   Trophy, GraduationCap, Globe, Users, MessageSquare,
   Award, Layers, FileText, CheckCircle2, Lock, ArrowLeft,
   ShieldAlert, UserX, ExternalLink, HelpCircle, Check,
-  Clock, Heart, Bookmark, Eye
+  Clock, Heart, Bookmark, Eye, Settings
 } from "lucide-react";
 import { useStudy } from "@/context/StudyContext";
 import { Navbar } from "@/components/landing/Navbar";
@@ -260,23 +260,16 @@ export default function TargetUserProfilePage() {
           </div>
 
           <div className="p-4 bg-amber-50/50 border border-amber-200/60 rounded-xl space-y-1.5">
-            <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Hồ sơ hạn chế hiển thị</h3>
+            <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Hồ sơ riêng tư</h3>
             <p className="text-xs text-amber-700 leading-relaxed">
-              {isPrivate
-                ? "Học viên này đã cài đặt hồ sơ ở chế độ Riêng tư hoàn toàn."
-                : "Chỉ bạn bè đã kết nối mới có thể xem chi tiết tài nguyên và bài tập của học viên này."}
+              Học viên này đã cài đặt hồ sơ ở chế độ Riêng tư. Các tài nguyên chia sẻ và thống kê học tập công khai đã được ẩn.
             </p>
           </div>
 
           <div className="flex gap-3 pt-2">
-            <Button onClick={() => router.back()} variant="outline" className="flex-1 font-bold">
+            <Button onClick={() => router.back()} variant="outline" className="w-full font-bold">
               Quay lại
             </Button>
-            {!isPrivate && !isAuthenticated && (
-              <Button onClick={() => setShowLoginModal(true)} className="flex-1 font-bold">
-                Đăng nhập kết bạn
-              </Button>
-            )}
           </div>
         </Card>
       </div>
@@ -333,12 +326,9 @@ export default function TargetUserProfilePage() {
                 <div className="pb-1 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-gray-900 text-2xl font-bold">{user.name}</h2>
-                    <Badge variant="pro" className="text-xs px-2.5 py-0.5">
-                      {user.role === 'admin' ? 'Quản trị viên' : 'Học viên'}
-                    </Badge>
-                    {user.is_premium && (
-                      <Badge variant="amber" className="text-xs px-2.5 py-0.5">
-                        ⭐ Pro
+                    {profile.isSelf && (
+                      <Badge variant="pro" className="text-xs px-2.5 py-0.5">
+                        Hồ sơ của bạn
                       </Badge>
                     )}
                   </div>
@@ -353,13 +343,23 @@ export default function TargetUserProfilePage() {
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2 pb-1">
-                <Button 
-                  onClick={() => router.push(`/messages?user=${user.id}`)}
-                  className="gap-2"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  Nhắn tin
-                </Button>
+                {profile.isSelf ? (
+                  <Button 
+                    onClick={() => router.push('/settings')}
+                    className="gap-2"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Cài đặt hồ sơ
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={() => router.push(`/messages?user=${user.id}`)}
+                    className="gap-2"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Nhắn tin
+                  </Button>
+                )}
                 <Button 
                   variant="outline"
                   onClick={handleShare}

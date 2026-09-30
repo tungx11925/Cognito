@@ -87,7 +87,6 @@ export async function runPhase14Tests() {
       assert(typeof u.learning_stats.total_focus_minutes === 'number', 'learning_stats includes total_focus_minutes');
       assert(Array.isArray(u.study_dates), 'Self profile includes study_dates calendar array');
       assert(Array.isArray(u.documents), 'Self profile includes full document list');
-      assert(Array.isArray(u.friends), 'Self profile includes friends list');
     }
 
     // ─── SUITE 2: Profile Settings Update (PUT /api/auth/profile) ───
@@ -101,7 +100,7 @@ export async function runPhase14Tests() {
         education: 'Đại học Quốc Gia',
         address: 'Hà Nội, Việt Nam',
         website: 'https://cognito-student.dev',
-        privacy_setting: 'friends',
+        privacy_setting: 'private',
         bio: 'Đam mê lập trình và học tập trực tuyến',
         headline: 'Full-stack Developer & Sinh viên xuất sắc',
       };
@@ -112,50 +111,57 @@ export async function runPhase14Tests() {
       assert(res.data.user.education === updateData.education, 'Education successfully updated');
       assert(res.data.user.address === updateData.address, 'Address successfully updated');
       assert(res.data.user.website === updateData.website, 'Website successfully updated');
-      assert(res.data.user.privacy_setting === 'friends', 'Privacy setting updated to friends');
+      assert(res.data.user.privacy_setting === 'private', 'Privacy setting updated to private');
       assert(res.data.user.bio === updateData.bio, 'Bio successfully updated');
       assert(res.data.user.headline === updateData.headline, 'Headline successfully updated');
 
       // 2.2 Verify update persisted in DB
       const dbCheck = await db.query('SELECT privacy_setting, bio, headline, website FROM users WHERE id = $1', [userA.id]);
-      assert(dbCheck.rows[0].privacy_setting === 'friends', 'DB stores updated privacy_setting');
+      assert(dbCheck.rows[0].privacy_setting === 'private', 'DB stores updated privacy_setting');
       assert(dbCheck.rows[0].bio === updateData.bio, 'DB stores updated bio');
       assert(dbCheck.rows[0].website === updateData.website, 'DB stores updated website');
 
-      // 2.3 Validation reject invalid privacy setting
+      // 2.3 Validation rejects invalid privacy settings (e.g. secret_world or friends)
       try {
         await axios.put(`${API_BASE}/auth/profile`, { name: 'Test', privacy_setting: 'secret_world' }, { headers: userA.headers });
-        assert(false, 'Invalid privacy_setting should be rejected');
+        assert(false, 'Invalid privacy_setting secret_world should be rejected');
       } catch (err: any) {
         assert(err.response?.status === 400, 'Invalid privacy_setting returns 400 Bad Request');
+      }
+
+      try {
+        await axios.put(`${API_BASE}/auth/profile`, { name: 'Test', privacy_setting: 'friends' }, { headers: userA.headers });
+        assert(false, 'privacy_setting friends should be rejected (out of scope)');
+      } catch (err: any) {
+        assert(err.response?.status === 400, 'privacy_setting friends is rejected (400 Bad Request)');
       }
     }
 
     // ─── SUITE 3: Public Profile Visibility & Strict Anti-Leak Protection ───
     console.log('\n--- SUITE 3: Public Profile Visibility & Strict Anti-Leak Protection ---');
     {
-      // 3.1 When privacy_setting is 'friends' and viewer is NOT a friend
-      const nonFriendView = await axios.get(`${API_BASE}/users/${userA.id}/profile`, { headers: userB.headers });
-      assert(nonFriendView.status === 200, 'Non-friend viewing friends-only profile returns 200');
-      assert(nonFriendView.data.isRestricted === true, 'Returns isRestricted = true');
-      assert(nonFriendView.data.privacy === 'friends', 'Returns privacy = friends');
-      assert(nonFriendView.data.user.name !== undefined, 'Basic name is visible');
-      assert(nonFriendView.data.user.email === undefined, 'ANTI-LEAK: Email is NOT exposed');
-      assert(nonFriendView.data.user.phone === undefined, 'ANTI-LEAK: Phone is NOT exposed');
-      assert(nonFriendView.data.user.address === undefined, 'ANTI-LEAK: Address is NOT exposed');
-      assert(nonFriendView.data.public_resources === undefined, 'Public resources hidden when restricted');
-      assert(nonFriendView.data.public_quizzes === undefined, 'Public quizzes hidden when restricted');
-      assert(nonFriendView.data.public_stats === undefined, 'Public stats hidden when restricted');
-
-      // 3.2 When privacy_setting is 'private'
+      // 3.1 When privacy_setting is 'private': User B cannot see restricted profile
       await axios.put(`${API_BASE}/auth/profile`, { name: 'P14 User A Updated', privacy_setting: 'private' }, { headers: userA.headers });
       const privateView = await axios.get(`${API_BASE}/users/${userA.id}/profile`, { headers: userB.headers });
+      assert(privateView.status === 200, 'Private profile returns 200 OK');
       assert(privateView.data.isRestricted === true, 'Private profile returns isRestricted = true');
       assert(privateView.data.privacy === 'private', 'Returns privacy = private');
+      assert(privateView.data.user.name !== undefined, 'Basic name is visible');
       assert(privateView.data.user.email === undefined, 'ANTI-LEAK: Private profile hides email');
-      assert(privateView.data.public_resources === undefined, 'ANTI-LEAK: Private profile hides resources');
+      assert(privateView.data.user.phone === undefined, 'ANTI-LEAK: Private profile hides phone');
+      assert(privateView.data.user.education === undefined, 'ANTI-LEAK: Private profile hides education');
+      assert(privateView.data.user.address === undefined, 'ANTI-LEAK: Private profile hides address');
+      assert(privateView.data.user.role === undefined, 'ANTI-LEAK: Private profile hides role');
+      assert(privateView.data.user.is_premium === undefined, 'ANTI-LEAK: Private profile hides is_premium');
+      assert(privateView.data.user.documents === undefined, 'ANTI-LEAK: Private profile hides user.documents');
+      assert(privateView.data.documents === undefined, 'ANTI-LEAK: Private profile hides res.data.documents');
+      assert(privateView.data.user.learning_stats === undefined, 'ANTI-LEAK: Private profile hides user.learning_stats');
+      assert(privateView.data.learning_stats === undefined, 'ANTI-LEAK: Private profile hides res.data.learning_stats');
+      assert(privateView.data.public_resources === undefined, 'ANTI-LEAK: Private profile hides public_resources');
+      assert(privateView.data.public_quizzes === undefined, 'ANTI-LEAK: Private profile hides public_quizzes');
+      assert(privateView.data.public_stats === undefined, 'ANTI-LEAK: Private profile hides public_stats');
 
-      // 3.3 When privacy_setting is 'public'
+      // 3.2 When privacy_setting is 'public': User A shares community resources
       await axios.put(`${API_BASE}/auth/profile`, { name: 'P14 User A Updated', privacy_setting: 'public' }, { headers: userA.headers });
 
       // Create test public assets for User A:
@@ -190,21 +196,21 @@ export async function runPhase14Tests() {
         [userA.id]
       );
 
-      // d) Private document (MUST NOT BE LEAKED)
+      // d) Private internal document (CRITICAL: MUST NOT BE LEAKED TO OTHER USERS)
       await db.query(
         `INSERT INTO documents (user_id, title, description, category, doc_url, file_size, visibility)
-         VALUES ($1, 'Tài liệu bí mật riêng tư.pdf', 'Mô tả bí mật', 'Riêng tư', '/secret.pdf', 1024, 'private')`,
+         VALUES ($1, 'Tài liệu bí mật riêng tư cá nhân.pdf', 'Mô tả bí mật học tập', 'Riêng tư', '/secret.pdf', 1024, 'private')`,
         [userA.id]
       );
 
-      // User B views User A's public profile
+      // User B (another user) views User A's public profile
       const publicView = await axios.get(`${API_BASE}/users/${userA.id}/profile`, { headers: userB.headers });
       assert(publicView.status === 200, 'Public profile returns 200 OK');
       assert(publicView.data.isRestricted === false, 'Public profile is not restricted');
       assert(publicView.data.isSelf === false, 'Viewing another user indicates isSelf = false');
 
       const targetU = publicView.data.user;
-      // Expose check
+      // Legitimate public showcase fields
       assert(targetU.name === 'P14 User A Updated', 'Display Name is exposed');
       assert(targetU.bio !== undefined, 'Bio is exposed');
       assert(targetU.headline !== undefined, 'Headline is exposed');
@@ -212,22 +218,38 @@ export async function runPhase14Tests() {
       assert(targetU.website === 'https://cognito-student.dev', 'Website is exposed');
       assert(targetU.created_at !== undefined, 'Join date (created_at) is exposed');
 
-      // STRICT ANTI-LEAK CHECKS
+      // STRICT ANTI-LEAK CHECKS ON TARGET USER OBJECT
       assert(targetU.email === undefined, 'ANTI-LEAK: Email is NOT exposed to other users');
       assert(targetU.phone === undefined, 'ANTI-LEAK: Phone is NOT exposed to other users');
       assert(targetU.education === undefined, 'ANTI-LEAK: Education is NOT exposed to other users');
       assert(targetU.address === undefined, 'ANTI-LEAK: Address is NOT exposed to other users');
       assert(targetU.wallet_balance === undefined, 'ANTI-LEAK: Wallet balance is NOT exposed');
-      assert(targetU.documents === undefined, 'ANTI-LEAK: Raw private documents NOT exposed');
-      assert(targetU.study_dates === undefined, 'ANTI-LEAK: Private study dates NOT exposed');
-      assert(targetU.learning_stats === undefined, 'ANTI-LEAK: Private learning stats NOT exposed');
+      assert(targetU.role === undefined, 'ANTI-LEAK: Role is NOT exposed to other users');
+      assert(targetU.is_premium === undefined, 'ANTI-LEAK: is_premium status is strictly hidden on public profile');
+      assert(targetU.documents === undefined, 'ANTI-LEAK: user.documents array is NOT exposed');
+      assert(targetU.learning_stats === undefined, 'ANTI-LEAK: user.learning_stats is NOT exposed');
+      assert(targetU.study_dates === undefined, 'ANTI-LEAK: user.study_dates is NOT exposed');
+
+      // STRICT ANTI-LEAK CHECKS ON ROOT RESPONSE BODY
+      assert(publicView.data.documents === undefined, 'ANTI-LEAK: Root documents array is NOT exposed');
+      assert(publicView.data.learning_stats === undefined, 'ANTI-LEAK: Root learning_stats is NOT exposed');
+      assert(publicView.data.study_dates === undefined, 'ANTI-LEAK: Root study_dates is NOT exposed');
       assert(publicView.data.quiz_attempts === undefined, 'ANTI-LEAK: Quiz attempts NOT exposed');
       assert(publicView.data.study_sessions === undefined, 'ANTI-LEAK: Study sessions NOT exposed');
 
-      // Check exposed public content
+      // STRICT WHITELIST KEY VERIFICATION: No unexpected fields present on user object
+      const allowedPublicKeys = ['avatar_url', 'bio', 'created_at', 'headline', 'id', 'name', 'privacy_setting', 'streak', 'website'].sort();
+      const actualUserKeys = Object.keys(targetU).sort();
+      assert(
+        JSON.stringify(actualUserKeys) === JSON.stringify(allowedPublicKeys),
+        `Public user keys strictly match whitelist: received [${actualUserKeys.join(', ')}] vs expected [${allowedPublicKeys.join(', ')}]`
+      );
+
+      // Check exposed public community content
       assert(Array.isArray(publicView.data.public_resources), 'public_resources is returned as array');
       assert(publicView.data.public_resources.some((r: any) => r.id === communityDocId), 'Contains published document');
       assert(!publicView.data.public_resources.some((r: any) => r.resource_type === 'test_set'), 'public_resources excludes test_sets');
+      assert(!publicView.data.public_resources.some((r: any) => r.title.includes('bí mật')), 'ANTI-LEAK: Private document NOT in public_resources');
 
       assert(Array.isArray(publicView.data.public_quizzes), 'public_quizzes is returned as array');
       assert(publicView.data.public_quizzes.some((q: any) => q.quiz_id === testSetId), 'Contains published quiz');
@@ -268,31 +290,37 @@ export async function runPhase14Tests() {
       }
     }
 
-    // ─── SUITE 5: Friends-Only Privacy Visibility with Accepted Friend ───
-    console.log('\n--- SUITE 5: Friends-Only Privacy Visibility with Accepted Friend ---');
+    // ─── SUITE 5: Dynamic Privacy Toggling & Self Profile Inspection ───
+    console.log('\n--- SUITE 5: Dynamic Privacy Toggling & Self Profile Inspection ---');
     {
-      // Set User A to friends-only
-      await axios.put(`${API_BASE}/auth/profile`, { name: 'P14 User A Updated', privacy_setting: 'friends' }, { headers: userA.headers });
+      // 5.1 Switch User A to private
+      await axios.put(`${API_BASE}/auth/profile`, { name: 'P14 User A Updated', privacy_setting: 'private' }, { headers: userA.headers });
 
-      // Before friendship: User B is restricted
-      const beforeFriend = await axios.get(`${API_BASE}/users/${userA.id}/profile`, { headers: userB.headers });
-      assert(beforeFriend.data.isRestricted === true, 'Before friendship: profile is restricted');
+      // User B sees restricted profile
+      const userBView = await axios.get(`${API_BASE}/users/${userA.id}/profile`, { headers: userB.headers });
+      assert(userBView.data.isRestricted === true, 'When private, other users receive restricted profile');
+      assert(userBView.data.public_resources === undefined, 'No resources exposed when private');
 
-      // Add friendship between User A and User B
-      await db.query(
-        `INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'accepted'), ($2, $1, 'accepted')`,
-        [userA.id, userB.id]
-      );
+      // 5.2 User A views self profile (isSelf === true)
+      const selfView = await axios.get(`${API_BASE}/users/${userA.id}/profile`, { headers: userA.headers });
+      assert(selfView.data.isRestricted === false, 'Owner viewing self is unrestricted');
+      assert(selfView.data.isSelf === true, 'Owner viewing self has isSelf = true');
+      assert(selfView.data.user.id === userA.id, 'Self view returns owner id');
+      assert(selfView.data.user.email !== undefined, 'Owner can see own email');
+      assert(selfView.data.user.phone !== undefined, 'Owner can see own phone');
+      assert(selfView.data.user.role !== undefined, 'Owner can see own role');
+      assert(selfView.data.user.is_premium !== undefined, 'Owner can see own is_premium status');
+      assert(Array.isArray(selfView.data.user.documents), 'Owner sees full private documents list');
+      assert(selfView.data.user.documents.length >= 1, 'Owner documents includes private document');
+      assert(selfView.data.user.learning_stats !== undefined, 'Owner sees full private learning stats');
 
-      // After friendship: User B can view User A's profile
-      const afterFriend = await axios.get(`${API_BASE}/users/${userA.id}/profile`, { headers: userB.headers });
-      assert(afterFriend.data.isRestricted === false, 'Accepted friend can view full public resources & stats');
-      assert(Array.isArray(afterFriend.data.public_resources), 'Accepted friend sees public_resources');
-      assert(afterFriend.data.user.email === undefined, 'ANTI-LEAK: Friend still CANNOT see sensitive personal email');
+      // 5.3 Switch User A back to public
+      await axios.put(`${API_BASE}/auth/profile`, { name: 'P14 User A Updated', privacy_setting: 'public' }, { headers: userA.headers });
 
-      // User C (not friend) is still restricted
-      const userCView = await axios.get(`${API_BASE}/users/${userA.id}/profile`, { headers: userC.headers });
-      assert(userCView.data.isRestricted === true, 'Non-friend User C is restricted');
+      // User B can view public showcase again
+      const restoredView = await axios.get(`${API_BASE}/users/${userA.id}/profile`, { headers: userB.headers });
+      assert(restoredView.data.isRestricted === false, 'Switching back to public restores public showcase');
+      assert(Array.isArray(restoredView.data.public_resources), 'User B sees public resources again');
     }
 
     // ─── SUITE 6: Bi-directional Block Relationship (Phase 13 Integration) ───

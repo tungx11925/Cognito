@@ -33,24 +33,23 @@ class ProfileService {
       }
     }
 
+    // Strict 2-tier privacy check (public vs private per Master Prompt)
     let isAllowed = false;
     if (isSelf) {
       isAllowed = true;
     } else if (targetUser.privacy_setting === 'public') {
       isAllowed = true;
-    } else if (targetUser.privacy_setting === 'friends') {
-      isAllowed = viewerId ? await profileRepository.checkFriendship(viewerId, targetUserId) : false;
     }
 
     if (!isAllowed) {
       return {
         isRestricted: true,
-        privacy: targetUser.privacy_setting,
+        privacy: targetUser.privacy_setting || 'private',
         user: {
           id: targetUser.id,
           name: targetUser.name,
           avatar_url: targetUser.avatar_url,
-          privacy_setting: targetUser.privacy_setting,
+          privacy_setting: targetUser.privacy_setting || 'private',
           bio: targetUser.bio,
           headline: targetUser.headline,
           created_at: targetUser.created_at
@@ -70,7 +69,6 @@ class ProfileService {
       const studyDatesResult = await activityRepository.getStudyDates(targetUserId);
       const studyDates = studyDatesResult.map(row => getVietnamDateString(new Date(row.study_date)));
       const documents = await profileRepository.getDocuments(targetUserId);
-      const friends = await profileRepository.getMutualFriends(targetUserId);
 
       return {
         isRestricted: false,
@@ -78,7 +76,6 @@ class ProfileService {
         user: {
           ...targetUser,
           study_dates: studyDates,
-          friends,
           decks: publicDecks,
           documents,
           learning_stats: {
@@ -101,14 +98,13 @@ class ProfileService {
     // Viewing another user's public profile:
     // Strip personal private contact details (email, phone, address, education, wallet_balance, etc.)
     // Strip private learning data (private documents, private notes, AI chats, quiz attempts, focus details)
+    // Strip role and is_premium to avoid targeting/harassment
     const safeProfile = {
       id: targetUser.id,
       name: targetUser.name,
       avatar_url: targetUser.avatar_url,
       streak: targetUser.streak,
       privacy_setting: targetUser.privacy_setting,
-      role: targetUser.role,
-      is_premium: targetUser.is_premium,
       bio: targetUser.bio,
       headline: targetUser.headline,
       created_at: targetUser.created_at,

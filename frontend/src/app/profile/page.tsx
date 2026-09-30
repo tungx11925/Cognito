@@ -424,6 +424,7 @@ export default function UserProfile() {
   const [editAddress, setEditAddress] = useState("");
   const [editBio, setEditBio] = useState("");
   const [editHeadline, setEditHeadline] = useState("");
+  const [editPrivacySetting, setEditPrivacySetting] = useState<string>("public");
   const [selectedProvince, setSelectedProvince] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
   const [provinceQuery, setProvinceQuery] = useState("");
@@ -490,6 +491,7 @@ export default function UserProfile() {
         address: finalAddress,
         bio: editBio,
         headline: editHeadline,
+        privacy_setting: editPrivacySetting,
       });
       if (success) {
         setIsEditing(false);
@@ -646,6 +648,17 @@ export default function UserProfile() {
 
               {/* Actions */}
               <div className="flex gap-2 pb-1 shrink-0">
+                {activeUser?.id && (
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={() => router.push(`/profile/${activeUser.id}`)}
+                    className="gap-1.5 border-[#1a2e1c]/30 text-[#1a2e1c] hover:bg-[#1a2e1c]/5"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    Xem trang công khai
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" className="gap-1.5 border-[#1a2e1c]/30 text-[#1a2e1c] hover:bg-[#1a2e1c]/5">
                   <Share2 className="w-3.5 h-3.5" />
                   Chia sẻ
@@ -698,6 +711,7 @@ export default function UserProfile() {
                     setEditEducation(savedEducation);
                     setEditBio(activeUser?.bio || "");
                     setEditHeadline(activeUser?.headline || "");
+                    setEditPrivacySetting(activeUser?.privacy_setting || "public");
                     
                     setIsEditing(true);
                   }}
@@ -1059,6 +1073,7 @@ export default function UserProfile() {
                                 setEditEducation(savedEducation);
                                 setEditBio(activeUser?.bio || "");
                                 setEditHeadline(activeUser?.headline || "");
+                                setEditPrivacySetting(activeUser?.privacy_setting || "public");
                                 
                                 setIsEditing(true);
                               }
@@ -1096,7 +1111,8 @@ export default function UserProfile() {
                         { label: "Địa chỉ", value: activeUser?.address || "", icon: MapPin },
                         { label: "Ngày tham gia", value: activeUser?.created_at ? new Date(activeUser.created_at).toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' }) : "Chưa rõ", icon: Calendar, readOnly: true },
                         { label: "Email liên hệ", value: activeUser?.email || "", icon: Mail, readOnly: true },
-                        { label: "Số điện thoại", value: activeUser?.phone || "Chưa cập nhật", icon: Phone }
+                        { label: "Số điện thoại", value: activeUser?.phone || "Chưa cập nhật", icon: Phone },
+                        { label: "Quyền riêng tư hồ sơ", value: activeUser?.privacy_setting === 'private' ? "Riêng tư (Chỉ mình bạn)" : "Công khai (Mọi người có thể xem)", icon: Globe }
                       ].map((item, index) => {
                         const isEditMode = isEditing && !item.readOnly;
                         
@@ -1279,6 +1295,20 @@ export default function UserProfile() {
                                       onChange={(e) => setEditEducation(e.target.value)}
                                       className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full text-left transition-all"
                                     />
+                                  </div>
+                                )}
+
+                                {item.label === "Quyền riêng tư hồ sơ" && (
+                                  <div className="flex flex-col gap-1 w-full text-left max-w-sm sm:max-w-md ml-auto">
+                                    <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">Chế độ hiển thị</div>
+                                    <select
+                                      value={editPrivacySetting}
+                                      onChange={(e) => setEditPrivacySetting(e.target.value)}
+                                      className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full text-left transition-all cursor-pointer"
+                                    >
+                                      <option value="public">Công khai (Mọi người đều có thể xem)</option>
+                                      <option value="private">Riêng tư (Chỉ mình bạn xem được)</option>
+                                    </select>
                                   </div>
                                 )}
                               </div>

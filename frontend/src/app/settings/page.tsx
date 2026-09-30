@@ -626,10 +626,7 @@ export default function SettingsPage() {
                             }`}
                           >
                             <option value="public">
-                              {language === "vi" ? "Công khai (Ai cũng có thể xem hồ sơ, flashcards, tài liệu)" : "Public (Anyone can view profile, flashcards, documents)"}
-                            </option>
-                            <option value="friends">
-                              {language === "vi" ? "Chỉ bạn bè học cùng (Chỉ những người đã kết bạn mới có thể xem)" : "Friends Only (Only connected friends can view)"}
+                              {language === "vi" ? "Công khai (Mọi người có thể xem hồ sơ và tài nguyên chia sẻ)" : "Public (Anyone can view profile and shared community resources)"}
                             </option>
                             <option value="private">
                               {language === "vi" ? "Riêng tư (Chỉ mình bạn xem được)" : "Private (Only you can view)"}
