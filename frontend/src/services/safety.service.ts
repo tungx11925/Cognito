@@ -5,7 +5,7 @@ const getAuthHeaders = (): Record<string, string> => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-export type ReportTargetType = 'resource' | 'comment' | 'user';
+export type ReportTargetType = 'resource' | 'comment' | 'user' | 'message';
 export type ReportReason =
   | 'SPAM'
   | 'INAPPROPRIATE'
@@ -98,23 +98,30 @@ export const safetyService = {
   },
 
   reportContent: async (
-    targetType: ReportTargetType,
-    targetId: number,
-    reason: ReportReason,
+    targetTypeOrInput: ReportTargetType | { targetType: ReportTargetType; targetId: number; reason: ReportReason; details?: string },
+    targetId?: number,
+    reason?: ReportReason,
     details?: string
   ) => {
+    let payload: { targetType: ReportTargetType; targetId: number; reason: ReportReason; details?: string };
+    if (typeof targetTypeOrInput === 'object') {
+      payload = targetTypeOrInput;
+    } else {
+      payload = {
+        targetType: targetTypeOrInput,
+        targetId: targetId!,
+        reason: reason!,
+        details,
+      };
+    }
+
     return await apiFetch('/api/community/reports', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...getAuthHeaders(),
       },
-      body: JSON.stringify({
-        targetType,
-        targetId,
-        reason,
-        details,
-      }),
+      body: JSON.stringify(payload),
     });
   },
 

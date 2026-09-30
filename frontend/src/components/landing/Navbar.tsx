@@ -6,6 +6,7 @@ import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, 
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
+import { getUnreadCount } from "@/services/message.service";
 
 export interface NotificationItem {
   id: string;
@@ -103,6 +104,24 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
   const [showToast, setShowToast] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  const [messageUnreadCount, setMessageUnreadCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const fetchUnread = () => {
+      getUnreadCount()
+        .then((res) => {
+          if (typeof res.total_unread === 'number') {
+            setMessageUnreadCount(res.total_unread);
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 15000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   const markAllAsRead = () => {
     updateNotifications(prev => prev.map(n => ({ ...n, read: true })));
@@ -357,6 +376,21 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   </button>
                 )}
                 
+                {/* Direct Messages Link Container */}
+                <Link
+                  href="/messages"
+                  prefetch={true}
+                  className="relative p-2 rounded-xl text-gray-700 hover:bg-[#1a3d28]/10 transition-colors flex items-center justify-center cursor-pointer"
+                  title="Tin nhắn"
+                >
+                  <MessageSquare size={18} className={messageUnreadCount > 0 ? "text-[#1a3d28]" : "text-gray-600"} />
+                  {messageUnreadCount > 0 && (
+                    <span className="absolute top-1 right-1 w-4 h-4 bg-emerald-600 text-white rounded-full text-[9px] font-black flex items-center justify-center animate-pulse border-2 border-[#f5f3ee]">
+                      {messageUnreadCount > 9 ? '9+' : messageUnreadCount}
+                    </span>
+                  )}
+                </Link>
+
                 {/* Notification Dropdown Container */}
                 <div className="relative notifications-dropdown-container">
                   <button
@@ -750,6 +784,16 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                     <Presentation size={16} /> Giảng dạy & Slide
                   </Link>
                   <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
+                  <Link href="/messages" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <MessageSquare size={16} /> Tin nhắn trực tiếp
+                    </span>
+                    {messageUnreadCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-xs font-black">
+                        {messageUnreadCount}
+                      </span>
+                    )}
+                  </Link>
                   <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">
                     <Trophy size={16} className="text-amber-500 fill-amber-500/20" /> Bảng xếp hạng
                   </Link>

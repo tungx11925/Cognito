@@ -21,6 +21,7 @@ const ALL_TESTS: PhaseTest[] = [
   { phase: 'Phase 12', name: 'Community Ecosystem & Resource Exchange', script: 'scripts/test-phase12.ts', isLiveAi: false },
   { phase: 'Phase 13', name: 'Community Safety & Content Moderation System', script: 'scripts/test-phase13.ts', isLiveAi: false },
   { phase: 'Phase 14', name: 'User Profile & Public Profile System', script: 'scripts/test-phase14.ts', isLiveAi: false },
+  { phase: 'Phase 15', name: 'User-to-User Chat & Direct Messaging', script: 'scripts/test-phase15.ts', isLiveAi: false },
 ];
 
 async function runRegression() {

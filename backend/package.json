@@ -8,6 +8,7 @@
     "test:fast": "ts-node scripts/run-all-tests.ts --fast",
     "test:live-ai": "ts-node scripts/run-all-tests.ts --live-ai",
     "test:all": "ts-node scripts/run-all-tests.ts",
+    "test:phase15": "ts-node scripts/test-phase15.ts",
     "migrate": "node-pg-migrate",
     "migrate:up": "node-pg-migrate up --no-check-order",
     "migrate:down": "node-pg-migrate down",

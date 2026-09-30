@@ -176,6 +176,14 @@ export class SafetyService {
       if (targetAuthorId === reporterId) {
         throw new AppError('Bạn không thể tự tố cáo chính bản thân mình', 400);
       }
+    } else if (input.targetType === 'message') {
+      const res = await db.query('SELECT id, sender_id, content FROM messages WHERE id = $1', [input.targetId]);
+      if (res.rows.length === 0) throw new AppError('Không tìm thấy tin nhắn để báo cáo', 404);
+      targetAuthorId = res.rows[0].sender_id;
+      targetTitle = res.rows[0].content.substring(0, 50);
+      if (targetAuthorId === reporterId) {
+        throw new AppError('Bạn không thể tự tố cáo tin nhắn của chính mình', 400);
+      }
     }
 
     // Check duplicate pending report

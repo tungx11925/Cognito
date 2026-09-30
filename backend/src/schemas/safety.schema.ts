@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const reportContentSchema = z.object({
-  targetType: z.enum(['resource', 'comment', 'user'], {
-    message: 'Loại mục tiêu tố cáo phải là resource, comment hoặc user',
+  targetType: z.enum(['resource', 'comment', 'user', 'message'], {
+    message: 'Loại mục tiêu tố cáo phải là resource, comment, user hoặc message',
   }),
   targetId: z.coerce.number().int().positive({
     message: 'ID mục tiêu tố cáo là bắt buộc',

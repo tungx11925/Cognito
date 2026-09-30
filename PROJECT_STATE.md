@@ -2129,8 +2129,128 @@ Status: DONE
 ### Tuân thủ Rule 0.1.1
 - Toàn bộ tính năng Phase 14 đã được triển khai hoàn chỉnh cả Backend và Frontend, xác minh qua 118/118 test assertions và 10/10 giai đoạn hồi quy.
 - Toàn bộ 3 Gate Checks của Rule 0.1.3 đều đạt chuẩn xuất sắc (TypeScript 0 errors trên cả FE & BE, Next.js build clean 23/23 routes, Fast regression pass).
-- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 15 (Direct Messaging / User-to-User Chat)**.
-- Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, nghiệm thu trước khi tiếp tục.
+
+---
+
+## ========================================================
+## PHASE 15 — USER-TO-USER CHAT (DIRECT MESSAGING & COMMUNICATION)
+## ========================================================
+*Hoàn thành ngày 30/09/2026*
+
+### 1. Kiến trúc & Thiết kế Phù hợp Master Prompt
+Theo chỉ đạo tại **Master Prompt lines 1503–1546** và **Flow D (lines 2217–2231)**:
+- **Module độc lập**: Direct Messaging là module độc lập (`/api/messages` & `/messages`), không phụ thuộc hay gắn chết vào Community. Community và Public Profile chỉ đóng vai trò kích hoạt (caller) thông qua tham số điều hướng URL `?user=${userId}`.
+- **Thực thể dữ liệu**:
+  1. `conversations`: ID, `last_message_text`, `last_message_at`, `last_sender_id`, `created_at`, `updated_at`.
+  2. `conversation_members`: `conversation_id`, `user_id`, `unread_count`, `last_read_at`, `joined_at`, unique `(conversation_id, user_id)`.
+  3. `messages`: `id`, `conversation_id`, `sender_id`, `content`, `message_type`, `is_read`, `created_at`.
+  4. `message_reads`: `id`, `message_id`, `user_id`, `read_at`, unique `(message_id, user_id)` (biên nhận đã xem).
+- **Tích hợp Chặn 2 chiều (Bi-directional Block)**: Tái sử dụng trực tiếp bảng `user_blocks` từ Phase 13 qua hàm `safetyService.hasBlockRelationship(userA, userB)`:
+  - Nếu A chặn B hoặc B chặn A: cả hai đều bị cấm gửi tin nhắn hoặc bắt đầu cuộc trò chuyện mới (HTTP 403 Forbidden).
+- **Tích hợp Kiểm duyệt & Báo cáo Nội dung (Content Reporting)**:
+  - Mở rộng `targetType: 'message'` vào `safety.schema.ts` và `safety.service.ts` giúp người dùng tố cáo trực tiếp tin nhắn quấy rối/spam trong luồng chat tới `content_reports` với trạng thái PENDING.
+- **Bảo vệ Chống Spam & Giới hạn Tần suất (Anti-Spam / Rate Limit)**:
+  - Middleware `rateLimiter(60000, 60)` kiểm soát số lượng request gửi tin nhắn.
+  - Tầng Service kiểm soát: tối đa 30 tin nhắn trong 60 giây và ngăn chặn hành vi gửi trùng lặp nội dung liên tiếp trong 3 giây.
+- **Truyền phát Thời gian thực (Real-time SSE)**:
+  - Endpoint SSE `/api/messages/stream` (xác thực token qua query/header/cookie) phát sóng sự kiện `NEW_MESSAGE` và `MESSAGES_READ` tới người nhận tức thì.
+
+---
+
+### 2. Các Thành phần Đã Triển khai
+
+#### A. Database Migration
+- Migration `backend/migrations/1791100000000_phase15_direct_messaging.js`:
+  - Khởi tạo và đồng bộ các bảng `conversations`, `conversation_members`, `messages`, `message_reads`.
+  - Thiết lập đầy đủ chỉ mục (`idx_conversations_last_msg`, `idx_conv_members_user`, `idx_messages_conversation`, `idx_message_reads_user`).
+  - Áp dụng thành công vào cơ sở dữ liệu PostgreSQL.
+
+#### B. Backend API & Dịch vụ (`/api/messages`)
+- **Validation Schemas (`backend/src/schemas/message.schema.ts`)**:
+  - `startConversationSchema`: Xác thực `recipient_id`.
+  - `sendMessageSchema`: Xác thực nội dung tin nhắn (1 - 2000 ký tự).
+  - `getMessagesQuerySchema`: Phân trang `limit` và `before_id` (hỗ trợ cuộn ngược lịch sử).
+- **Data Access Layer (`backend/src/repositories/message.repository.ts`)**:
+  - `findDirectConversationId`: Tìm kiếm hội thoại 1-1 đã tồn tại giữa 2 user.
+  - `createDirectConversation`: Tạo hội thoại và 2 thành viên trong transaction với `withTransaction`.
+  - `getUserConversations`: Truy vấn danh sách hội thoại kèm thông tin đối phương (`other_user`), số tin chưa đọc (`unread_count`), và cờ quan hệ chặn (`is_blocked`).
+  - `getConversationById`: Lấy chi tiết cuộc trò chuyện và đối phương.
+  - `getMessages`: Truy vấn tin nhắn phân trang kèm thông tin người gửi, sắp xếp theo trình tự thời gian.
+  - `createMessage`: Lưu tin nhắn mới, cập nhật `last_message_text`, `last_message_at` của conversation, và tăng `unread_count` cho thành viên còn lại.
+  - `markAsRead`: Reset `unread_count = 0`, đánh dấu `is_read = true` và ghi nhận lịch sử vào `message_reads`.
+  - `getTotalUnreadCount`: Tính tổng số tin nhắn chưa đọc cho Navbar badge.
+- **Service Layer (`backend/src/services/message.service.ts`)**:
+  - Kiểm tra tính hợp lệ của người nhận (tồn tại, không bị đình chỉ, không phải chính mình).
+  - Kiểm tra quan hệ chặn 2 chiều `hasBlockRelationship`.
+  - Cơ chế Anti-spam & Rate-limit ngăn chặn tin nhắn gửi quá nhanh hoặc lặp nội dung.
+  - Broadcast sự kiện SSE `NEW_MESSAGE` và `MESSAGES_READ` tới các phiên kết nối đang mở.
+- **Controller & Routes (`backend/src/controllers/message.controller.ts`, `backend/src/routes/message.routes.ts`)**:
+  - `GET /api/messages/stream`: Kết nối SSE nhận tin nhắn live.
+  - `GET /api/messages/unread-count`: Lấy tổng số tin nhắn chưa đọc.
+  - `GET /api/messages/conversations`: Lấy danh sách cuộc trò chuyện.
+  - `POST /api/messages/conversations`: Bắt đầu hoặc lấy hội thoại 1-1 với `recipient_id`.
+  - `GET /api/messages/conversations/:id`: Lấy chi tiết hội thoại (chặn IDOR đối với người ngoài).
+  - `GET /api/messages/conversations/:id/messages`: Lấy tin nhắn trong hội thoại.
+  - `POST /api/messages/conversations/:id/messages`: Gửi tin nhắn mới.
+  - `POST /api/messages/conversations/:id/read`: Đánh dấu đã đọc.
+  - Mount chính thức vào `backend/src/app.ts`.
+
+#### C. Frontend UI & Kết nối Người dùng
+- **Frontend Service (`frontend/src/services/message.service.ts`)**:
+  - Cung cấp đầy đủ hàm gọi API kèm TypeScript interfaces: `ChatUser`, `ConversationItem`, `MessageItem`.
+- **Trang Nhắn tin (`frontend/src/app/messages/page.tsx`)**:
+  - Giao diện Chia đôi màn hình (Split-View) chuẩn Responsive:
+    - **Cột trái**: Danh sách hội thoại, thanh tìm kiếm người dùng, nhãn số tin chưa đọc, thời gian gần nhất, biểu tượng khóa khi bị chặn.
+    - **Cột phải**: Khung chat hoạt động, thanh header đối phương, nút menu bảo mật (Xem hồ sơ, Báo cáo người dùng, Chặn/Bỏ chặn), dòng thời gian tin nhắn phân biệt bên gửi/nhận, biên nhận đã xem (dấu kiểm đôi), nút báo cáo nhanh từng tin nhắn khi rê chuột, thanh nhập tin nhắn gửi bằng phím Enter (Shift+Enter xuống dòng), banner cảnh báo khi cuộc trò chuyện bị chặn.
+  - Lắng nghe sự kiện SSE thời gian thực để cập nhật tin nhắn ngay khi nhận mà không cần reload trang.
+  - Hỗ trợ Deep-link `?user=${userId}` tự động mở hoặc tạo mới cuộc trò chuyện với user mục tiêu.
+  - Bọc `Suspense` an toàn cho Next.js Client Component.
+- **Tích hợp Điều hướng**:
+  - **Trang cá nhân (`frontend/src/app/profile/[userId]/page.tsx`)**: Nút "Nhắn tin" kết nối tới `/messages?user=${userId}`.
+  - **Cộng đồng (`frontend/src/app/community/page.tsx`)**: Nút "Nhắn tin" trên thẻ tác giả bài viết, trên từng bình luận và câu trả lời.
+  - **Navbar (`frontend/src/components/landing/Navbar.tsx`)**: Nút icon Tin nhắn kèm huy hiệu số tin chưa đọc tự động làm mới trên cả giao diện Desktop và Mobile.
+
+---
+
+### 3. Kết quả Kiểm thử & Đảm bảo Chất lượng (Quality Gates)
+
+#### A. Test Suite Chuyên biệt Phase 15 (`backend/scripts/test-phase15.ts`):
+- **Tổng số Assertions**: **40/40 Assertions PASSED (100%)**
+- Chi tiết 7 Suites kiểm thử:
+  1. **Suite 1: Conversation Creation & Idempotency** (9/9 PASS): Ngăn chặn tự nhắn tin cho bản thân (400), tạo hội thoại mới (201), kiểm tra tính Idempotent khi gọi lại trả về cùng Conversation ID, hiển thị đúng phía người nhận.
+  2. **Suite 2: Message Sending, Unread Counts & Timeline** (10/10 PASS): Gửi tin nhắn thành công (201), tăng số tin chưa đọc phía người nhận lên 1, giữ nguyên 0 phía người gửi, gửi phản hồi, lấy tin nhắn theo đúng thứ tự thời gian.
+  3. **Suite 3: Read Receipts & Mark as Read** (4/4 PASS): Đánh dấu đã đọc thành công (200), reset số tin chưa đọc về 0, lưu biên nhận vào `message_reads`.
+  4. **Suite 4: IDOR & Security Access Protection** (4/4 PASS): Người thứ 3 không thuộc hội thoại bị chặn truy cập chi tiết, đọc tin nhắn, gửi tin nhắn hoặc đánh dấu đọc (đều nhận 403 Forbidden).
+  5. **Suite 5: Bi-directional Block Integration** (6/6 PASS): Khi A chặn B, cả A và B đều không thể gửi tin nhắn vào hội thoại hiện có (403), không thể bắt đầu hội thoại mới (403); sau khi A bỏ chặn, việc nhắn tin được phục hồi bình thường (201).
+  6. **Suite 6: Content Reporting for Chat Messages** (4/4 PASS): Báo cáo tin nhắn quấy rối vào `content_reports` (201 PENDING), không cho phép tự báo cáo tin nhắn của chính mình (400), ngăn chặn báo cáo trùng lặp khi đang chờ xử lý (400).
+  7. **Suite 7: Anti-Spam & Input Validation** (3/3 PASS): Từ chối tin nhắn rỗng (400), từ chối tin nhắn vượt quá 2000 ký tự (400), từ chối tin nhắn gửi trùng lặp liên tiếp trong 3 giây (400 anti-spam).
+
+#### B. Kiểm thử Hồi quy Toàn diện (`npm run test:fast`):
+- **Phase 3**: PASS (Auth & User System — 2.37s)
+- **Phase 4**: PASS (Document Management & Processing Pipeline — 3.43s)
+- **Phase 7**: PASS (Exam & Question Bank Management — 2.25s)
+- **Phase 8**: PASS (Quiz / Test System & Anti-Cheat Grading — 2.33s)
+- **Phase 9**: PASS (Notes, Mindmaps & Flashcards Workspace — 3.29s)
+- **Phase 10**: PASS (Learning Activity, Learning Goals & StudyStreak — 2.58s)
+- **Phase 11**: PASS (Focus Mode & Distraction Detection Engine — 2.39s)
+- **Phase 12**: PASS (Community Ecosystem & Resource Exchange — 2.52s)
+- **Phase 13**: PASS (Community Safety & Content Moderation System — 4.01s)
+- **Phase 14**: PASS (User Profile & Public Profile System — 2.50s)
+- **Phase 15**: PASS (User-to-User Chat & Direct Messaging — 2.49s)
+- $\rightarrow$ **11/11 PHASES PASSED (100%), ZERO REGRESSION DETECTED**.
+
+#### C. Biên dịch & Đóng gói Mã nguồn:
+- Backend: `npx tsc --noEmit` $\rightarrow$ **0 lỗi TypeScript**.
+- Frontend: `npx tsc --noEmit` $\rightarrow$ **0 lỗi TypeScript**.
+- Next.js Build: `npm run build` $\rightarrow$ **24/24 static & dynamic routes compiled successfully**, trang `/messages` tạo thành công với kích thước tối ưu (8.2 kB).
+
+---
+
+### 4. Tuân thủ Rule 0.1.1
+- Toàn bộ tính năng Phase 15 (User-to-User Chat) đã hoàn tất 100%.
+- **TUYỆT ĐỐI KHÔNG TỰ Ý BẮT ĐẦU PHASE 16 (Notification System)**.
+- Dừng lại tại đây để báo cáo chi tiết và chờ người dùng đánh giá, nghiệm thu trước khi bước sang giai đoạn tiếp theo.
+
 
 
 

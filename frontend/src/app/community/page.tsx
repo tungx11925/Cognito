@@ -943,20 +943,35 @@ export default function CommunityPage() {
                       {/* Author Info & Date */}
                       <div className="flex items-center justify-between pt-4 mt-4 border-t border-stone-100 text-xs text-stone-500">
                         <div className="flex items-center gap-2">
-                          {item.author_avatar ? (
-                            <img
-                              src={item.author_avatar}
-                              alt={item.author_name}
-                              className="w-6 h-6 rounded-full object-cover border border-stone-200"
-                            />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px]">
-                              {item.author_name.charAt(0).toUpperCase()}
-                            </div>
+                          <button
+                            onClick={() => router.push(`/profile/${item.user_id}`)}
+                            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity text-left cursor-pointer"
+                            title="Xem hồ sơ người dùng"
+                          >
+                            {item.author_avatar ? (
+                              <img
+                                src={item.author_avatar}
+                                alt={item.author_name}
+                                className="w-6 h-6 rounded-full object-cover border border-stone-200"
+                              />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px]">
+                                {item.author_name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="font-medium text-stone-700 hover:text-emerald-800 truncate max-w-[110px]">
+                              {item.author_name}
+                            </span>
+                          </button>
+                          {!isOwner && (
+                            <button
+                              onClick={() => router.push(`/messages?user=${item.user_id}`)}
+                              className="text-stone-400 hover:text-emerald-700 transition-colors p-0.5 cursor-pointer"
+                              title="Nhắn tin cho tác giả"
+                            >
+                              <MessageSquare size={13} />
+                            </button>
                           )}
-                          <span className="font-medium text-stone-700 truncate max-w-[130px]">
-                            {item.author_name}
-                          </span>
                         </div>
 
                         <span className="text-stone-400">
@@ -1475,6 +1490,15 @@ export default function CommunityPage() {
                             >
                               <CornerDownRight size={12} /> Trả lời
                             </button>
+                            {!isAuthor && (
+                              <button
+                                onClick={() => router.push(`/messages?user=${c.user_id}`)}
+                                className="text-[11px] text-stone-400 hover:text-emerald-700 flex items-center gap-1 transition-colors cursor-pointer"
+                                title="Nhắn tin cho tác giả bình luận"
+                              >
+                                <MessageSquare size={11} /> Nhắn tin
+                              </button>
+                            )}
                             <button
                               onClick={() => handleOpenReport('comment', c.id, c.content)}
                               className="text-[11px] text-stone-400 hover:text-amber-600 flex items-center gap-1 transition-colors"
@@ -1530,6 +1554,15 @@ export default function CommunityPage() {
                                     >
                                       <Flag size={10} /> Báo cáo
                                     </button>
+                                    {!isReplyAuthor && (
+                                      <button
+                                        onClick={() => router.push(`/messages?user=${reply.user_id}`)}
+                                        className="text-[10px] text-stone-400 hover:text-emerald-700 flex items-center gap-0.5 transition-colors cursor-pointer"
+                                        title="Nhắn tin cho người trả lời"
+                                      >
+                                        <MessageSquare size={10} /> Nhắn tin
+                                      </button>
+                                    )}
                                     {!isReplyAuthor && (
                                       <button
                                         onClick={() => handleOpenBlock(reply.user_id, reply.user_name)}
