@@ -87,7 +87,7 @@ export default function FeedbackWidget() {
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.5, type: 'spring' }}
-        className="fixed bottom-6 right-6 z-40"
+        className="fixed bottom-6 right-6 z-[9990]"
       >
         <button
           onClick={() => setIsOpen(true)}
@@ -108,14 +108,14 @@ export default function FeedbackWidget() {
       {/* Modal Đánh giá trải nghiệm */}
       <AnimatePresence>
         {isOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => !isSubmitting && setIsOpen(false)}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-0"
             />
 
             {/* Modal Card */}
@@ -124,6 +124,7 @@ export default function FeedbackWidget() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden z-10 my-auto"
+              style={{ backgroundColor: '#ffffff' }}
             >
               {/* Header */}
               <div className="bg-gradient-to-r from-[#1a3d28] via-[#214f34] to-[#1a3d28] px-6 py-5 text-white flex items-center justify-between relative overflow-hidden">
@@ -147,7 +148,10 @@ export default function FeedbackWidget() {
               </div>
 
               {/* Body */}
-              <div className="p-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
+              <div 
+                className="p-6 max-h-[80vh] overflow-y-auto custom-scrollbar bg-white"
+                style={{ backgroundColor: '#ffffff' }}
+              >
                 {isSuccess ? (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.9 }}

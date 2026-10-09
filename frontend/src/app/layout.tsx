@@ -46,8 +46,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           />
           <TaskNotifications />
           <GlobalModals />
-          <FeedbackWidget />
           {children}
+          <FeedbackWidget />
         </StudyContextProvider>
       </body>
     </html>
