@@ -3,9 +3,15 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const isCloudOrProduction =
+  process.env.NODE_ENV === 'production' ||
+  Boolean(process.env.DATABASE_URL?.includes('supabase.co')) ||
+  Boolean(process.env.DATABASE_URL?.includes('pooler.supabase.com'));
+
 export const db = new Pool({
   connectionString: process.env.DATABASE_URL,
-  connectionTimeoutMillis: 5000,
+  ssl: isCloudOrProduction ? { rejectUnauthorized: false } : false,
+  connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 30000,
   max: 10,
 });
