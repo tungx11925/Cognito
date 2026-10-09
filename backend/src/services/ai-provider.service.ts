@@ -237,11 +237,16 @@ class AIProviderService {
   // ─────────────────────────── Chat / Completion ───────────────────────────
 
   private buildProviderOrder(resolved: { provider: ProviderName } | null): ProviderName[] {
+    const groqAdapter = this.adapters['groq'];
+    // Ưu tiên Groq trước vì tốc độ chip LPU siêu nhanh (~800ms) so với Gemini (~30s)
+    if (groqAdapter && groqAdapter.isAvailable()) {
+      return ['groq', 'gemini'];
+    }
     if (resolved) {
       const other: ProviderName = resolved.provider === 'groq' ? 'gemini' : 'groq';
-      return [resolved.provider, other]; // giữ hành vi fallback chéo như code cũ
+      return [resolved.provider, other];
     }
-    return ['groq', 'gemini']; // thứ tự mặc định cũ: Groq trước, Gemini sau
+    return ['groq', 'gemini'];
   }
 
   private async logRequest(params: {
@@ -300,7 +305,7 @@ class AIProviderService {
     const resolved = await this.resolveModel(options.modelId, options.taskType, options.tier).catch(() => null);
     const temperature = options.temperature ?? 0.6;
     const maxTokens = options.maxTokens ?? 4096;
-    const timeoutMs = options.timeoutMs ?? 120_000;
+    const timeoutMs = options.timeoutMs ?? 15_000;
 
     let lastError: any = null;
 
