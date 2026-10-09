@@ -27,16 +27,6 @@ function LandingPageContent() {
 
   const router = useRouter();
 
-  useEffect(() => {
-    if (isAuthenticated && activeUser) {
-      if (activeUser.role === 'admin') {
-        router.push('/admin');
-      } else if (activeUser.role === 'teacher') {
-        router.push('/teacher');
-      }
-    }
-  }, [isAuthenticated, activeUser, router]);
-
   const handleDemoScroll = () => {
     const element = document.getElementById('features');
     element?.scrollIntoView({ behavior: 'smooth' });
