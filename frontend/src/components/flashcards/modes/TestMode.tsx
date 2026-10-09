@@ -196,11 +196,11 @@ export default function TestMode({
   if (!isConfiguring) {
     return (
       <div className="flex-1 bg-[#fafafa] overflow-y-auto w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="w-full max-w-[1400px] mx-auto px-6 lg:px-12 py-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
             {/* === CỘT TRÁI: MAIN CONTENT (QUESTIONS) === */}
-            <div className="lg:col-span-8 space-y-8 pb-20">
+            <div className="lg:col-span-8 xl:col-span-9 space-y-8 pb-20">
               <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
                 <button onClick={() => setIsConfiguring(true)} className="text-gray-500 font-bold hover:text-gray-800 bg-gray-100 px-4 py-2 rounded-xl transition-colors">
                   Thoát bài thi
@@ -232,7 +232,7 @@ export default function TestMode({
                 {questions.map((q, idx) => {
                   const isCorrect = isSubmitted && (
                     (q.type === 'multipleChoice' && answers[q.id] === q.correctBack) ||
-                    (q.type === 'trueFalse' && (answers[q.id] === 'true') === q.isTrue) ||
+                    (q.type === 'trueFalse' && answers[q.id] !== undefined && answers[q.id] !== '' && (answers[q.id] === 'true') === q.isTrue) ||
                     (q.type === 'written' && answers[q.id]?.trim().toLowerCase() === q.correctBack.trim().toLowerCase())
                   );
                   const showRed = isSubmitted && !isCorrect;
@@ -353,7 +353,7 @@ export default function TestMode({
             </div>
 
             {/* === CỘT PHẢI: STICKY SIDEBAR (NAVIGATION) === */}
-            <div className="lg:col-span-4 hidden lg:block">
+            <div className="lg:col-span-4 xl:col-span-3 hidden lg:block">
               <div className="sticky top-24 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col max-h-[calc(100vh-8rem)]">
                 <h3 className="font-bold text-gray-800 mb-6 text-xl">Danh sách câu hỏi</h3>
                 
@@ -368,7 +368,7 @@ export default function TestMode({
                       if (isSubmitted) {
                         const isCorrect = (
                           (q.type === 'multipleChoice' && answers[q.id] === q.correctBack) ||
-                          (q.type === 'trueFalse' && (answers[q.id] === 'true') === q.isTrue) ||
+                          (q.type === 'trueFalse' && answers[q.id] !== undefined && answers[q.id] !== '' && (answers[q.id] === 'true') === q.isTrue) ||
                           (q.type === 'written' && answers[q.id]?.trim().toLowerCase() === q.correctBack.trim().toLowerCase())
                         );
                         if (isCorrect) {
