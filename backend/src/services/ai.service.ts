@@ -17,21 +17,46 @@ export class AiService {
     let reply = '';
 
     let documentText = '';
-    if (document && document.doc_url && (document.doc_url.endsWith('.docx') || document.doc_url.endsWith('.doc'))) {
-       documentText = await parserService.parseFromUrl(document.doc_url);
+    // 1. RAG Fast Retrieval: Lấy trực tiếp từ document_chunks (5ms, không tốn 2s tải Cloudinary)
+    if (document && document.id) {
+      try {
+        const chunksResult = await db.query(
+          `SELECT content FROM document_chunks 
+           WHERE document_id = $1 
+           ORDER BY chunk_index ASC 
+           LIMIT 2`,
+          [document.id]
+        );
+        if (chunksResult.rows.length > 0) {
+          documentText = chunksResult.rows.map(r => r.content).join('\n---\n');
+        }
+      } catch (err) {
+        console.warn('Failed to fetch document_chunks:', err);
+      }
     }
 
-    const systemPrompt = `Bạn là trợ lý AI thông minh "EduShare AI", một siêu gia sư có khả năng phân tích, giảng dạy, giải toán và phân tích hình ảnh toàn diện như ChatGPT-4o.
-Tên tài liệu người dùng đang xem: ${docTitle}
-Mô tả: ${docDesc}
-Nội dung tài liệu (Trích xuất trực tiếp từ file):\n\n${documentText ? documentText.substring(0, 5000) : '(Người dùng chưa tải lên file có nội dung văn bản, hãy hỗ trợ dựa trên câu hỏi của họ)'}\n\n
-${docSolution ? 'Lời giải đính kèm: ' + docSolution : ''}
+    if (!documentText && document) {
+      if (document.solution_text) {
+        documentText = document.solution_text;
+      } else if (document.doc_url && (document.doc_url.endsWith('.docx') || document.doc_url.endsWith('.doc'))) {
+        documentText = await parserService.parseFromUrl(document.doc_url);
+      }
+    }
 
-YÊU CẦU ĐỐI VỚI BẠN (AI):
-1. Nếu người dùng gửi KÈM MỘT HOẶC NHIỀU HÌNH ẢNH: Hãy quan sát kỹ toàn bộ các hình ảnh (bài tập, công thức, biểu đồ, sơ đồ, các trang sách hoặc hình vẽ), kết hợp và phân tích / giải chi tiết từng bước cho từng ảnh.
-2. Nếu là bài Toán/Lý/Hóa trong ảnh hoặc văn bản: Phân tích đề bài, chỉ ra công thức áp dụng, giải từng bước và đưa ra đáp số rõ ràng.
-3. Nếu là Tiếng Anh / Ngoại ngữ: Nhận diện chữ trong ảnh, giải thích ngữ pháp, từ vựng và dịch nghĩa đầy đủ.
-4. Trình bày nội dung đẹp mắt bằng Markdown (in đậm, danh sách gạch đầu dòng, công thức LaTeX chuẩn xác $\\rightarrow$, $x^2$).`;
+    // Tiết kiệm token: Chỉ lấy tối đa 1500 ký tự context trọng tâm thay vì 5000+
+    const trimmedDocText = documentText ? documentText.substring(0, 1500) : '';
+
+    const systemPrompt = `Bạn là trợ lý AI học tập thông minh "EduShare AI".
+Tài liệu đang xem: "${docTitle}"
+${docDesc ? 'Mô tả: ' + docDesc : ''}
+Trích đoạn nội dung tài liệu:
+${trimmedDocText || '(Hỗ trợ dựa trên kiến thức học thuật và câu hỏi của học sinh)'}
+${docSolution ? '\nLời giải đính kèm: ' + docSolution.substring(0, 500) : ''}
+
+QUY TẮC PHẢN HỒI (TIẾT KIỆM TOKEN & TRẢ LỜI NHANH):
+1. Trả lời trực diện, súc tích, đi thẳng vào câu hỏi hoặc yêu cầu dịch/giải bài.
+2. Trình bày rõ ràng bằng Markdown (gạch đầu dòng, công thức LaTeX nếu có).
+3. Không mở đầu chào hỏi lê thê dài dòng, trả lời trong tối đa 3-4 đoạn ngắn.`;
 
     // Normalize images into an array (supports both single 'image' and multiple 'images')
     let imageList: string[] = [];
@@ -82,14 +107,15 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
     try {
       const apiMessages: any[] = [{ role: "system", content: systemPrompt }];
       if (history && Array.isArray(history)) {
-        apiMessages.push(...history.slice(-4));
+        // Tiết kiệm token: Chỉ lấy 2 tin nhắn gần nhất thay vì 4+
+        apiMessages.push(...history.slice(-2));
       }
       apiMessages.push({ role: "user", content: message });
 
       const result = await aiProviderService.chat({
         messages: apiMessages,
-        temperature: 0.7,
-        maxTokens: 4096,
+        temperature: 0.5,
+        maxTokens: 1024,
         taskType: 'chat',
         userId: userId ?? null,
         documentId: document ? document.id : null,
@@ -131,6 +157,21 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
   async generateQuizForDocument(document: any) {
     if (process.env.NODE_ENV === 'production' && (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY)) {
       throw new AppError('AI Service is temporarily unavailable or not configured. Please contact the administrator.', 503);
+    }
+
+    // 1. Kiểm tra cache trước (tiết kiệm 100% token, phản hồi siêu tốc <5ms)
+    if (document && document.id) {
+      try {
+        const cached = await db.query(
+          'SELECT quizzes FROM document_quiz_cache WHERE document_id = $1',
+          [document.id]
+        );
+        if (cached.rows.length > 0 && Array.isArray(cached.rows[0].quizzes) && cached.rows[0].quizzes.length > 0) {
+          return cached.rows[0].quizzes;
+        }
+      } catch (cacheErr) {
+        console.warn('[QuizCache] Read failed:', cacheErr);
+      }
     }
     
     let quizzes = [];
@@ -230,6 +271,18 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
         }
       ];
     }
+
+    // 2. Lưu vào cache cho các lần sau (tốn 0 token cho mọi lượt truy cập sau)
+    if (document && document.id && quizzes.length > 0) {
+      db.query(
+        `INSERT INTO document_quiz_cache (document_id, quizzes)
+         VALUES ($1, $2)
+         ON CONFLICT (document_id)
+         DO UPDATE SET quizzes = EXCLUDED.quizzes, created_at = CURRENT_TIMESTAMP`,
+        [document.id, JSON.stringify(quizzes)]
+      ).catch(err => console.warn('[QuizCache] Write failed:', err));
+    }
+
     return quizzes;
   }
 
