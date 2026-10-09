@@ -19,9 +19,9 @@ export const submitFeedback = async (req: AuthRequest, res: Response, next: Next
     let resolvedEmail = user_email?.trim() || null;
 
     if (userId) {
-      const userRes = await db.query('SELECT username, email FROM users WHERE id = $1', [userId]);
+      const userRes = await db.query('SELECT name, email FROM users WHERE id = $1', [userId]);
       if (userRes.rows.length > 0) {
-        resolvedName = resolvedName || userRes.rows[0].username;
+        resolvedName = resolvedName || userRes.rows[0].name;
         resolvedEmail = resolvedEmail || userRes.rows[0].email;
       }
     }
@@ -64,7 +64,7 @@ export const getAdminFeedbacks = async (req: AuthRequest, res: Response, next: N
          f.comment,
          f.page_url,
          f.created_at,
-         u.username AS account_username,
+         u.name AS account_username,
          u.avatar_url
        FROM user_feedbacks f
        LEFT JOIN users u ON f.user_id = u.id
