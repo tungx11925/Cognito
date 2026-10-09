@@ -86,8 +86,9 @@ export async function bootstrapAITestSchema() {
       ALTER TABLE questions ADD COLUMN IF NOT EXISTS source_chunk_id INTEGER REFERENCES document_chunks(id) ON DELETE SET NULL;
     `);
 
-    // Step 4 — Add user_id to ai_task_configs (safe upgrade)
+    // Step 4 — Add course_id and user_id to ai_task_configs (safe upgrade)
     await db.query(`
+      ALTER TABLE ai_task_configs ADD COLUMN IF NOT EXISTS course_id VARCHAR(255);
       ALTER TABLE ai_task_configs ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
     `);
 
