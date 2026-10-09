@@ -3,7 +3,7 @@
 exports.shorthands = undefined;
 
 exports.up = pgm => {
-  // 1. Create Enums
+  // 1. Create Enums & Ensure questions table exists
   pgm.sql(`
     DO $$ BEGIN
       CREATE TYPE academic_status AS ENUM ('ACTIVE', 'INACTIVE', 'ARCHIVED');
@@ -24,6 +24,17 @@ exports.up = pgm => {
       CREATE TYPE attempt_status AS ENUM ('IN_PROGRESS', 'SUBMITTED', 'GRADED', 'ABANDONED');
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$;
+
+    CREATE TABLE IF NOT EXISTS questions (
+      id SERIAL PRIMARY KEY,
+      test_set_id INTEGER REFERENCES test_sets(id) ON DELETE CASCADE,
+      content TEXT NOT NULL,
+      score NUMERIC(4,2) DEFAULT 1.0,
+      options JSONB,
+      correct_answer JSONB,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // 2. Academic Years

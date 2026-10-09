@@ -2,7 +2,37 @@
 
 exports.shorthands = undefined;
 
-exports.up = pgm => {
+exports.up = async pgm => {
+  // 0. Đảm bảo bảng test_sets tồn tại (phục vụ khóa ngoại của class_assignments)
+  await pgm.sql(`
+    CREATE TABLE IF NOT EXISTS ai_task_configs (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      mcq_count INTEGER DEFAULT 10,
+      mcq_score NUMERIC(4,2) DEFAULT 0.5,
+      fill_blank_count INTEGER DEFAULT 5,
+      fill_blank_score NUMERIC(4,2) DEFAULT 1.0,
+      essay_count INTEGER DEFAULT 2,
+      essay_score NUMERIC(4,2) DEFAULT 2.0,
+      true_false_count INTEGER DEFAULT 5,
+      true_false_score NUMERIC(4,2) DEFAULT 0.5,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS test_sets (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      config_id INTEGER REFERENCES ai_task_configs(id) ON DELETE SET NULL,
+      total_questions INTEGER DEFAULT 0,
+      total_score NUMERIC(6,2) DEFAULT 0,
+      is_active BOOLEAN DEFAULT true,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // 1. Cập nhật bảng users: thêm primary_organization_id
   pgm.addColumn('users', {
     primary_organization_id: { type: 'uuid' }
