@@ -307,7 +307,7 @@ ${extractedText.substring(0, 15000)}
         const groq = new Groq({ apiKey: groqApiKey });
         const comp = await groq.chat.completions.create({
           messages: [{ role: 'user', content: prompt }],
-          model: process.env.GROQ_CHAT_MODEL || 'groq/compound-mini',
+          model: process.env.GROQ_CHAT_MODEL || 'openai/gpt-oss-120b',
           temperature: 0.3,
           max_tokens: 3000
         });
@@ -533,7 +533,7 @@ Trả lời súc tích, dễ hiểu và chuyên sâu bằng Tiếng Việt chu�
         const groq = new Groq({ apiKey: groqApiKey });
         const comp = await groq.chat.completions.create({
           messages: [{ role: 'user', content: systemPrompt }],
-          model: process.env.GROQ_CHAT_MODEL || 'groq/compound-mini',
+          model: process.env.GROQ_CHAT_MODEL || 'openai/gpt-oss-120b',
           temperature: 0.5,
           max_tokens: 1500
         });

@@ -82,7 +82,7 @@ class GroqAdapter implements AIProviderAdapter {
   }
 
   defaultModelName(): string {
-    return process.env.GROQ_CHAT_MODEL || 'groq/compound';
+    return process.env.GROQ_CHAT_MODEL || 'openai/gpt-oss-120b';
   }
 
   async complete(req: AdapterCompleteRequest): Promise<AdapterCompleteResult> {
@@ -119,7 +119,7 @@ class GeminiAdapter implements AIProviderAdapter {
   }
 
   defaultModelName(): string {
-    return process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+    return process.env.GEMINI_MODEL || 'gemini-3.8-flash';
   }
 
   async complete(req: AdapterCompleteRequest): Promise<AdapterCompleteResult> {

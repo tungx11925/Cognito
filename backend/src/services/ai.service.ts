@@ -66,7 +66,7 @@ YÊU CẦU ĐỐI VỚI BẠN (AI):
     if (imageParts.length > 0 && geminiApiKey && !geminiApiKey.includes('your_')) {
       try {
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+        const modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
         const model = genAI.getGenerativeModel({ model: modelName });
         
         const promptText = `${systemPrompt}\n\nCâu hỏi/Yêu cầu của người dùng đối với các hình ảnh đính kèm: "${message || 'Hãy quan sát kỹ, phân tích, đối chiếu và giải đáp chi tiết tất cả các hình ảnh này.'}"`;
