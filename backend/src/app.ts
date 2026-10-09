@@ -31,16 +31,29 @@ if (missingEnvs.length > 0) {
 
 const app = express();
 app.set('trust proxy', 1);
+const configuredOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map(url => url.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
+  ...configuredOrigins,
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-].filter(Boolean) as string[];
+];
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
+    }
+    try {
+      const hostname = new URL(origin).hostname;
+      if (hostname === 'localhost' || hostname.endsWith('.vercel.app')) {
+        return callback(null, true);
+      }
+    } catch {
+      // ignore invalid URL
     }
     return callback(new Error('Not allowed by CORS'));
   },
