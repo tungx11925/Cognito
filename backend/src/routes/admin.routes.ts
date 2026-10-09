@@ -13,6 +13,7 @@ import {
   warnUser,
   getUserDetails
 } from '../controllers/admin.controller';
+import { getAdminFeedbacks, deleteAdminFeedback } from '../controllers/feedback.controller';
 
 const router = Router();
 
@@ -29,5 +30,7 @@ router.get('/users/:id/details', getUserDetails);
 router.get('/documents', rateLimiter(60000, 120), getDocuments);
 router.delete('/documents/:id', deleteDocument);
 router.get('/transactions', getTransactions);
+router.get('/feedbacks', getAdminFeedbacks);
+router.delete('/feedbacks/:id', deleteAdminFeedback);
 
 export default router;

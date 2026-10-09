@@ -2,6 +2,7 @@ import './globals.css';
 import { StudyContextProvider } from '../context/StudyContext';
 import { TaskNotifications } from '@/components/TaskNotifications';
 import GlobalModals from '@/components/layout/GlobalModals';
+import FeedbackWidget from '@/components/feedback/FeedbackWidget';
 import Script from 'next/script';
 import { Toaster } from 'react-hot-toast';
 import type { Metadata } from 'next';
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           />
           <TaskNotifications />
           <GlobalModals />
+          <FeedbackWidget />
           {children}
         </StudyContextProvider>
       </body>

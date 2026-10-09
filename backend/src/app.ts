@@ -15,6 +15,7 @@ import questionGenerationRoutes from './routes/question-generation.routes';
 import lectureRoutes from './routes/lecture.routes';
 import schoolRoutes from './routes/school.routes';
 import attemptRoutes from './routes/attempt.routes';
+import feedbackRoutes from './routes/feedback.routes';
 import { bootstrapAITestSchema } from './db/ai-test-schema';
 import { bootstrapLectureSchema } from './db/lecture-schema';
 import path from 'path';
@@ -81,6 +82,7 @@ app.use('/api', aiTestRoutes);
 app.use('/api', questionGenerationRoutes);
 app.use('/api/school', schoolRoutes);
 app.use('/api', attemptRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Tạo các bảng phục vụ tính năng "Bài tập AI" và "Bài giảng Giảng viên (Lecture Slides)"
 bootstrapAITestSchema().catch(err => console.error('AI test schema bootstrap failed:', err));
