@@ -64,10 +64,11 @@ app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK' });
+  res.json({ status: 'OK', version: '2.1.0-feedback', timestamp: new Date().toISOString() });
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/feedback', feedbackRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/flashcards', flashcardRoutes);
 app.use('/api/shares', shareRoutes);
@@ -76,13 +77,12 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/lectures', lectureRoutes);
+app.use('/api/school', schoolRoutes);
 app.use('/api', activityRoutes);
 app.use('/api', studyRoutes);
 app.use('/api', aiTestRoutes);
 app.use('/api', questionGenerationRoutes);
-app.use('/api/school', schoolRoutes);
 app.use('/api', attemptRoutes);
-app.use('/api/feedback', feedbackRoutes);
 
 // Tạo các bảng phục vụ tính năng "Bài tập AI" và "Bài giảng Giảng viên (Lecture Slides)"
 bootstrapAITestSchema().catch(err => console.error('AI test schema bootstrap failed:', err));

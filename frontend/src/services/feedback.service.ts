@@ -38,7 +38,7 @@ export interface FeedbackStats {
 
 // User submits feedback
 export const submitFeedback = async (data: FeedbackSubmission) => {
-  return apiFetch('/feedback', {
+  const res = await apiFetch('/feedback', {
     method: 'POST',
     headers: {
       ...getAuthHeaders(),
@@ -46,20 +46,32 @@ export const submitFeedback = async (data: FeedbackSubmission) => {
     },
     body: JSON.stringify(data),
   });
+  if (res && res.error) {
+    throw new Error(res.error);
+  }
+  return res;
 };
 
 // Admin gets all feedbacks and analytics
 export const getAdminFeedbacks = async (): Promise<{ success: boolean; stats: FeedbackStats; feedbacks: FeedbackItem[] }> => {
-  return apiFetch('/admin/feedbacks', {
+  const res = await apiFetch('/admin/feedbacks', {
     method: 'GET',
     headers: getAuthHeaders(),
   });
+  if (res && res.error) {
+    throw new Error(res.error);
+  }
+  return res;
 };
 
 // Admin deletes a feedback
 export const deleteAdminFeedback = async (id: number) => {
-  return apiFetch(`/admin/feedbacks/${id}`, {
+  const res = await apiFetch(`/admin/feedbacks/${id}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
+  if (res && res.error) {
+    throw new Error(res.error);
+  }
+  return res;
 };
