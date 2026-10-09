@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useStudy } from '@/context/StudyContext';
-import { submitFeedback } from '@/services/feedback.service';
-import { MessageSquareHeart, Star, X, Send, CheckCircle2, Sparkles, AlertCircle } from 'lucide-react';
+import { submitFeedback, checkMyFeedbackStatus } from '@/services/feedback.service';
+import { MessageSquareHeart, Star, X, Send, CheckCircle2, Sparkles, AlertCircle, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CATEGORIES = [
@@ -38,6 +38,34 @@ export default function FeedbackWidget() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [hasSubmitted, setHasSubmitted] = useState<boolean>(false);
+  const [submittedData, setSubmittedData] = useState<any>(null);
+
+  // Kiểm tra trạng thái đã đánh giá hay chưa
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('cognito_feedback_submitted');
+      if (stored === 'true') {
+        setHasSubmitted(true);
+      }
+    }
+
+    if (activeUser?.id && activeUser?.role !== 'admin') {
+      checkMyFeedbackStatus()
+        .then((res) => {
+          if (res?.hasSubmitted) {
+            setHasSubmitted(true);
+            if (res.feedback) {
+              setSubmittedData(res.feedback);
+            }
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('cognito_feedback_submitted', 'true');
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeUser]);
 
   // Ẩn hoàn toàn nếu người dùng là Admin hoặc đang ở trong trang quản trị /admin
   if (activeUser?.role === 'admin' || pathname?.startsWith('/admin')) {
@@ -65,14 +93,31 @@ export default function FeedbackWidget() {
       });
 
       setIsSuccess(true);
+      setHasSubmitted(true);
+      setSubmittedData({
+        rating,
+        category,
+        comment: comment.trim(),
+        created_at: new Date().toISOString(),
+      });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('cognito_feedback_submitted', 'true');
+      }
+
       setTimeout(() => {
         setIsSuccess(false);
         setIsOpen(false);
         setComment('');
-        setRating(5);
       }, 2500);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Không thể gửi đánh giá, vui lòng thử lại.');
+      const msg = err.message || 'Không thể gửi đánh giá, vui lòng thử lại.';
+      if (msg.includes('đã gửi') || msg.includes('1 lần')) {
+        setHasSubmitted(true);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('cognito_feedback_submitted', 'true');
+        }
+      }
+      setErrorMessage(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -91,17 +136,25 @@ export default function FeedbackWidget() {
       >
         <button
           onClick={() => setIsOpen(true)}
-          className="group flex items-center gap-2.5 px-4 py-3 bg-[#1a3d28] hover:bg-[#153422] text-white rounded-full shadow-lg hover:shadow-xl hover:shadow-[#1a3d28]/25 transition-all duration-300 active:scale-95 border border-white/20"
-          title="Đóng góp ý kiến & Đánh giá trải nghiệm"
+          className={`group flex items-center gap-2.5 px-4 py-3 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 active:scale-95 border border-white/20 ${
+            hasSubmitted
+              ? 'bg-[#1a3d28]/95 hover:bg-[#153422] hover:shadow-[#1a3d28]/25'
+              : 'bg-[#1a3d28] hover:bg-[#153422] hover:shadow-[#1a3d28]/25'
+          }`}
+          title={hasSubmitted ? "Bạn đã gửi đánh giá trải nghiệm (Click để xem lại)" : "Đóng góp ý kiến & Đánh giá trải nghiệm"}
         >
           <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 group-hover:scale-110 transition-transform">
-            <MessageSquareHeart size={15} />
+            {hasSubmitted ? <CheckCircle2 size={15} /> : <MessageSquareHeart size={15} />}
           </div>
-          <span className="text-xs font-bold tracking-wide pr-1">Đánh giá</span>
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          <span className="text-xs font-bold tracking-wide pr-1">
+            {hasSubmitted ? 'Đã đánh giá' : 'Đánh giá'}
           </span>
+          {!hasSubmitted && (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+          )}
         </button>
       </motion.div>
 
@@ -131,11 +184,15 @@ export default function FeedbackWidget() {
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-400/10 rounded-full translate-x-8 -translate-y-8 blur-xl pointer-events-none" />
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-emerald-300 border border-white/15">
-                    <Sparkles size={20} />
+                    {hasSubmitted ? <ShieldCheck size={20} /> : <Sparkles size={20} />}
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-base tracking-tight">Đánh giá & Góp ý trải nghiệm</h3>
-                    <p className="text-xs text-emerald-100/80">Ý kiến của bạn giúp Cognito ngày càng hoàn thiện hơn</p>
+                    <h3 className="font-extrabold text-base tracking-tight">
+                      {hasSubmitted ? 'Đánh giá của bạn đã được ghi nhận' : 'Đánh giá & Góp ý trải nghiệm'}
+                    </h3>
+                    <p className="text-xs text-emerald-100/80">
+                      {hasSubmitted ? 'Cảm ơn bạn đã đồng hành và đóng góp cho Cognito' : 'Ý kiến của bạn giúp Cognito ngày càng hoàn thiện hơn'}
+                    </p>
                   </div>
                 </div>
                 <button
@@ -165,6 +222,66 @@ export default function FeedbackWidget() {
                     <p className="text-xs text-gray-500 max-w-xs">
                       Cảm ơn bạn rất nhiều! Đội ngũ phát triển Cognito đã ghi nhận ý kiến đóng góp quý báu này.
                     </p>
+                  </motion.div>
+                ) : hasSubmitted ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="py-4 text-center flex flex-col items-center justify-center space-y-4"
+                  >
+                    <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border-2 border-emerald-200 shadow-sm">
+                      <CheckCircle2 size={36} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <h4 className="text-lg font-bold text-gray-900">Tài khoản đã gửi đánh giá trải nghiệm</h4>
+                      <p className="text-xs text-gray-500 max-w-sm mx-auto leading-relaxed">
+                        Để đảm bảo tính khách quan và tránh tình trạng spam, mỗi tài khoản người dùng chỉ được gửi đánh giá trải nghiệm tổng thể 1 lần.
+                      </p>
+                    </div>
+
+                    {submittedData && (
+                      <div className="w-full bg-gray-50/80 rounded-2xl p-4 text-left border border-gray-100 space-y-2.5 mt-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-gray-600">Đánh giá đã gửi:</span>
+                          <div className="flex items-center gap-0.5">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star
+                                key={s}
+                                size={14}
+                                className={s <= (Number(submittedData.rating) || 5) ? 'fill-amber-400 text-amber-400' : 'text-gray-200'}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        {submittedData.category && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-gray-500">Chủ đề:</span>
+                            <span className="text-xs text-emerald-800 font-bold bg-emerald-100/60 px-2.5 py-0.5 rounded-md">
+                              {submittedData.category}
+                            </span>
+                          </div>
+                        )}
+
+                        {submittedData.comment && (
+                          <div className="mt-1">
+                            <span className="text-[11px] text-gray-500 block mb-1">Nội dung góp ý:</span>
+                            <p className="text-xs text-gray-700 italic bg-white p-3 rounded-xl border border-gray-100 leading-relaxed">
+                              &ldquo;{submittedData.comment}&rdquo;
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="pt-2 w-full">
+                      <button
+                        onClick={() => setIsOpen(false)}
+                        className="w-full py-3 px-5 rounded-2xl bg-[#1a3d28] hover:bg-[#153422] text-white font-bold text-xs transition-all shadow-sm hover:shadow"
+                      >
+                        Đã hiểu & Đóng
+                      </button>
+                    </div>
                   </motion.div>
                 ) : (
                   <form onSubmit={handleSubmit} className="space-y-5">

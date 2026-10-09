@@ -24,6 +24,28 @@ export const submitFeedback = async (req: AuthRequest, res: Response, next: Next
         resolvedName = resolvedName || userRes.rows[0].name;
         resolvedEmail = resolvedEmail || userRes.rows[0].email;
       }
+
+      // Chống spam: 1 tài khoản chỉ được gửi đánh giá 1 lần
+      const existingUserFeedback = await db.query(
+        'SELECT id FROM user_feedbacks WHERE user_id = $1 LIMIT 1',
+        [userId]
+      );
+      if (existingUserFeedback.rows.length > 0) {
+        return res.status(400).json({
+          error: 'Tài khoản của bạn đã gửi đánh giá trải nghiệm rồi. Mỗi tài khoản chỉ được gửi 1 lần để tránh spam.'
+        });
+      }
+    } else if (resolvedEmail) {
+      // Đối với khách vãng lai: kiểm tra trùng email
+      const existingEmailFeedback = await db.query(
+        'SELECT id FROM user_feedbacks WHERE LOWER(user_email) = LOWER($1) LIMIT 1',
+        [resolvedEmail]
+      );
+      if (existingEmailFeedback.rows.length > 0) {
+        return res.status(400).json({
+          error: 'Email này đã từng gửi đánh giá trải nghiệm rồi. Mỗi người dùng chỉ được đánh giá 1 lần.'
+        });
+      }
     }
 
     const result = await db.query(
@@ -45,6 +67,39 @@ export const submitFeedback = async (req: AuthRequest, res: Response, next: Next
       success: true,
       message: 'Cảm ơn bạn đã đóng góp ý kiến giúp Cognito ngày càng hoàn thiện!',
       feedbackId: result.rows[0].id
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMyFeedbackStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.id || null;
+    if (!userId) {
+      return res.status(200).json({ success: true, hasSubmitted: false });
+    }
+
+    const check = await db.query(
+      `SELECT id, rating, category, comment, created_at 
+       FROM user_feedbacks 
+       WHERE user_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (check.rows.length > 0) {
+      return res.status(200).json({
+        success: true,
+        hasSubmitted: true,
+        feedback: check.rows[0]
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      hasSubmitted: false
     });
   } catch (error) {
     next(error);

@@ -36,6 +36,18 @@ export interface FeedbackStats {
   categoryCounts: Record<string, number>;
 }
 
+// Check if current user has already submitted feedback
+export const checkMyFeedbackStatus = async (): Promise<{ success: boolean; hasSubmitted: boolean; feedback?: any }> => {
+  const res = await apiFetch('/feedback/status', {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  if (res && res.error) {
+    return { success: false, hasSubmitted: false };
+  }
+  return res || { success: true, hasSubmitted: false };
+};
+
 // User submits feedback
 export const submitFeedback = async (data: FeedbackSubmission) => {
   const res = await apiFetch('/feedback', {
