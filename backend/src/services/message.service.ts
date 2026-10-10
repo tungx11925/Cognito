@@ -7,6 +7,7 @@ import {
 } from '../repositories/message.repository';
 import { safetyService } from './safety.service';
 import { sseService } from '../utils/sse.service';
+import { notificationService } from './notification.service';
 
 class MessageService {
   /**
@@ -173,6 +174,21 @@ class MessageService {
 
     sseService.sendToUser(otherMember.id, 'NEW_MESSAGE', payload);
     sseService.sendToUser(senderId, 'NEW_MESSAGE', payload);
+
+    // 7. Create notification for recipient
+    try {
+      const senderName = message.sender?.name || 'Một người dùng';
+      await notificationService.createNotification({
+        userId: otherMember.id,
+        type: 'message',
+        title: 'Tin nhắn mới',
+        content: `${senderName}: ${content.substring(0, 60)}`,
+        link: `/messages?user=${senderId}`,
+        actorId: senderId,
+      });
+    } catch (err) {
+      console.error('Error creating message notification:', err);
+    }
 
     return message;
   }

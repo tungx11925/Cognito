@@ -79,3 +79,16 @@ export const changePasswordSchema = z.object({
     newPassword: passwordSchema,
   }),
 });
+
+export const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().email('Email không hợp lệ').toLowerCase().trim(),
+  }),
+});
+
+export const resetPasswordSchema = z.object({
+  body: z.object({
+    token: z.string().min(1, 'Token đặt lại mật khẩu là bắt buộc'),
+    newPassword: passwordSchema,
+  }),
+});

@@ -116,6 +116,10 @@ export class UserRepository {
   }
 
   async checkAvailability(field: string, value: string, client?: PoolClient) {
+    const allowedFields = ['email', 'phone', 'name'];
+    if (!allowedFields.includes(field)) {
+      throw new Error(`Invalid field for checkAvailability: ${field}`);
+    }
     const q = client || db;
     const query = `SELECT id FROM users WHERE ${field} = $1`;
     const result = await q.query(query, [value]);

@@ -233,6 +233,44 @@ export async function runPhase15Tests() {
     assert(err.response?.status === 403, '4.4 Non-member marking read receives 403 Forbidden');
   }
 
+  // 4.5 User Isolation: GET /conversations strictly returns conversations where caller is a member
+  // First, create a separate conversation between User B and User C
+  const convBCRes = await axios.post(
+    `${API_BASE}/messages/conversations`,
+    { recipient_id: userC.id },
+    { headers: userB.headers }
+  );
+  const convBCId = convBCRes.data.conversation?.id;
+  assert(!!convBCId, '4.5 Setup: Conversation between B and C created');
+
+  // Verify User A only sees conversation AB, never conversation BC
+  const userAConvs = await axios.get(`${API_BASE}/messages/conversations`, {
+    headers: userA.headers,
+  });
+  const userAConvIds = userAConvs.data.conversations.map((c: any) => c.id);
+  assert(
+    userAConvIds.includes(conversationId),
+    '4.5 User A conversation list includes conversation AB'
+  );
+  assert(
+    !userAConvIds.includes(convBCId),
+    '4.5 User A conversation list STRICTLY EXCLUDES conversation BC (Zero cross-user leakage)'
+  );
+
+  // Verify User C only sees conversation BC, never conversation AB
+  const userCConvs = await axios.get(`${API_BASE}/messages/conversations`, {
+    headers: userC.headers,
+  });
+  const userCConvIds = userCConvs.data.conversations.map((c: any) => c.id);
+  assert(
+    userCConvIds.includes(convBCId),
+    '4.5 User C conversation list includes conversation BC'
+  );
+  assert(
+    !userCConvIds.includes(conversationId),
+    '4.5 User C conversation list STRICTLY EXCLUDES conversation AB'
+  );
+
   // ──────────────────────────────────────────────────────────
   // SUITE 5: Bi-directional Block Integration
   // ──────────────────────────────────────────────────────────
@@ -279,6 +317,9 @@ export async function runPhase15Tests() {
     );
     assert(false, '5.4 Starting conversation with blocker should fail');
   } catch (err: any) {
+    if (err.response?.status !== 403) {
+      console.error('DEBUG 5.4 FAILED:', err.response?.status, err.response?.data, err.message);
+    }
     assert(err.response?.status === 403, '5.4 Starting conversation with blocker rejected with 403 Forbidden');
   }
 
@@ -349,6 +390,26 @@ export async function runPhase15Tests() {
     assert(err.response?.status === 400, '6.3 Duplicate pending report rejected with 400');
   }
 
+  // 6.4 IDOR Protection: Non-member User C cannot report message from conversation AB
+  try {
+    await axios.post(
+      `${API_BASE}/community/reports`,
+      {
+        targetType: 'message',
+        targetId: message1Id,
+        reason: 'HARASSMENT',
+        details: 'User C tries to report message from conversation they are not in',
+      },
+      { headers: userC.headers }
+    );
+    assert(false, '6.4 Non-member User C should not be able to report message in AB conversation');
+  } catch (err: any) {
+    assert(
+      err.response?.status === 403,
+      '6.4 IDOR protection: Non-member reporting message rejected with 403 Forbidden'
+    );
+  }
+
   // ──────────────────────────────────────────────────────────
   // SUITE 7: Anti-Spam & Input Validation
   // ──────────────────────────────────────────────────────────
@@ -394,6 +455,76 @@ export async function runPhase15Tests() {
     assert(false, '7.3 Immediate duplicate message should be rejected');
   } catch (err: any) {
     assert(err.response?.status === 400, '7.3 Immediate duplicate message rejected with 400 anti-spam');
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // SUITE 8: Unified SSE Authentication & Capability Stream Ticket
+  // (Multiplexed stream for both messages and notifications)
+  // ──────────────────────────────────────────────────────────
+  console.log('\n--- SUITE 8: Unified SSE Authentication & Capability Stream Ticket ---');
+
+  // 8.1 Passing full JWT in URL query string is strictly banned (mirroring Phase 11 lesson)
+  try {
+    await axios.get(`${API_BASE}/notifications/stream?token=${userA.token}`);
+    assert(false, '8.1 Passing JWT in query string should be strictly rejected');
+  } catch (err: any) {
+    assert(
+      err.response?.status === 400,
+      '8.1 Passing JWT in query string is rejected with HTTP 400 Bad Request'
+    );
+    assert(
+      err.response?.data?.error?.includes('bảo mật') || err.response?.data?.error?.includes('query string bị cấm'),
+      '8.1 Error message explicitly cites query string JWT security prohibition'
+    );
+  }
+
+  // 8.2 Obtain short-lived capability stream ticket via authenticated POST
+  const ticketRes = await axios.post(
+    `${API_BASE}/notifications/stream-ticket`,
+    {},
+    { headers: userA.headers }
+  );
+  assert(ticketRes.status === 200, '8.2 Capability ticket request returns 200 OK');
+  assert(!!ticketRes.data?.ticket, '8.2 Stream ticket is returned');
+  assert(
+    ticketRes.data.ticket.startsWith('sse_notif_'),
+    '8.2 Ticket format matches sse_notif_<hex>'
+  );
+  const streamTicket = ticketRes.data.ticket;
+
+  // 8.3 Connect to unified SSE stream using capability ticket
+  const sseRes = await axios.get(`${API_BASE}/notifications/stream?ticket=${streamTicket}`, {
+    responseType: 'stream',
+    timeout: 3000,
+  });
+  assert(sseRes.status === 200, '8.3 SSE connection established with capability ticket (HTTP 200)');
+  assert(
+    String(sseRes.headers['content-type']).includes('text/event-stream'),
+    '8.3 SSE response has text/event-stream Content-Type'
+  );
+  // Close connection
+  sseRes.data.destroy();
+
+  // 8.4 Single-use ticket invalidation: Reusing the same ticket must be rejected
+  try {
+    await axios.get(`${API_BASE}/notifications/stream?ticket=${streamTicket}`);
+    assert(false, '8.4 Reusing consumed capability ticket should be rejected');
+  } catch (err: any) {
+    assert(
+      err.response?.status === 401,
+      '8.4 Consumed capability ticket immediately rejected with HTTP 401 Unauthorized'
+    );
+  }
+
+  // 8.5 Fake or forged ticket must be rejected
+  try {
+    await axios.get(`${API_BASE}/notifications/stream?ticket=sse_notif_invalid_1234567890`);
+    assert(false, '8.5 Fake capability ticket should be rejected');
+  } catch (err: any) {
+    assert(
+      err.response?.status === 401,
+      '8.5 Forged/invalid ticket rejected with HTTP 401 Unauthorized'
+    );
   }
 
   console.log(`\n========================================================`);

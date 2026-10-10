@@ -4,6 +4,8 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 import { documentService } from '../services/document.service';
 import { documentProcessingService } from '../services/document-processing.service';
 import { activityService } from '../services/activity.service';
+import { entitlementService } from '../services/entitlement.service';
+import { validateFileContent } from '../utils/file-security';
 import cloudinary from '../config/cloudinary';
 import { UploadApiResponse } from 'cloudinary';
 
@@ -39,6 +41,9 @@ export const uploadDocument = async (req: AuthRequest, res: Response, next: any)
       return res.status(400).json({ error: 'Vui lòng chọn file hợp lệ (PDF, DOC, DOCX, TXT, ảnh, XLSX, CSV)' });
     }
 
+    // Security Hardening: Validate real magic bytes & reject spoofed executables / scripts
+    validateFileContent(file.buffer, file.originalname, file.mimetype);
+
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ error: 'Vui lòng đăng nhập' });
@@ -48,6 +53,27 @@ export const uploadDocument = async (req: AuthRequest, res: Response, next: any)
 
     if (!title || title.trim() === '') {
       return res.status(400).json({ error: 'Tiêu đề tài liệu là bắt buộc' });
+    }
+
+    // 1. Entitlement check (Phase 20)
+    let pageCount: number | undefined;
+    if (file.mimetype === 'application/pdf') {
+      try {
+        const pdfParse = require('pdf-parse');
+        const pdfData = await pdfParse(file.buffer);
+        pageCount = pdfData.numpages;
+      } catch (e) {
+        // Continue if page count probe fails
+      }
+    }
+
+    const entitlementCheck = await entitlementService.checkDocumentUpload(userId, pageCount);
+    if (!entitlementCheck.allowed) {
+      return res.status(403).json({
+        error: entitlementCheck.code || 'LIMIT_EXCEEDED',
+        message: entitlementCheck.message,
+        feature: 'document_upload',
+      });
     }
 
     // Upload buffer to Cloudinary
@@ -76,6 +102,9 @@ export const uploadDocument = async (req: AuthRequest, res: Response, next: any)
       publicId: cloudinaryResult.public_id,
     });
 
+    // Increment document upload telemetry
+    await entitlementService.incrementDocumentUploaded(userId).catch(() => {});
+
     res.status(201).json({
       message: 'Tải lên tài liệu thành công',
       document
@@ -93,12 +122,17 @@ export const getDocuments = async (req: AuthRequest, res: Response, next: any) =
       return res.status(401).json({ error: 'Vui lòng đăng nhập' });
     }
 
-    const { search, category } = req.query;
+    const { search, category, page, limit } = req.query;
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10) || 50));
+    const offset = (pageNum - 1) * limitNum;
 
     const documents = await documentService.getDocuments(
       userId, 
       search as string, 
-      category as string
+      category as string,
+      limitNum,
+      offset
     );
 
     res.status(200).json(documents);

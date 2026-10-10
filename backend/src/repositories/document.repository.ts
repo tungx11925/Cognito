@@ -61,7 +61,14 @@ class DocumentRepository {
     return result.rows[0];
   }
 
-  async findDocuments(userId: number, search?: string, category?: string, client?: PoolClient) {
+  async findDocuments(
+    userId: number, 
+    search?: string, 
+    category?: string, 
+    client?: PoolClient,
+    limit: number = 50,
+    offset: number = 0
+  ) {
     const q = client || db;
     let query = `SELECT * FROM documents WHERE user_id = $1`;
     let values: any[] = [userId];
@@ -79,7 +86,11 @@ class DocumentRepository {
       idx++;
     }
 
-    query += ` ORDER BY created_at DESC`;
+    const safeLimit = Math.min(100, Math.max(1, limit || 50));
+    const safeOffset = Math.max(0, offset || 0);
+
+    query += ` ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`;
+    values.push(safeLimit, safeOffset);
 
     const result = await q.query(query, values);
     return result.rows;

@@ -6,6 +6,7 @@ import { User, Phone, Mail, Lock, Eye, EyeOff, CheckCircle2, XCircle, Circle, X,
 import { useStudy } from '@/context/StudyContext';
 import { useRouter } from 'next/navigation';
 import { googleLogin } from '../../services/auth.service';
+import { getSafeReturnUrl } from './RouteGuard';
 import Lottie from 'lottie-react';
 import loginAnimation from './login-animation.json';
 import registerAnimation from './register-animation.json';
@@ -172,7 +173,8 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         setIsAuthenticated(true);
         onClose();
         triggerMessage("Đăng nhập bằng Google thành công!", "success");
-        router.push('/home');
+        const target = getSafeReturnUrl('/home');
+        router.push(target);
       } else {
         triggerMessage(res.error || "Không thể đăng nhập bằng Google", "error");
       }
@@ -429,7 +431,8 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
           if (result.role === 'admin') {
             router.push('/admin');
           } else {
-            router.push('/home');
+            const target = getSafeReturnUrl('/home');
+            router.push(target);
           }
         }
       }
@@ -446,7 +449,8 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     const success = await verify2FA(twoFAEmail, twoFACode);
     if (success) {
       onClose();
-      router.push('/home');
+      const target = getSafeReturnUrl('/home');
+      router.push(target);
     } else {
       setTwoFAError('Mã xác nhận không hợp lệ');
     }
@@ -462,7 +466,8 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     const success = await verify2FA(twoFAEmail, twoFACode);
     if (success) {
       onClose();
-      router.push('/home');
+      const target = getSafeReturnUrl('/home');
+      router.push(target);
     } else {
       setTwoFAError("Mã xác thực không chính xác hoặc đã hết hạn");
     }

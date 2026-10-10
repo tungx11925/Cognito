@@ -1,33 +1,53 @@
-import { Router, Response, NextFunction } from 'express';
-import { authenticate, requireRole, AuthRequest } from '../middlewares/auth.middleware';
+import { Router } from 'express';
+import { authenticate, requireRole } from '../middlewares/auth.middleware';
 import { rateLimiter } from '../middlewares/rateLimiter.middleware';
 import { 
   getAdminStats, 
   getUsers, 
-  createUser,
-  updateUser,
+  createUser, 
+  updateUser, 
   deleteUser, 
   getDocuments, 
-  deleteDocument,
-  getTransactions,
-  warnUser,
-  getUserDetails
+  deleteDocument, 
+  warnUser, 
+  suspendUser, 
+  unsuspendUser, 
+  getUserDetails, 
+  getAdminSubscriptions, 
+  getAdminOrders, 
+  syncSubscriptionsCron, 
+  cancelAdminSubscription,
+  getAICostStats
 } from '../controllers/admin.controller';
 
 const router = Router();
 
-// All admin routes are protected by authenticate + requireRole('admin')
+// All admin routes are strictly guarded by authenticate + requireRole('admin')
+// Non-admin accounts will strictly receive HTTP 403 Forbidden
 router.use(authenticate, requireRole('admin'));
 
-router.get('/stats', getAdminStats);
+// 1. Dashboard & Platform Analytics
+router.get('/stats', rateLimiter(60000, 60), getAdminStats);
+router.get('/ai-costs', rateLimiter(60000, 60), getAICostStats);
+
+// 2. User Management (Guarded by Role + Rate Limited for Defense-in-Depth)
 router.get('/users', rateLimiter(60000, 120), getUsers);
-router.post('/users', createUser);
-router.put('/users/:id', updateUser);
-router.delete('/users/:id', deleteUser);
-router.post('/users/:id/warn', rateLimiter(60000, 10), warnUser);
-router.get('/users/:id/details', getUserDetails);
+router.post('/users', rateLimiter(60000, 30), createUser);
+router.get('/users/:id/details', rateLimiter(60000, 120), getUserDetails);
+router.put('/users/:id', rateLimiter(60000, 60), updateUser);
+router.delete('/users/:id', rateLimiter(60000, 30), deleteUser);
+router.post('/users/:id/warn', rateLimiter(60000, 60), warnUser);
+router.post('/users/:id/suspend', rateLimiter(60000, 30), suspendUser);
+router.post('/users/:id/unsuspend', rateLimiter(60000, 30), unsuspendUser);
+
+// 3. Subscription & Revenue Management
+router.get('/subscriptions', rateLimiter(60000, 120), getAdminSubscriptions);
+router.post('/subscriptions/sync', rateLimiter(60000, 60), syncSubscriptionsCron);
+router.post('/subscriptions/:id/cancel', rateLimiter(60000, 60), cancelAdminSubscription);
+router.get('/orders', rateLimiter(60000, 120), getAdminOrders);
+
+// 4. Documents & Content Management (Zero Private Content Leakage)
 router.get('/documents', rateLimiter(60000, 120), getDocuments);
-router.delete('/documents/:id', deleteDocument);
-router.get('/transactions', getTransactions);
+router.delete('/documents/:id', rateLimiter(60000, 30), deleteDocument);
 
 export default router;

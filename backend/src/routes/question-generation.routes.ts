@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate, requireRole } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate';
+import { rateLimiter } from '../middlewares/rateLimiter.middleware';
 import {
   generateQuestionsSchema,
   updateQuestionSchema,
@@ -27,7 +28,7 @@ const router = Router();
 router.use(authenticate);
 
 // ── Sinh câu hỏi (user/admin) ──
-router.post('/questions/generate', requireRole('user', 'admin'), validate(generateQuestionsSchema), generateQuestions);
+router.post('/questions/generate', rateLimiter(60 * 1000, 20), requireRole('user', 'admin'), validate(generateQuestionsSchema), generateQuestions);
 
 // ── Preview: sửa / xoá câu hỏi + duyệt bộ đề (user/admin) ──
 router.patch('/questions/:id', requireRole('user', 'admin'), validate(updateQuestionSchema), updateQuestion);

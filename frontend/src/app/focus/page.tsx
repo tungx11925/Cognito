@@ -9,6 +9,10 @@ import {
   EyeOff, Coffee, ArrowRight, BookOpen, HelpCircle, 
   TrendingUp, Sparkles, RefreshCw, XCircle, Flame, ShieldAlert
 } from 'lucide-react';
+import { Navbar } from '@/components/landing/Navbar';
+import { useStudy } from '@/context/StudyContext';
+import RegisterModal from '@/components/auth/RegisterModal';
+import PremiumModal from '@/components/layout/PremiumModal';
 import { focusService, FocusSession, FocusSummary } from '@/services/focus.service';
 import { getDocuments } from '@/services/document.service';
 import { getTestSets } from '@/services/ai-test.service';
@@ -18,6 +22,15 @@ type FocusModeState = 'SETUP' | 'ACTIVE' | 'SUMMARY' | 'BREAK';
 function FocusContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const {
+    isAuthenticated,
+    showLoginModal,
+    setShowLoginModal,
+    showPremiumModal,
+    setShowPremiumModal,
+    activeUser,
+    triggerMessage,
+  } = useStudy();
 
   const queryDocId = searchParams.get('documentId') ? Number(searchParams.get('documentId')) : null;
   const queryQuizId = searchParams.get('quizId') ? Number(searchParams.get('quizId')) : null;
@@ -73,6 +86,11 @@ function FocusContent() {
     let isMounted = true;
 
     async function init() {
+      if (!isAuthenticated) {
+        if (isMounted) setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         // Load active session from server if any
@@ -128,10 +146,16 @@ function FocusContent() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   // 2. Start Session Handler
   const handleStartSession = async (durationMinsOverride?: number) => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      triggerMessage('Vui lòng đăng nhập để bắt đầu phiên học tập trung', 'error');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -157,11 +181,42 @@ function FocusContent() {
     }
   };
 
-  // 3. Finish Session Handler
+  // 3. Distraction Event Recording Queue (Batch Processing: Không bỏ sót sự kiện, gộp đếm và gửi theo lô)
+  const pendingDistractionsQueueRef = useRef<Array<{
+    event_type: 'TAB_SWITCH' | 'PAGE_BLUR' | 'PAGE_HIDDEN' | 'IDLE' | 'RETURNED';
+    duration_seconds?: number;
+    details?: Record<string, any>;
+  }>>([]);
+  const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const flushDistractionQueue = useCallback(async () => {
+    if (flushTimeoutRef.current) {
+      clearTimeout(flushTimeoutRef.current);
+      flushTimeoutRef.current = null;
+    }
+    if (!activeSession || pendingDistractionsQueueRef.current.length === 0) return;
+
+    const eventsToSend = [...pendingDistractionsQueueRef.current];
+    pendingDistractionsQueueRef.current = [];
+
+    try {
+      const res = await focusService.recordDistractionsBatch(activeSession.id, eventsToSend);
+      if (res && res.distractionCount !== undefined) {
+        setLiveDistractionCount(res.distractionCount);
+      }
+    } catch (e) {
+      // Non-blocking telemetry
+    }
+  }, [activeSession]);
+
+  // 4. Finish Session Handler
   const handleFinishSession = useCallback(async (status: 'COMPLETED' | 'INTERRUPTED' | 'CANCELLED') => {
     if (!activeSession) return;
     try {
       setLoading(true);
+      // Flush hết các sự kiện xao nhãng còn đọng trong queue trước khi kết thúc
+      await flushDistractionQueue();
+
       const res = await focusService.finishSession(activeSession.id, {
         status,
         actual_duration_seconds: secondsElapsed,
@@ -189,9 +244,8 @@ function FocusContent() {
       setLoading(false);
       setShowCancelModal(false);
     }
-  }, [activeSession, secondsElapsed]);
+  }, [activeSession, secondsElapsed, flushDistractionQueue]);
 
-  // 4. Distraction Event Recording Helper
   const recordDistraction = useCallback((
     eventType: 'TAB_SWITCH' | 'PAGE_BLUR' | 'PAGE_HIDDEN' | 'IDLE' | 'RETURNED', 
     durationSecs?: number,
@@ -199,26 +253,41 @@ function FocusContent() {
   ) => {
     if (!activeSession || isPaused) return;
 
-    focusService.recordDistraction(activeSession.id, {
+    // 1. Luôn push sự kiện vào queue — TUYỆT ĐỐI KHÔNG BỎ QUA BẤT KỲ SỰ KIỆN NÀO
+    pendingDistractionsQueueRef.current.push({
       event_type: eventType,
       duration_seconds: durationSecs,
       details,
-    }).then((res) => {
-      setLiveDistractionCount(res.distractionCount);
-      if (eventType === 'PAGE_HIDDEN' || eventType === 'TAB_SWITCH' || eventType === 'PAGE_BLUR') {
-        setLastDistractionNotice('Đã ghi nhận chuyển đổi cửa sổ/tab trình duyệt');
-        setTimeout(() => setLastDistractionNotice(null), 4000);
-      } else if (eventType === 'RETURNED') {
-        setLastDistractionNotice('Chào mừng bạn quay lại tập trung!');
-        setTimeout(() => setLastDistractionNotice(null), 4000);
-      } else if (eventType === 'IDLE') {
-        setLastDistractionNotice('Không có thao tác trong hơn 60 giây');
-        setTimeout(() => setLastDistractionNotice(null), 4000);
-      }
-    }).catch(() => {
-      // Non-blocking telemetry
     });
-  }, [activeSession, isPaused]);
+
+    // 2. Tăng đếm live tức thì trên UI
+    if (eventType !== 'RETURNED') {
+      setLiveDistractionCount(prev => prev + 1);
+    }
+
+    // 3. Hiển thị thông báo UI
+    if (eventType === 'PAGE_HIDDEN' || eventType === 'TAB_SWITCH' || eventType === 'PAGE_BLUR') {
+      setLastDistractionNotice('Đã ghi nhận chuyển đổi cửa sổ/tab trình duyệt');
+      setTimeout(() => setLastDistractionNotice(null), 4000);
+    } else if (eventType === 'RETURNED') {
+      setLastDistractionNotice('Chào mừng bạn quay lại tập trung!');
+      setTimeout(() => setLastDistractionNotice(null), 4000);
+    } else if (eventType === 'IDLE') {
+      setLastDistractionNotice('Không có thao tác trong hơn 60 giây');
+      setTimeout(() => setLastDistractionNotice(null), 4000);
+    }
+
+    // 4. Nếu hàng đợi đạt từ 5 sự kiện hoặc là event RETURNED -> flush ngay; nếu không hẹn giờ flush sau 2s
+    if (pendingDistractionsQueueRef.current.length >= 5 || eventType === 'RETURNED') {
+      flushDistractionQueue();
+    } else {
+      if (!flushTimeoutRef.current) {
+        flushTimeoutRef.current = setTimeout(() => {
+          flushDistractionQueue();
+        }, 2000);
+      }
+    }
+  }, [activeSession, isPaused, flushDistractionQueue]);
 
   // 5. Active Session Timer & Heartbeat Ping
   useEffect(() => {
@@ -436,46 +505,54 @@ function FocusContent() {
     const currentQuiz = userTestSets.find((t) => t.id === selectedQuizId);
 
     return (
-      <div className="min-h-screen bg-[#FAF8F5] flex flex-col font-sans">
-        {/* Header */}
-        <header className="h-16 px-6 sm:px-10 bg-white border-b border-gray-200/80 flex items-center justify-between">
-          <Link href="/study-sessions" className="inline-flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-gray-900 transition-colors">
-            <ArrowLeft size={16} /> Không gian học tập
-          </Link>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200/60">
-              <Zap size={13} className="text-emerald-600" />
-              Focus Mode
-            </span>
-          </div>
-        </header>
+      <div className="min-h-screen bg-[#FAF8F5] dark:bg-[#0B0F17] text-gray-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
+        <Navbar
+          isLoggedIn={isAuthenticated}
+          onSignInClick={() => setShowLoginModal(true)}
+          onDashboardClick={() => router.push('/library')}
+          activeUser={activeUser}
+        />
 
-        {/* Setup Content */}
-        <main className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-10 flex-1">
+        <div className="pt-20 flex-1 flex flex-col">
+          {/* Header */}
+          <header className="h-14 px-6 sm:px-10 bg-white dark:bg-zinc-900 border-b border-gray-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0 transition-colors">
+            <Link href="/library" className="inline-flex items-center gap-2 text-sm font-bold text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 transition-colors">
+              <ArrowLeft size={16} /> Thư viện của tôi
+            </Link>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-400 text-xs font-bold border border-emerald-200/60 dark:border-emerald-800">
+                <Zap size={13} className="text-emerald-600 dark:text-emerald-400" />
+                Focus Mode
+              </span>
+            </div>
+          </header>
+
+          {/* Setup Content */}
+          <main className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-10 flex-1">
           <div className="text-center mb-10">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#0D2B24] to-[#1b5245] text-white flex items-center justify-center mx-auto mb-4 shadow-sm">
               <Zap size={28} className="text-emerald-300" />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-zinc-100 tracking-tight">
               Chế độ Tập trung Cao độ
             </h1>
-            <p className="text-sm text-gray-600 mt-2 max-w-lg mx-auto">
+            <p className="text-sm text-gray-600 dark:text-zinc-400 mt-2 max-w-lg mx-auto">
               Không gian học sâu không phân tâm. Tự động đếm giờ, phát hiện chuyển tab trình duyệt và đồng bộ chuỗi ngày học của bạn.
             </p>
           </div>
 
           {error && (
-            <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs sm:text-sm flex items-center gap-2">
-              <AlertTriangle size={16} className="text-red-600 shrink-0" />
+            <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-800 dark:text-red-300 text-xs sm:text-sm flex items-center gap-2">
+              <AlertTriangle size={16} className="text-red-600 dark:text-red-400 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Form Card */}
-          <div className="bg-white rounded-2xl border border-gray-200/80 p-6 sm:p-8 shadow-sm space-y-8">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 p-6 sm:p-8 shadow-sm space-y-8 transition-colors">
             {/* Step 1: Duration Selection */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400 mb-3">
                 1. Chọn thời gian tập trung
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -491,18 +568,18 @@ function FocusContent() {
                       }}
                       className={`p-4 rounded-xl border text-left transition-all ${
                         isSelected
-                          ? 'border-[#0D2B24] bg-emerald-50/50 ring-2 ring-[#0D2B24]/10 shadow-sm'
-                          : 'border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50/50'
+                          ? 'border-[#0D2B24] dark:border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/40 ring-2 ring-[#0D2B24]/10 dark:ring-emerald-500/20 shadow-sm'
+                          : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600 bg-white dark:bg-zinc-800/60 hover:bg-gray-50/50 dark:hover:bg-zinc-800'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className={`text-base font-extrabold ${isSelected ? 'text-[#0D2B24]' : 'text-gray-900'}`}>
+                        <span className={`text-base font-extrabold ${isSelected ? 'text-[#0D2B24] dark:text-emerald-400' : 'text-gray-900 dark:text-zinc-100'}`}>
                           {preset.mins} phút
                         </span>
-                        {isSelected && <CheckCircle2 size={16} className="text-[#0D2B24]" />}
+                        {isSelected && <CheckCircle2 size={16} className="text-[#0D2B24] dark:text-emerald-400" />}
                       </div>
-                      <div className="text-[11px] font-bold text-gray-700">{preset.label}</div>
-                      <div className="text-[10px] text-gray-500 mt-0.5">{preset.desc}</div>
+                      <div className="text-[11px] font-bold text-gray-700 dark:text-zinc-300">{preset.label}</div>
+                      <div className="text-[10px] text-gray-500 dark:text-zinc-400 mt-0.5">{preset.desc}</div>
                     </button>
                   );
                 })}
@@ -510,7 +587,7 @@ function FocusContent() {
 
               {/* Custom input */}
               <div className="mt-3 flex items-center gap-2">
-                <span className="text-xs text-gray-500">Hoặc tùy chỉnh:</span>
+                <span className="text-xs text-gray-500 dark:text-zinc-400">Hoặc tùy chỉnh:</span>
                 <input
                   type="number"
                   min="1"
@@ -525,15 +602,15 @@ function FocusContent() {
                       setTargetDurationMinutes(n);
                     }
                   }}
-                  className="w-32 px-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-[#0D2B24]"
+                  className="w-32 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-[#0D2B24] dark:focus:ring-emerald-500"
                 />
-                <span className="text-xs text-gray-500">phút</span>
+                <span className="text-xs text-gray-500 dark:text-zinc-400">phút</span>
               </div>
             </div>
 
             {/* Step 2: Attachment Selection */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400 mb-3">
                 2. Gắn kết nội dung học tập (Tùy chọn)
               </label>
 
@@ -546,32 +623,32 @@ function FocusContent() {
                   }}
                   className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                     !selectedDocId && !selectedQuizId
-                      ? 'border-[#0D2B24] bg-emerald-50/50 ring-1 ring-[#0D2B24]'
-                      : 'border-gray-200 hover:bg-gray-50/60'
+                      ? 'border-[#0D2B24] dark:border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/40 ring-1 ring-[#0D2B24] dark:ring-emerald-500'
+                      : 'border-gray-200 dark:border-zinc-700 hover:bg-gray-50/60 dark:hover:bg-zinc-800/50'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
+                    <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-700 dark:text-zinc-300">
                       <Sparkles size={16} />
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-gray-900">Tập trung tự do (Không gắn kết)</div>
-                      <div className="text-[11px] text-gray-500">Tự do đọc sách vở ngoài đời, ôn bài vở hoặc ghi chép</div>
+                      <div className="text-xs font-bold text-gray-900 dark:text-zinc-100">Tập trung tự do (Không gắn kết)</div>
+                      <div className="text-[11px] text-gray-500 dark:text-zinc-400">Tự do đọc sách vở ngoài đời, ôn bài vở hoặc ghi chép</div>
                     </div>
                   </div>
-                  {!selectedDocId && !selectedQuizId && <CheckCircle2 size={16} className="text-[#0D2B24]" />}
+                  {!selectedDocId && !selectedQuizId && <CheckCircle2 size={16} className="text-[#0D2B24] dark:text-emerald-400" />}
                 </div>
 
                 {/* Document Attachment */}
-                <div className="p-3.5 rounded-xl border border-gray-200 space-y-2">
+                <div className="p-3.5 rounded-xl border border-gray-200 dark:border-zinc-700 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center border border-amber-200/60">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 flex items-center justify-center border border-amber-200/60 dark:border-amber-800">
                         <BookOpen size={16} />
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-gray-900">Gắn với Tài liệu đọc</div>
-                        <div className="text-[11px] text-gray-500">Đọc tài liệu trong thư viện khi tập trung</div>
+                        <div className="text-xs font-bold text-gray-900 dark:text-zinc-100">Gắn với Tài liệu đọc</div>
+                        <div className="text-[11px] text-gray-500 dark:text-zinc-400">Đọc tài liệu trong thư viện khi tập trung</div>
                       </div>
                     </div>
                   </div>
@@ -583,7 +660,7 @@ function FocusContent() {
                       setSelectedDocId(val);
                       if (val) setSelectedQuizId(null);
                     }}
-                    className="w-full text-xs p-2 rounded-lg border border-gray-200 bg-gray-50/50 focus:outline-none focus:ring-1 focus:ring-[#0D2B24]"
+                    className="w-full text-xs p-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-gray-50/50 dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-[#0D2B24] dark:focus:ring-emerald-500"
                   >
                     <option value="">-- Chọn tài liệu từ thư viện --</option>
                     {userDocuments.map((doc) => (
@@ -593,22 +670,22 @@ function FocusContent() {
                     ))}
                   </select>
                   {currentDoc && (
-                    <div className="text-[11px] text-emerald-800 font-semibold bg-emerald-50 px-2.5 py-1 rounded-md">
+                    <div className="text-[11px] text-emerald-800 dark:text-emerald-300 font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md">
                       ✓ Đã chọn: {currentDoc.title}
                     </div>
                   )}
                 </div>
 
                 {/* Quiz Attachment */}
-                <div className="p-3.5 rounded-xl border border-gray-200 space-y-2">
+                <div className="p-3.5 rounded-xl border border-gray-200 dark:border-zinc-700 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-800 flex items-center justify-center border border-purple-200/60">
+                      <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 flex items-center justify-center border border-purple-200/60 dark:border-purple-800">
                         <HelpCircle size={16} />
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-gray-900">Gắn với Bộ đề luyện thi</div>
-                        <div className="text-[11px] text-gray-500">Luyện đề trắc nghiệm trong phiên tập trung</div>
+                        <div className="text-xs font-bold text-gray-900 dark:text-zinc-100">Gắn với Bộ đề luyện thi</div>
+                        <div className="text-[11px] text-gray-500 dark:text-zinc-400">Luyện đề trắc nghiệm trong phiên tập trung</div>
                       </div>
                     </div>
                   </div>
@@ -620,7 +697,7 @@ function FocusContent() {
                       setSelectedQuizId(val);
                       if (val) setSelectedDocId(null);
                     }}
-                    className="w-full text-xs p-2 rounded-lg border border-gray-200 bg-gray-50/50 focus:outline-none focus:ring-1 focus:ring-[#0D2B24]"
+                    className="w-full text-xs p-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-gray-50/50 dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-[#0D2B24] dark:focus:ring-emerald-500"
                   >
                     <option value="">-- Chọn bộ đề kiểm tra --</option>
                     {userTestSets.map((test) => (
@@ -630,7 +707,7 @@ function FocusContent() {
                     ))}
                   </select>
                   {currentQuiz && (
-                    <div className="text-[11px] text-purple-800 font-semibold bg-purple-50 px-2.5 py-1 rounded-md">
+                    <div className="text-[11px] text-purple-800 dark:text-purple-300 font-semibold bg-purple-50 dark:bg-purple-950/40 px-2.5 py-1 rounded-md">
                       ✓ Đã chọn: {currentQuiz.name}
                     </div>
                   )}
@@ -639,9 +716,9 @@ function FocusContent() {
             </div>
 
             {/* Privacy & Anti-Distraction Policy */}
-            <div className="p-4 rounded-xl bg-gray-50 border border-gray-200/70 text-gray-600 text-xs space-y-1.5">
-              <div className="flex items-center gap-1.5 font-bold text-gray-800">
-                <ShieldAlert size={14} className="text-emerald-700" />
+            <div className="p-4 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-200/70 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 text-xs space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-zinc-200">
+                <ShieldAlert size={14} className="text-emerald-700 dark:text-emerald-400" />
                 <span>Cam kết bảo mật & Quyền riêng tư người học</span>
               </div>
               <p className="leading-relaxed">
@@ -654,13 +731,24 @@ function FocusContent() {
             <button
               type="button"
               onClick={() => handleStartSession()}
-              className="w-full py-3.5 bg-[#0D2B24] hover:bg-[#144136] text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 shadow-sm transition-all transform active:scale-[0.99]"
+              className="w-full py-3.5 bg-[#0D2B24] hover:bg-[#144136] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 shadow-sm transition-all transform active:scale-[0.99]"
             >
               <Play size={18} className="fill-white" />
               <span>Bắt đầu phiên tập trung ({targetDurationMinutes} phút)</span>
             </button>
           </div>
         </main>
+        </div>
+
+        <RegisterModal 
+          isOpen={showLoginModal} 
+          onClose={() => setShowLoginModal(false)} 
+          triggerMessage={triggerMessage} 
+        />
+        <PremiumModal 
+          isOpen={showPremiumModal} 
+          onClose={() => setShowPremiumModal(false)} 
+        />
       </div>
     );
   }
@@ -866,34 +954,42 @@ function FocusContent() {
     const scoreBadgeColor = score >= 90 ? 'bg-emerald-100 text-emerald-800' : score >= 75 ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800';
 
     return (
-      <div className="min-h-screen bg-[#FAF8F5] flex flex-col font-sans">
-        <header className="h-16 px-6 sm:px-10 bg-white border-b border-gray-200/80 flex items-center justify-between">
-          <Link href="/study-sessions" className="inline-flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-gray-900 transition-colors">
-            <ArrowLeft size={16} /> Không gian học tập
-          </Link>
-          <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60">
-            Tổng kết phiên tập trung
-          </span>
-        </header>
+      <div className="min-h-screen bg-[#FAF8F5] dark:bg-[#0B0F17] text-gray-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
+        <Navbar
+          isLoggedIn={isAuthenticated}
+          onSignInClick={() => setShowLoginModal(true)}
+          onDashboardClick={() => router.push('/library')}
+          activeUser={activeUser}
+        />
 
-        <main className="max-w-2xl mx-auto w-full px-4 sm:px-6 py-10 flex-1 space-y-6">
+        <div className="pt-20 flex-1 flex flex-col">
+          <header className="h-14 px-6 sm:px-10 bg-white dark:bg-zinc-900 border-b border-gray-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0 transition-colors">
+            <Link href="/library" className="inline-flex items-center gap-2 text-sm font-bold text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 transition-colors">
+              <ArrowLeft size={16} /> Thư viện của tôi
+            </Link>
+            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-200/60 dark:border-emerald-800">
+              Tổng kết phiên tập trung
+            </span>
+          </header>
+
+          <main className="max-w-2xl mx-auto w-full px-4 sm:px-6 py-10 flex-1 space-y-6">
           {/* Main Card */}
-          <div className="bg-white rounded-3xl border border-gray-200/80 p-6 sm:p-8 shadow-sm text-center">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-200/60 flex items-center justify-center mx-auto mb-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-200/80 dark:border-zinc-800 p-6 sm:p-8 shadow-sm text-center transition-colors">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800 flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 size={36} />
             </div>
 
-            <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-zinc-100 tracking-tight">
               {isSuccess ? 'Chúc mừng bạn đã hoàn thành phiên tập trung!' : 'Phiên tập trung đã được lưu lại'}
             </h2>
-            <p className="text-xs sm:text-sm text-gray-600 mt-1 max-w-md mx-auto">
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-zinc-400 mt-1 max-w-md mx-auto">
               Toàn bộ thời gian học và điểm tập trung đã được tự động đồng bộ vào Bảng tiến độ và Chuỗi ngày học (StudyStreak).
             </p>
 
             {/* Score Pill */}
-            <div className="mt-6 inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-gray-50 border border-gray-200/80">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Điểm tập trung</span>
-              <span className="text-2xl font-black text-gray-900">{score}/100</span>
+            <div className="mt-6 inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-gray-50 dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700">
+              <span className="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Điểm tập trung</span>
+              <span className="text-2xl font-black text-gray-900 dark:text-zinc-100">{score}/100</span>
               <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full ${scoreBadgeColor}`}>
                 {scoreRating}
               </span>
@@ -901,46 +997,46 @@ function FocusContent() {
 
             {/* Metric Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-8">
-              <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-gray-200/60 text-center">
-                <Clock size={16} className="text-gray-400 mx-auto mb-1.5" />
-                <div className="text-lg font-black text-gray-900">{summaryData.actualFocusMinutes} phút</div>
-                <div className="text-[11px] text-gray-500">Thời gian thực tế</div>
+              <div className="p-4 rounded-2xl bg-[#FAF8F5] dark:bg-zinc-800/60 border border-gray-200/60 dark:border-zinc-700 text-center">
+                <Clock size={16} className="text-gray-400 dark:text-zinc-500 mx-auto mb-1.5" />
+                <div className="text-lg font-black text-gray-900 dark:text-zinc-100">{summaryData.actualFocusMinutes} phút</div>
+                <div className="text-[11px] text-gray-500 dark:text-zinc-400">Thời gian thực tế</div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-gray-200/60 text-center">
-                <Zap size={16} className="text-emerald-600 mx-auto mb-1.5" />
-                <div className="text-lg font-black text-gray-900">{Math.round(summaryData.targetDurationSeconds / 60)} phút</div>
-                <div className="text-[11px] text-gray-500">Thời gian mục tiêu</div>
+              <div className="p-4 rounded-2xl bg-[#FAF8F5] dark:bg-zinc-800/60 border border-gray-200/60 dark:border-zinc-700 text-center">
+                <Zap size={16} className="text-emerald-600 dark:text-emerald-400 mx-auto mb-1.5" />
+                <div className="text-lg font-black text-gray-900 dark:text-zinc-100">{Math.round(summaryData.targetDurationSeconds / 60)} phút</div>
+                <div className="text-[11px] text-gray-500 dark:text-zinc-400">Thời gian mục tiêu</div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-gray-200/60 text-center">
-                <EyeOff size={16} className="text-amber-600 mx-auto mb-1.5" />
-                <div className="text-lg font-black text-gray-900">{summaryData.distractionCount} lần</div>
-                <div className="text-[11px] text-gray-500">Rời tab/cửa sổ</div>
+              <div className="p-4 rounded-2xl bg-[#FAF8F5] dark:bg-zinc-800/60 border border-gray-200/60 dark:border-zinc-700 text-center">
+                <EyeOff size={16} className="text-amber-600 dark:text-amber-400 mx-auto mb-1.5" />
+                <div className="text-lg font-black text-gray-900 dark:text-zinc-100">{summaryData.distractionCount} lần</div>
+                <div className="text-[11px] text-gray-500 dark:text-zinc-400">Rời tab/cửa sổ</div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-gray-200/60 text-center">
-                <Flame size={16} className="text-orange-500 mx-auto mb-1.5 fill-orange-500" />
-                <div className="text-lg font-black text-gray-900">+{summaryData.actualFocusMinutes}m</div>
-                <div className="text-[11px] text-gray-500">Cộng dồn Streak</div>
+              <div className="p-4 rounded-2xl bg-[#FAF8F5] dark:bg-zinc-800/60 border border-gray-200/60 dark:border-zinc-700 text-center">
+                <Flame size={16} className="text-orange-500 dark:text-orange-400 mx-auto mb-1.5 fill-orange-500 dark:fill-orange-400" />
+                <div className="text-lg font-black text-gray-900 dark:text-zinc-100">+{summaryData.actualFocusMinutes}m</div>
+                <div className="text-[11px] text-gray-500 dark:text-zinc-400">Cộng dồn Streak</div>
               </div>
             </div>
 
             {/* Distraction breakdown if any */}
             {detailedEvents.length > 0 && (
-              <div className="mt-6 text-left border-t border-gray-100 pt-4">
-                <div className="text-xs font-bold text-gray-700 mb-2">Nhật ký chuyển đổi trình duyệt:</div>
+              <div className="mt-6 text-left border-t border-gray-100 dark:border-zinc-800 pt-4">
+                <div className="text-xs font-bold text-gray-700 dark:text-zinc-300 mb-2">Nhật ký chuyển đổi trình duyệt:</div>
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                   {detailedEvents.map((evt, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-[11px] text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg">
-                      <span className="font-semibold text-gray-800">
+                    <div key={idx} className="flex items-center justify-between text-[11px] text-gray-600 dark:text-zinc-400 bg-gray-50 dark:bg-zinc-800/70 px-3 py-1.5 rounded-lg">
+                      <span className="font-semibold text-gray-800 dark:text-zinc-200">
                         {evt.event_type === 'TAB_SWITCH' && 'Chuyển đổi thẻ (Tab Switch)'}
                         {evt.event_type === 'PAGE_BLUR' && 'Mất tiêu điểm cửa sổ (Blur)'}
                         {evt.event_type === 'PAGE_HIDDEN' && 'Ẩn trang trình duyệt (Hidden)'}
                         {evt.event_type === 'IDLE' && 'Không thao tác > 60s (Idle)'}
                         {evt.event_type === 'RETURNED' && 'Đã quay lại tập trung'}
                       </span>
-                      <span className="text-gray-400 font-mono">
+                      <span className="text-gray-400 dark:text-zinc-500 font-mono">
                         {new Date(evt.occurred_at).toLocaleTimeString('vi-VN')}
                       </span>
                     </div>
@@ -951,22 +1047,22 @@ function FocusContent() {
           </div>
 
           {/* Actionable Next Steps (Never a Dead End) */}
-          <div className="bg-white rounded-3xl border border-gray-200/80 p-6 sm:p-8 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-200/80 dark:border-zinc-800 p-6 sm:p-8 shadow-sm space-y-4 transition-colors">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400">
               Bước tiếp theo dành cho bạn:
             </h3>
 
             {/* Option 1: Pomodoro Short Break */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/70 flex items-center justify-between">
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 border border-emerald-200/70 dark:border-emerald-800/60 flex items-center justify-between">
               <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 dark:bg-emerald-700 text-white flex items-center justify-center shrink-0">
                   <Coffee size={20} />
                 </div>
                 <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-gray-900">
+                  <h4 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-zinc-100">
                     Nghỉ giải lao ngắn 5 phút (Pomodoro Break)
                   </h4>
-                  <p className="text-[11px] text-gray-600 mt-0.5">
+                  <p className="text-[11px] text-gray-600 dark:text-zinc-400 mt-0.5">
                     Thư giãn mắt, hít thở sâu và nạp lại năng lượng trước khi bắt đầu phiên tiếp theo.
                   </p>
                 </div>
@@ -985,57 +1081,57 @@ function FocusContent() {
               {summaryData.documentId ? (
                 <Link
                   href={`/viewer/${summaryData.documentId}`}
-                  className="p-3.5 rounded-xl border border-gray-200 hover:border-gray-300 bg-gray-50 hover:bg-gray-100/70 flex items-center justify-between text-xs font-bold text-gray-800 transition-colors"
+                  className="p-3.5 rounded-xl border border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600 bg-gray-50 dark:bg-zinc-800/60 hover:bg-gray-100/70 dark:hover:bg-zinc-800 flex items-center justify-between text-xs font-bold text-gray-800 dark:text-zinc-200 transition-colors"
                 >
                   <span className="flex items-center gap-2">
-                    <BookOpen size={15} className="text-amber-600" />
+                    <BookOpen size={15} className="text-amber-600 dark:text-amber-400" />
                     Quay lại đọc tài liệu
                   </span>
-                  <ArrowRight size={14} className="text-gray-400" />
+                  <ArrowRight size={14} className="text-gray-400 dark:text-zinc-500" />
                 </Link>
               ) : (
                 <Link
                   href="/library"
-                  className="p-3.5 rounded-xl border border-gray-200 hover:border-gray-300 bg-gray-50 hover:bg-gray-100/70 flex items-center justify-between text-xs font-bold text-gray-800 transition-colors"
+                  className="p-3.5 rounded-xl border border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600 bg-gray-50 dark:bg-zinc-800/60 hover:bg-gray-100/70 dark:hover:bg-zinc-800 flex items-center justify-between text-xs font-bold text-gray-800 dark:text-zinc-200 transition-colors"
                 >
                   <span className="flex items-center gap-2">
-                    <BookOpen size={15} className="text-amber-600" />
+                    <BookOpen size={15} className="text-amber-600 dark:text-amber-400" />
                     Mở kho tài liệu học tập
                   </span>
-                  <ArrowRight size={14} className="text-gray-400" />
+                  <ArrowRight size={14} className="text-gray-400 dark:text-zinc-500" />
                 </Link>
               )}
 
               {summaryData.quizId ? (
                 <Link
                   href={`/quiz/${summaryData.quizId}`}
-                  className="p-3.5 rounded-xl border border-gray-200 hover:border-gray-300 bg-gray-50 hover:bg-gray-100/70 flex items-center justify-between text-xs font-bold text-gray-800 transition-colors"
+                  className="p-3.5 rounded-xl border border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600 bg-gray-50 dark:bg-zinc-800/60 hover:bg-gray-100/70 dark:hover:bg-zinc-800 flex items-center justify-between text-xs font-bold text-gray-800 dark:text-zinc-200 transition-colors"
                 >
                   <span className="flex items-center gap-2">
-                    <HelpCircle size={15} className="text-purple-600" />
+                    <HelpCircle size={15} className="text-purple-600 dark:text-purple-400" />
                     Vào làm bài kiểm tra
                   </span>
-                  <ArrowRight size={14} className="text-gray-400" />
+                  <ArrowRight size={14} className="text-gray-400 dark:text-zinc-500" />
                 </Link>
               ) : (
                 <Link
                   href="/ai-test"
-                  className="p-3.5 rounded-xl border border-gray-200 hover:border-gray-300 bg-gray-50 hover:bg-gray-100/70 flex items-center justify-between text-xs font-bold text-gray-800 transition-colors"
+                  className="p-3.5 rounded-xl border border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600 bg-gray-50 dark:bg-zinc-800/60 hover:bg-gray-100/70 dark:hover:bg-zinc-800 flex items-center justify-between text-xs font-bold text-gray-800 dark:text-zinc-200 transition-colors"
                 >
                   <span className="flex items-center gap-2">
-                    <HelpCircle size={15} className="text-purple-600" />
+                    <HelpCircle size={15} className="text-purple-600 dark:text-purple-400" />
                     Luyện đề thi trắc nghiệm
                   </span>
-                  <ArrowRight size={14} className="text-gray-400" />
+                  <ArrowRight size={14} className="text-gray-400 dark:text-zinc-500" />
                 </Link>
               )}
             </div>
 
             {/* Option 3: Check Progress or Start Next Session */}
-            <div className="flex items-center justify-between pt-4 border-t border-gray-100 text-xs">
+            <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-zinc-800 text-xs">
               <Link
                 href="/progress"
-                className="text-gray-600 hover:text-gray-900 font-bold inline-flex items-center gap-1.5"
+                className="text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 font-bold inline-flex items-center gap-1.5"
               >
                 <TrendingUp size={14} />
                 <span>Xem Bảng tiến độ & Chuỗi học</span>
@@ -1044,13 +1140,24 @@ function FocusContent() {
               <button
                 type="button"
                 onClick={() => setModeState('SETUP')}
-                className="px-5 py-2.5 bg-[#0D2B24] hover:bg-[#144136] text-white rounded-xl font-bold transition-all shadow-sm"
+                className="px-5 py-2.5 bg-[#0D2B24] hover:bg-[#144136] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white rounded-xl font-bold transition-all shadow-sm"
               >
                 Bắt đầu phiên học mới
               </button>
             </div>
           </div>
         </main>
+        </div>
+
+        <RegisterModal 
+          isOpen={showLoginModal} 
+          onClose={() => setShowLoginModal(false)} 
+          triggerMessage={triggerMessage} 
+        />
+        <PremiumModal 
+          isOpen={showPremiumModal} 
+          onClose={() => setShowPremiumModal(false)} 
+        />
       </div>
     );
   }
@@ -1062,39 +1169,39 @@ function FocusContent() {
     const breakRatio = Math.min(1, (breakTotalSeconds - breakSecondsRemaining) / breakTotalSeconds);
 
     return (
-      <div className="min-h-screen bg-[#F0F7F4] flex flex-col font-sans items-center justify-center p-6 text-center select-none">
-        <div className="max-w-md w-full bg-white rounded-3xl border border-emerald-100 shadow-sm p-8 space-y-6">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto">
+      <div className="min-h-screen bg-[#F0F7F4] dark:bg-[#0B0F17] flex flex-col font-sans items-center justify-center p-6 text-center select-none transition-colors duration-200">
+        <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-3xl border border-emerald-100 dark:border-zinc-800 shadow-sm p-8 space-y-6">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-400 flex items-center justify-center mx-auto">
             <Coffee size={28} />
           </div>
 
           <div>
-            <h2 className="text-xl font-extrabold text-gray-900">Giờ nghỉ giải lao Pomodoro</h2>
-            <p className="text-xs text-gray-600 mt-1">
+            <h2 className="text-xl font-extrabold text-gray-900 dark:text-zinc-100">Giờ nghỉ giải lao Pomodoro</h2>
+            <p className="text-xs text-gray-600 dark:text-zinc-400 mt-1">
               Hãy đứng dậy uống nước, vươn vai hoặc làm theo bài tập thở nhẹ dưới đây.
             </p>
           </div>
 
           {/* Break Timer Display */}
           <div className="py-4">
-            <div className="text-5xl font-black text-emerald-800 font-mono tracking-tight">
+            <div className="text-5xl font-black text-emerald-800 dark:text-emerald-400 font-mono tracking-tight">
               {formatTime(breakSecondsRemaining)}
             </div>
             {/* Progress bar */}
-            <div className="w-full h-2 bg-emerald-100 rounded-full mt-4 overflow-hidden">
+            <div className="w-full h-2 bg-emerald-100 dark:bg-zinc-800 rounded-full mt-4 overflow-hidden">
               <div 
-                className="h-full bg-emerald-600 transition-all duration-1000"
+                className="h-full bg-emerald-600 dark:bg-emerald-500 transition-all duration-1000"
                 style={{ width: `${breakRatio * 100}%` }}
               />
             </div>
           </div>
 
           {/* Calming Breathing Guide */}
-          <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200/50">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block mb-1">
+          <div className="p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/50 dark:border-emerald-900/50">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block mb-1">
               Bài tập thở thư giãn 4-4-4
             </span>
-            <div className="text-base font-extrabold text-emerald-950 animate-pulse">
+            <div className="text-base font-extrabold text-emerald-950 dark:text-emerald-200 animate-pulse">
               {breathingPhase}...
             </div>
           </div>
@@ -1103,7 +1210,7 @@ function FocusContent() {
           <button
             type="button"
             onClick={endBreak}
-            className="w-full py-3 bg-[#0D2B24] hover:bg-[#144136] text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2"
+            className="w-full py-3 bg-[#0D2B24] hover:bg-[#144136] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2"
           >
             <span>Kết thúc nghỉ & Vào phiên mới</span>
             <ArrowRight size={14} />

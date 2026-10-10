@@ -35,7 +35,19 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import RegisterModal from '@/components/auth/RegisterModal';
+import dynamic from 'next/dynamic';
+
+const RegisterModal = dynamic(
+  () => import('@/components/auth/RegisterModal'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
 import {
   safetyService,
   ReportTargetType,
@@ -283,9 +295,10 @@ export default function CommunityPage() {
         search: debouncedSearch || undefined,
       });
 
-      if (res && Array.isArray(res.items)) {
-        setResources(res.items);
-        setTotalCount(res.total || res.items.length);
+      const items = Array.isArray(res?.items) ? res.items : Array.isArray((res as any)?.resources) ? (res as any).resources : [];
+      if (items.length > 0) {
+        setResources(items);
+        setTotalCount(res.total || items.length);
       } else {
         setResources([]);
         setTotalCount(0);
@@ -638,20 +651,20 @@ export default function CommunityPage() {
   const getTypeInfo = (type: ResourceType) => {
     switch (type) {
       case 'document':
-        return { label: 'Tài liệu', icon: BookOpen, bg: 'bg-blue-50 text-blue-700 border-blue-200' };
+        return { label: 'Tài liệu', icon: BookOpen, bg: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800' };
       case 'test_set':
-        return { label: 'Đề trắc nghiệm', icon: HelpCircle, bg: 'bg-amber-50 text-amber-700 border-amber-200' };
+        return { label: 'Đề trắc nghiệm', icon: HelpCircle, bg: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800' };
       case 'mindmap':
-        return { label: 'Sơ đồ tư duy', icon: GitBranch, bg: 'bg-purple-50 text-purple-700 border-purple-200' };
+        return { label: 'Sơ đồ tư duy', icon: GitBranch, bg: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800' };
       case 'flashcard_deck':
-        return { label: 'Thẻ ghi nhớ', icon: Layers, bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+        return { label: 'Thẻ ghi nhớ', icon: Layers, bg: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' };
       default:
-        return { label: 'Học liệu', icon: BookOpen, bg: 'bg-stone-50 text-stone-700 border-stone-200' };
+        return { label: 'Học liệu', icon: BookOpen, bg: 'bg-stone-50 dark:bg-zinc-800 text-stone-700 dark:text-zinc-300 border-stone-200 dark:border-zinc-700' };
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f6f2] text-[#121f17] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#f7f6f2] dark:bg-[#0B0F17] text-[#121f17] dark:text-zinc-100 flex flex-col font-sans">
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
@@ -660,20 +673,20 @@ export default function CommunityPage() {
       />
 
       {/* Hero Banner Header */}
-      <header className="border-b border-stone-200/80 bg-white/70 backdrop-blur-md sticky top-0 z-20">
+      <header className="border-b border-stone-200/80 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 tracking-wide uppercase">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 tracking-wide uppercase">
                   Cognito Ecosystem
                 </span>
-                <span className="text-xs text-stone-400">• {totalCount} tài nguyên chia sẻ</span>
+                <span className="text-xs text-stone-400 dark:text-zinc-500">• {totalCount} tài nguyên chia sẻ</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0d1a14] mt-1">
-                Cộng đồng Chia sẻ & Trao đổi Học tập
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0d1a14] dark:text-zinc-100 mt-1">
+                Cộng đồng Chia sẻ &amp; Trao đổi Học tập
               </h1>
-              <p className="text-sm text-stone-600 mt-0.5">
+              <p className="text-sm text-stone-600 dark:text-zinc-400 mt-0.5">
                 Khám phá tài liệu, đề trắc nghiệm, sơ đồ tư duy và bộ thẻ ghi nhớ được chia sẻ công khai.
               </p>
             </div>
@@ -682,16 +695,16 @@ export default function CommunityPage() {
               {isAuthenticated && (
                 <button
                   onClick={handleOpenBlockedUsersModal}
-                  className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-stone-200 bg-white text-stone-700 font-medium text-sm hover:bg-stone-50 transition-all shadow-2xs"
+                  className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-700 dark:text-zinc-300 font-medium text-sm hover:bg-stone-50 dark:hover:bg-zinc-700 transition-all shadow-2xs"
                   title="Quản lý danh sách người dùng đã chặn"
                 >
-                  <UserX size={16} className="text-stone-500" />
+                  <UserX size={16} className="text-stone-500 dark:text-zinc-400" />
                   <span>Danh sách chặn</span>
                 </button>
               )}
               <button
                 onClick={handleOpenPublishModal}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a3a2a] text-white font-medium text-sm hover:bg-[#12281d] shadow-sm hover:shadow transition-all"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a3a2a] dark:bg-emerald-700 text-white font-medium text-sm hover:bg-[#12281d] dark:hover:bg-emerald-600 shadow-sm hover:shadow transition-all"
               >
                 <Plus size={18} />
                 <span>Đăng tài liệu</span>
@@ -700,13 +713,13 @@ export default function CommunityPage() {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 mt-5 border-t border-stone-100 pt-3 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2 mt-5 border-t border-stone-100 dark:border-zinc-800 pt-3 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab('recent')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                 activeTab === 'recent'
-                  ? 'bg-[#1a3a2a] text-white shadow-sm'
-                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+                  ? 'bg-[#1a3a2a] dark:bg-emerald-700 text-white shadow-sm'
+                  : 'text-stone-600 dark:text-zinc-400 hover:text-stone-900 dark:hover:text-zinc-100 hover:bg-stone-100 dark:hover:bg-zinc-800'
               }`}
             >
               <Clock size={16} />
@@ -717,8 +730,8 @@ export default function CommunityPage() {
               onClick={() => setActiveTab('popular')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                 activeTab === 'popular'
-                  ? 'bg-[#1a3a2a] text-white shadow-sm'
-                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+                  ? 'bg-[#1a3a2a] dark:bg-emerald-700 text-white shadow-sm'
+                  : 'text-stone-600 dark:text-zinc-400 hover:text-stone-900 dark:hover:text-zinc-100 hover:bg-stone-100 dark:hover:bg-zinc-800'
               }`}
             >
               <TrendingUp size={16} />
@@ -735,8 +748,8 @@ export default function CommunityPage() {
               }}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                 activeTab === 'saved'
-                  ? 'bg-[#1a3a2a] text-white shadow-sm'
-                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+                  ? 'bg-[#1a3a2a] dark:bg-emerald-700 text-white shadow-sm'
+                  : 'text-stone-600 dark:text-zinc-400 hover:text-stone-900 dark:hover:text-zinc-100 hover:bg-stone-100 dark:hover:bg-zinc-800'
               }`}
             >
               <Bookmark size={16} />
@@ -748,21 +761,21 @@ export default function CommunityPage() {
 
       {/* Search & Filter Toolbar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-2 w-full">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-stone-200/80 shadow-sm">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-stone-200/80 dark:border-zinc-800 shadow-sm">
           {/* Search input */}
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 dark:text-zinc-500" size={18} />
             <input
               type="text"
               placeholder="Tìm kiếm theo tiêu đề, danh mục, từ khóa..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-10 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3a2a] transition-all"
+              className="w-full pl-10 pr-10 py-2.5 bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 text-stone-900 dark:text-zinc-100 placeholder:text-stone-400 dark:placeholder:text-zinc-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 dark:text-zinc-400 dark:hover:text-zinc-200"
               >
                 <X size={16} />
               </button>
@@ -780,11 +793,11 @@ export default function CommunityPage() {
                   onClick={() => setSelectedType(t.key)}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all border ${
                     isSelected
-                      ? 'bg-stone-900 text-white border-stone-900 shadow-sm'
-                      : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
+                      ? 'bg-stone-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-stone-900 dark:border-zinc-100 shadow-sm'
+                      : 'bg-stone-50 dark:bg-zinc-800 text-stone-600 dark:text-zinc-400 border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700'
                   }`}
                 >
-                  <Icon size={14} className={isSelected ? 'text-white' : t.color} />
+                  <Icon size={14} className={isSelected ? 'text-white dark:text-zinc-900' : t.color} />
                   <span>{t.label}</span>
                 </button>
               );
@@ -794,7 +807,7 @@ export default function CommunityPage() {
 
         {/* Category Filter Chips */}
         <div className="flex items-center gap-2 mt-3 overflow-x-auto py-1 no-scrollbar">
-          <span className="text-xs text-stone-400 flex items-center gap-1 pl-1">
+          <span className="text-xs text-stone-400 dark:text-zinc-500 flex items-center gap-1 pl-1">
             <Filter size={13} />
             <span>Chủ đề:</span>
           </span>
@@ -804,8 +817,8 @@ export default function CommunityPage() {
               onClick={() => setSelectedCategory(cat)}
               className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
                 selectedCategory === cat
-                  ? 'bg-emerald-800 text-white shadow-xs'
-                  : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-100'
+                  ? 'bg-emerald-800 dark:bg-emerald-700 text-white shadow-xs'
+                  : 'bg-white dark:bg-zinc-800 text-stone-600 dark:text-zinc-400 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-750'
               }`}
             >
               {cat}
@@ -818,18 +831,18 @@ export default function CommunityPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
         {loading ? (
           <div className="py-24 flex flex-col items-center justify-center text-center">
-            <div className="w-10 h-10 border-4 border-[#1a3a2a] border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-sm text-stone-500 font-medium">Đang tải học liệu từ cộng đồng...</p>
+            <div className="w-10 h-10 border-4 border-[#1a3a2a] dark:border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-sm text-stone-500 dark:text-zinc-400 font-medium">Đang tải học liệu từ cộng đồng...</p>
           </div>
         ) : resources.length === 0 ? (
-          <div className="py-20 bg-white rounded-3xl border border-stone-200 text-center px-4 max-w-xl mx-auto shadow-sm my-8">
-            <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-stone-400">
+          <div className="py-20 bg-white dark:bg-zinc-900 rounded-3xl border border-stone-200 dark:border-zinc-800 text-center px-4 max-w-xl mx-auto shadow-sm my-8">
+            <div className="w-16 h-16 bg-stone-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-4 text-stone-400 dark:text-zinc-500">
               <BookOpen size={32} />
             </div>
-            <h3 className="text-lg font-bold text-stone-900">
+            <h3 className="text-lg font-bold text-stone-900 dark:text-zinc-100">
               {activeTab === 'saved' ? 'Bạn chưa lưu tài nguyên nào' : 'Chưa tìm thấy học liệu phù hợp'}
             </h3>
-            <p className="text-sm text-stone-500 mt-1 max-w-md mx-auto">
+            <p className="text-sm text-stone-500 dark:text-zinc-400 mt-1 max-w-md mx-auto">
               {activeTab === 'saved'
                 ? 'Hãy khám phá các bài viết trong tab "Mới nhất" hoặc "Phổ biến" và nhấn nút lưu để tham chiếu học tập.'
                 : 'Thử điều chỉnh lại từ khóa tìm kiếm hoặc danh mục, hoặc hãy là người đầu tiên chia sẻ học liệu của bạn!'}
@@ -837,7 +850,7 @@ export default function CommunityPage() {
             {activeTab !== 'saved' && (
               <button
                 onClick={handleOpenPublishModal}
-                className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a3a2a] text-white text-sm font-semibold hover:bg-[#12281d] transition-all"
+                className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a3a2a] dark:bg-emerald-700 text-white text-sm font-semibold hover:bg-[#12281d] dark:hover:bg-emerald-600 transition-all"
               >
                 <Plus size={16} />
                 <span>Đăng tài liệu ngay</span>
@@ -857,23 +870,23 @@ export default function CommunityPage() {
                   key={item.id}
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`bg-white rounded-2xl border transition-all duration-200 flex flex-col justify-between overflow-hidden shadow-xs hover:shadow-md ${
+                  className={`bg-white dark:bg-zinc-900 rounded-2xl border transition-all duration-200 flex flex-col justify-between overflow-hidden shadow-xs hover:shadow-md ${
                     item.is_available
-                      ? 'border-stone-200/90 hover:border-stone-300'
-                      : 'border-red-200 bg-stone-50/60 opacity-80'
+                      ? 'border-stone-200/90 dark:border-zinc-800 hover:border-stone-300 dark:hover:border-zinc-700'
+                      : 'border-red-200 dark:border-red-900/60 bg-stone-50/60 dark:bg-zinc-800/40 opacity-80'
                   }`}
                 >
                   <div>
                     {/* Reshare Attribution Header */}
                     {item.is_reshare && (
-                      <div className="bg-emerald-50/70 border-b border-emerald-100/70 px-4 py-2 flex items-center justify-between text-xs text-emerald-900">
+                      <div className="bg-emerald-50/70 dark:bg-emerald-950/40 border-b border-emerald-100/70 dark:border-emerald-900/40 px-4 py-2 flex items-center justify-between text-xs text-emerald-900 dark:text-emerald-300">
                         <div className="flex items-center gap-1.5 truncate">
-                          <Share2 size={13} className="text-emerald-700 shrink-0" />
+                          <Share2 size={13} className="text-emerald-700 dark:text-emerald-400 shrink-0" />
                           <span className="font-semibold truncate">{item.author_name}</span>
-                          <span className="text-emerald-700">đã chia sẻ lại</span>
+                          <span className="text-emerald-700 dark:text-emerald-400">đã chia sẻ lại</span>
                           {item.original_author_name && (
-                            <span className="text-stone-500 truncate">
-                              từ <strong className="text-stone-700">{item.original_author_name}</strong>
+                            <span className="text-stone-500 dark:text-zinc-400 truncate">
+                              từ <strong className="text-stone-700 dark:text-zinc-200">{item.original_author_name}</strong>
                             </span>
                           )}
                         </div>
@@ -882,7 +895,7 @@ export default function CommunityPage() {
 
                     {/* Reshare Note */}
                     {item.is_reshare && item.reshare_note && (
-                      <div className="px-5 pt-3 pb-1 text-xs italic text-stone-700 bg-stone-50/50 border-b border-stone-100">
+                      <div className="px-5 pt-3 pb-1 text-xs italic text-stone-700 dark:text-zinc-300 bg-stone-50/50 dark:bg-zinc-800/50 border-b border-stone-100 dark:border-zinc-800">
                         "{item.reshare_note}"
                       </div>
                     )}
@@ -898,25 +911,25 @@ export default function CommunityPage() {
                         </div>
 
                         {item.category && (
-                          <span className="text-xs px-2.5 py-0.5 rounded-full bg-stone-100 text-stone-600 font-medium">
+                          <span className="text-xs px-2.5 py-0.5 rounded-full bg-stone-100 dark:bg-zinc-800 text-stone-600 dark:text-zinc-400 font-medium">
                             {item.category}
                           </span>
                         )}
 
                         {!item.is_available && (
-                          <span className="text-xs px-2 py-0.5 rounded-md bg-red-100 text-red-700 font-semibold flex items-center gap-1">
+                          <span className="text-xs px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400 font-semibold flex items-center gap-1">
                             <AlertCircle size={12} /> Không khả dụng
                           </span>
                         )}
                       </div>
 
                       {/* Title */}
-                      <h3 className="text-base font-bold text-stone-900 line-clamp-2 leading-snug group-hover:text-emerald-800 transition-colors">
+                      <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100 line-clamp-2 leading-snug group-hover:text-emerald-800 dark:group-hover:text-emerald-400 transition-colors">
                         {item.title}
                       </h3>
 
                       {/* Description */}
-                      <p className="text-xs text-stone-600 line-clamp-2 mt-1.5 leading-relaxed min-h-[32px]">
+                      <p className="text-xs text-stone-600 dark:text-zinc-400 line-clamp-2 mt-1.5 leading-relaxed min-h-[32px]">
                         {item.description || 'Tài nguyên học tập được đóng góp bởi thành viên cộng đồng Cognito.'}
                       </p>
 
@@ -926,14 +939,14 @@ export default function CommunityPage() {
                           {item.tags.slice(0, 3).map((tag, idx) => (
                             <span
                               key={idx}
-                              className="text-[11px] text-stone-500 bg-stone-100/80 px-2 py-0.5 rounded-md flex items-center gap-1"
+                              className="text-[11px] text-stone-500 dark:text-zinc-400 bg-stone-100/80 dark:bg-zinc-800 px-2 py-0.5 rounded-md flex items-center gap-1"
                             >
-                              <Tag size={10} className="text-stone-400" />
+                              <Tag size={10} className="text-stone-400 dark:text-zinc-500" />
                               {tag}
                             </span>
                           ))}
                           {item.tags.length > 3 && (
-                            <span className="text-[11px] text-stone-400 px-1 py-0.5">
+                            <span className="text-[11px] text-stone-400 dark:text-zinc-500 px-1 py-0.5">
                               +{item.tags.length - 3}
                             </span>
                           )}
@@ -941,7 +954,7 @@ export default function CommunityPage() {
                       )}
 
                       {/* Author Info & Date */}
-                      <div className="flex items-center justify-between pt-4 mt-4 border-t border-stone-100 text-xs text-stone-500">
+                      <div className="flex items-center justify-between pt-4 mt-4 border-t border-stone-100 dark:border-zinc-800 text-xs text-stone-500 dark:text-zinc-400">
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => router.push(`/profile/${item.user_id}`)}
@@ -952,21 +965,21 @@ export default function CommunityPage() {
                               <img
                                 src={item.author_avatar}
                                 alt={item.author_name}
-                                className="w-6 h-6 rounded-full object-cover border border-stone-200"
+                                className="w-6 h-6 rounded-full object-cover border border-stone-200 dark:border-zinc-700"
                               />
                             ) : (
-                              <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px]">
+                              <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center font-bold text-[10px]">
                                 {item.author_name.charAt(0).toUpperCase()}
                               </div>
                             )}
-                            <span className="font-medium text-stone-700 hover:text-emerald-800 truncate max-w-[110px]">
+                            <span className="font-medium text-stone-700 dark:text-zinc-300 hover:text-emerald-800 dark:hover:text-emerald-400 truncate max-w-[110px]">
                               {item.author_name}
                             </span>
                           </button>
                           {!isOwner && (
                             <button
                               onClick={() => router.push(`/messages?user=${item.user_id}`)}
-                              className="text-stone-400 hover:text-emerald-700 transition-colors p-0.5 cursor-pointer"
+                              className="text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors p-0.5 cursor-pointer"
                               title="Nhắn tin cho tác giả"
                             >
                               <MessageSquare size={13} />
@@ -974,7 +987,7 @@ export default function CommunityPage() {
                           )}
                         </div>
 
-                        <span className="text-stone-400">
+                        <span className="text-stone-400 dark:text-zinc-500">
                           {new Date(item.created_at).toLocaleDateString('vi-VN')}
                         </span>
                       </div>
@@ -982,42 +995,42 @@ export default function CommunityPage() {
                   </div>
 
                   {/* Card Actions & Stats Footer */}
-                  <div className="bg-stone-50/70 border-t border-stone-100 px-4 py-2.5">
+                  <div className="bg-stone-50/70 dark:bg-zinc-800/60 border-t border-stone-100 dark:border-zinc-800 px-4 py-2.5">
                     <div className="flex items-center justify-between text-xs mb-2.5">
                       {/* Social Metrics & Toggles */}
                       <div className="flex items-center gap-3">
                         <button
                           onClick={() => handleToggleLike(item)}
                           className={`flex items-center gap-1 transition-colors ${
-                            item.is_liked ? 'text-red-600 font-bold' : 'text-stone-500 hover:text-red-500'
+                            item.is_liked ? 'text-red-600 dark:text-red-400 font-bold' : 'text-stone-500 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400'
                           }`}
                           title="Thích bài đăng"
                         >
-                          <Heart size={15} className={item.is_liked ? 'fill-red-600' : ''} />
+                          <Heart size={15} className={item.is_liked ? 'fill-red-600 dark:fill-red-400' : ''} />
                           <span>{item.likes}</span>
                         </button>
 
                         <button
                           onClick={() => handleToggleSave(item)}
                           className={`flex items-center gap-1 transition-colors ${
-                            item.is_saved ? 'text-blue-600 font-bold' : 'text-stone-500 hover:text-blue-500'
+                            item.is_saved ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-stone-500 dark:text-zinc-400 hover:text-blue-500 dark:hover:text-blue-400'
                           }`}
                           title="Lưu tham chiếu (Zero data duplication)"
                         >
-                          <Bookmark size={15} className={item.is_saved ? 'fill-blue-600' : ''} />
+                          <Bookmark size={15} className={item.is_saved ? 'fill-blue-600 dark:fill-blue-400' : ''} />
                           <span>{item.save_count ?? item.forks ?? 0}</span>
                         </button>
 
                         <button
                           onClick={() => handleOpenComments(item)}
-                          className="flex items-center gap-1 text-stone-500 hover:text-stone-800 transition-colors"
+                          className="flex items-center gap-1 text-stone-500 dark:text-zinc-400 hover:text-stone-800 dark:hover:text-zinc-200 transition-colors"
                           title="Bình luận"
                         >
                           <MessageSquare size={15} />
                           <span>{item.comment_count || 0}</span>
                         </button>
 
-                        <span className="flex items-center gap-1 text-stone-400 pl-1" title="Lượt xem">
+                        <span className="flex items-center gap-1 text-stone-400 dark:text-zinc-500 pl-1" title="Lượt xem">
                           <Eye size={14} />
                           <span>{item.views}</span>
                         </span>
@@ -1027,7 +1040,7 @@ export default function CommunityPage() {
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => handleOpenReport('resource', item.id, item.title)}
-                          className="p-1 text-stone-400 hover:text-amber-600 transition-colors"
+                          className="p-1 text-stone-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
                           title="Báo cáo vi phạm (Report)"
                         >
                           <Flag size={14} />
@@ -1036,7 +1049,7 @@ export default function CommunityPage() {
                         {!isOwner && (
                           <button
                             onClick={() => handleOpenBlock(item.user_id, item.author_name)}
-                            className="p-1 text-stone-400 hover:text-red-600 transition-colors"
+                            className="p-1 text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                             title="Chặn tác giả này (Block user)"
                           >
                             <UserX size={14} />
@@ -1045,7 +1058,7 @@ export default function CommunityPage() {
 
                         <button
                           onClick={() => handleOpenReshare(item)}
-                          className="p-1 text-stone-400 hover:text-emerald-700 transition-colors"
+                          className="p-1 text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
                           title="Chia sẻ lại (Reshare)"
                         >
                           <Share2 size={15} />
@@ -1060,8 +1073,8 @@ export default function CommunityPage() {
                         disabled={!item.is_available}
                         className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
                           item.is_available
-                            ? 'bg-[#1a3a2a] text-white hover:bg-[#12281d] active:scale-[0.98]'
-                            : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+                            ? 'bg-[#1a3a2a] dark:bg-emerald-700 text-white hover:bg-[#12281d] dark:hover:bg-emerald-600 active:scale-[0.98]'
+                            : 'bg-stone-200 dark:bg-zinc-800 text-stone-400 dark:text-zinc-500 cursor-not-allowed'
                         }`}
                       >
                         <span>Học ngay</span>
@@ -1071,7 +1084,7 @@ export default function CommunityPage() {
                       {(isOwner || isAdmin) && (
                         <button
                           onClick={() => handleUnpublish(item)}
-                          className="p-2 rounded-xl text-stone-400 hover:text-red-600 hover:bg-red-50 border border-stone-200 transition-colors"
+                          className="p-2 rounded-xl text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-stone-200 dark:border-zinc-700 transition-colors"
                           title="Gỡ khỏi cộng đồng"
                         >
                           <Trash2 size={14} />
@@ -1094,18 +1107,18 @@ export default function CommunityPage() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-stone-200 overflow-hidden max-h-[90vh] flex flex-col"
+              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden max-h-[90vh] flex flex-col"
             >
-              <div className="flex items-center justify-between pb-4 border-b border-stone-100">
+              <div className="flex items-center justify-between pb-4 border-b border-stone-100 dark:border-zinc-800">
                 <div>
-                  <h3 className="text-lg font-bold text-stone-900">Đăng tài nguyên lên Cộng đồng</h3>
-                  <p className="text-xs text-stone-500">
+                  <h3 className="text-lg font-bold text-stone-900 dark:text-zinc-100">Đăng tài nguyên lên Cộng đồng</h3>
+                  <p className="text-xs text-stone-500 dark:text-zinc-400">
                     Quy tắc: PUBLIC ≠ PUBLISHED. Chỉ tài nguyên bạn xác nhận đăng mới xuất hiện trên bảng tin.
                   </p>
                 </div>
                 <button
                   onClick={() => setIsPublishModalOpen(false)}
-                  className="p-1 rounded-full text-stone-400 hover:bg-stone-100"
+                  className="p-1 rounded-full text-stone-400 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
                 >
                   <X size={20} />
                 </button>
@@ -1113,14 +1126,14 @@ export default function CommunityPage() {
 
               {loadingPersonal ? (
                 <div className="py-16 text-center">
-                  <div className="w-8 h-8 border-3 border-[#1a3a2a] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                  <p className="text-xs text-stone-500">Đang kiểm tra tài nguyên của bạn...</p>
+                  <div className="w-8 h-8 border-3 border-[#1a3a2a] dark:border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <p className="text-xs text-stone-500 dark:text-zinc-400">Đang kiểm tra tài nguyên của bạn...</p>
                 </div>
               ) : (
                 <form onSubmit={handlePublishSubmit} className="mt-4 space-y-4 overflow-y-auto pr-1">
                   {/* Step 1: Type Selection */}
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 uppercase tracking-wide mb-1.5">
+                    <label className="block text-xs font-bold text-stone-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">
                       1. Chọn loại tài nguyên
                     </label>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1134,11 +1147,11 @@ export default function CommunityPage() {
                             onClick={() => handleTypeChangeInPublish(t.key as ResourceType)}
                             className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
                               isSelected
-                                ? 'border-[#1a3a2a] bg-emerald-50/50 text-[#1a3a2a] font-bold'
-                                : 'border-stone-200 text-stone-600 hover:bg-stone-50'
+                                ? 'border-[#1a3a2a] dark:border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/40 text-[#1a3a2a] dark:text-emerald-300 font-bold'
+                                : 'border-stone-200 dark:border-zinc-700 text-stone-600 dark:text-zinc-400 hover:bg-stone-50 dark:hover:bg-zinc-800'
                             }`}
                           >
-                            <Icon size={16} className={isSelected ? 'text-emerald-700' : 'text-stone-400'} />
+                            <Icon size={16} className={isSelected ? 'text-emerald-700 dark:text-emerald-400' : 'text-stone-400 dark:text-zinc-500'} />
                             <span className="text-xs">{t.label}</span>
                           </button>
                         );
@@ -1148,7 +1161,7 @@ export default function CommunityPage() {
 
                   {/* Step 2: Choose Personal Resource */}
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 uppercase tracking-wide mb-1.5">
+                    <label className="block text-xs font-bold text-stone-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">
                       2. Chọn học liệu cá nhân của bạn
                     </label>
                     {personalResources && (
@@ -1166,7 +1179,7 @@ export default function CommunityPage() {
                                 category: item?.category || prev.category,
                               }));
                             }}
-                            className="w-full p-2.5 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                            className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                           >
                             {personalResources.documents.length === 0 ? (
                               <option value="">(Bạn chưa có tài liệu nào trong thư viện)</option>
@@ -1192,7 +1205,7 @@ export default function CommunityPage() {
                                 title: item?.name || prev.title,
                               }));
                             }}
-                            className="w-full p-2.5 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                            className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                           >
                             {personalResources.quizzes.length === 0 ? (
                               <option value="">(Bạn chưa có bộ đề thi trắc nghiệm nào)</option>
@@ -1218,7 +1231,7 @@ export default function CommunityPage() {
                                 title: item?.title || prev.title,
                               }));
                             }}
-                            className="w-full p-2.5 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                            className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                           >
                             {personalResources.mindmaps.length === 0 ? (
                               <option value="">(Bạn chưa tạo sơ đồ tư duy nào)</option>
@@ -1244,7 +1257,7 @@ export default function CommunityPage() {
                                 title: item?.name || prev.title,
                               }));
                             }}
-                            className="w-full p-2.5 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                            className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                           >
                             {personalResources.flashcardDecks.length === 0 ? (
                               <option value="">(Bạn chưa có bộ thẻ ghi nhớ nào)</option>
@@ -1263,7 +1276,7 @@ export default function CommunityPage() {
 
                   {/* Step 3: Metadata */}
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 uppercase tracking-wide mb-1.5">
+                    <label className="block text-xs font-bold text-stone-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">
                       3. Tiêu đề hiển thị trên Cộng đồng
                     </label>
                     <input
@@ -1272,19 +1285,19 @@ export default function CommunityPage() {
                       placeholder="Ví dụ: Ôn tập Kiến trúc Vi điều khiển & Hệ nhúng..."
                       value={publishForm.title}
                       onChange={(e) => setPublishForm({ ...publishForm, title: e.target.value })}
-                      className="w-full p-2.5 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                      className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                     />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 uppercase tracking-wide mb-1.5">
+                      <label className="block text-xs font-bold text-stone-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">
                         Danh mục
                       </label>
                       <select
                         value={publishForm.category}
                         onChange={(e) => setPublishForm({ ...publishForm, category: e.target.value })}
-                        className="w-full p-2.5 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                        className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                       >
                         {CATEGORIES.filter((c) => c !== 'Tất cả').map((c) => (
                           <option key={c} value={c}>
@@ -1295,7 +1308,7 @@ export default function CommunityPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 uppercase tracking-wide mb-1.5">
+                      <label className="block text-xs font-bold text-stone-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">
                         Tags (phân cách bằng dấu phẩy)
                       </label>
                       <input
@@ -1303,13 +1316,13 @@ export default function CommunityPage() {
                         placeholder="cntt, de-thi, final-exam..."
                         value={publishForm.tagsInput}
                         onChange={(e) => setPublishForm({ ...publishForm, tagsInput: e.target.value })}
-                        className="w-full p-2.5 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                        className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 placeholder:text-stone-400 dark:placeholder:text-zinc-500 text-sm focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 uppercase tracking-wide mb-1.5">
+                    <label className="block text-xs font-bold text-stone-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">
                       Mô tả ngắn gọn
                     </label>
                     <textarea
@@ -1317,22 +1330,22 @@ export default function CommunityPage() {
                       placeholder="Mô tả nội dung học liệu để các thành viên khác dễ dàng tìm kiếm và tham khảo..."
                       value={publishForm.description}
                       onChange={(e) => setPublishForm({ ...publishForm, description: e.target.value })}
-                      className="w-full p-2.5 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                      className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 placeholder:text-stone-400 dark:placeholder:text-zinc-500 text-sm focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                     />
                   </div>
 
-                  <div className="pt-2 flex items-center justify-end gap-2 border-t border-stone-100">
+                  <div className="pt-2 flex items-center justify-end gap-2 border-t border-stone-100 dark:border-zinc-800">
                     <button
                       type="button"
                       onClick={() => setIsPublishModalOpen(false)}
-                      className="px-4 py-2 rounded-xl text-xs font-medium text-stone-600 hover:bg-stone-100"
+                      className="px-4 py-2 rounded-xl text-xs font-medium text-stone-600 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
                     >
                       Hủy bỏ
                     </button>
                     <button
                       type="submit"
                       disabled={isPublishing || !publishForm.resourceId}
-                      className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#1a3a2a] text-white hover:bg-[#12281d] disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                      className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#1a3a2a] dark:bg-emerald-700 text-white hover:bg-[#12281d] dark:hover:bg-emerald-600 disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
                     >
                       {isPublishing ? 'Đang xuất bản...' : 'Xác nhận đăng lên Cộng đồng'}
                     </button>
@@ -1352,32 +1365,32 @@ export default function CommunityPage() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200"
+              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800"
             >
-              <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-zinc-800">
                 <div className="flex items-center gap-2">
-                  <Share2 size={18} className="text-emerald-700" />
-                  <h3 className="text-base font-bold text-stone-900">Chia sẻ lại tài nguyên (Reshare)</h3>
+                  <Share2 size={18} className="text-emerald-700 dark:text-emerald-400" />
+                  <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100">Chia sẻ lại tài nguyên (Reshare)</h3>
                 </div>
                 <button
                   onClick={() => setReshareTarget(null)}
-                  className="p-1 rounded-full text-stone-400 hover:bg-stone-100"
+                  className="p-1 rounded-full text-stone-400 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
                 >
                   <X size={18} />
                 </button>
               </div>
 
               {/* Attribution Preview */}
-              <div className="my-4 p-3 bg-stone-50 border border-stone-200/80 rounded-xl">
-                <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wide block mb-1">
+              <div className="my-4 p-3 bg-stone-50 dark:bg-zinc-800/80 border border-stone-200/80 dark:border-zinc-700 rounded-xl">
+                <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide block mb-1">
                   Đính kèm bản gốc:
                 </span>
-                <p className="text-sm font-bold text-stone-900">{reshareTarget.title}</p>
-                <p className="text-xs text-stone-500 mt-0.5">Tác giả: {reshareTarget.author_name}</p>
+                <p className="text-sm font-bold text-stone-900 dark:text-zinc-100">{reshareTarget.title}</p>
+                <p className="text-xs text-stone-500 dark:text-zinc-400 mt-0.5">Tác giả: {reshareTarget.author_name}</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wide mb-1.5">
+                <label className="block text-xs font-bold text-stone-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">
                   Thêm suy nghĩ / ghi chú của bạn (tùy chọn)
                 </label>
                 <textarea
@@ -1385,22 +1398,22 @@ export default function CommunityPage() {
                   placeholder="Chia sẻ lý do bạn thấy tài liệu này hữu ích..."
                   value={reshareNote}
                   onChange={(e) => setReshareNote(e.target.value)}
-                  className="w-full p-3 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                  className="w-full p-3 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 placeholder:text-stone-400 dark:placeholder:text-zinc-500 text-sm focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                 />
               </div>
 
-              <div className="mt-4 pt-3 flex items-center justify-end gap-2 border-t border-stone-100">
+              <div className="mt-4 pt-3 flex items-center justify-end gap-2 border-t border-stone-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setReshareTarget(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-stone-600 hover:bg-stone-100"
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-stone-600 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
                 >
                   Hủy
                 </button>
                 <button
                   onClick={handleConfirmReshare}
                   disabled={isResharing}
-                  className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#1a3a2a] text-white hover:bg-[#12281d] disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                  className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#1a3a2a] dark:bg-emerald-700 text-white hover:bg-[#12281d] dark:hover:bg-emerald-600 disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
                 >
                   {isResharing ? 'Đang chia sẻ...' : 'Đăng lên trang cá nhân'}
                 </button>
@@ -1419,22 +1432,22 @@ export default function CommunityPage() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between"
+              className="bg-white dark:bg-zinc-900 w-full max-w-md h-full shadow-2xl flex flex-col justify-between border-l border-stone-200 dark:border-zinc-800"
             >
               {/* Drawer Header */}
-              <div className="p-4 border-b border-stone-200 flex items-center justify-between">
+              <div className="p-4 border-b border-stone-200 dark:border-zinc-800 flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
-                    <MessageSquare size={17} className="text-emerald-700" />
-                    <span>Bình luận & Thảo luận</span>
+                  <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100 flex items-center gap-2">
+                    <MessageSquare size={17} className="text-emerald-700 dark:text-emerald-400" />
+                    <span>Bình luận &amp; Thảo luận</span>
                   </h3>
-                  <p className="text-xs text-stone-500 truncate max-w-[280px]">
+                  <p className="text-xs text-stone-500 dark:text-zinc-400 truncate max-w-[280px]">
                     {commentsTarget.title}
                   </p>
                 </div>
                 <button
                   onClick={() => setCommentsTarget(null)}
-                  className="p-1.5 rounded-full text-stone-400 hover:bg-stone-100"
+                  className="p-1.5 rounded-full text-stone-400 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
                 >
                   <X size={18} />
                 </button>
@@ -1443,12 +1456,12 @@ export default function CommunityPage() {
               {/* Comments List */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {loadingComments ? (
-                  <div className="py-12 text-center text-xs text-stone-400">
-                    <div className="w-6 h-6 border-2 border-[#1a3a2a] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <div className="py-12 text-center text-xs text-stone-400 dark:text-zinc-500">
+                    <div className="w-6 h-6 border-2 border-[#1a3a2a] dark:border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     Đang tải bình luận...
                   </div>
                 ) : commentsList.length === 0 ? (
-                  <div className="py-16 text-center text-stone-400 text-xs">
+                  <div className="py-16 text-center text-stone-400 dark:text-zinc-500 text-xs">
                     Chưa có bình luận nào. Hãy là người đầu tiên đặt câu hỏi hoặc nhận xét!
                   </div>
                 ) : (
@@ -1457,7 +1470,7 @@ export default function CommunityPage() {
                     return (
                       <div key={c.id} className="space-y-2">
                         {/* Parent Comment */}
-                        <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/80 text-xs">
+                        <div className="p-3 bg-stone-50 dark:bg-zinc-800/80 rounded-2xl border border-stone-200/80 dark:border-zinc-700 text-xs">
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-2">
                               {c.user_avatar ? (
@@ -1467,13 +1480,13 @@ export default function CommunityPage() {
                                   className="w-5 h-5 rounded-full object-cover"
                                 />
                               ) : (
-                                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[9px]">
+                                <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center font-bold text-[9px]">
                                   {c.user_name.charAt(0).toUpperCase()}
                                 </div>
                               )}
-                              <span className="font-bold text-stone-800">{c.user_name}</span>
+                              <span className="font-bold text-stone-800 dark:text-zinc-200">{c.user_name}</span>
                             </div>
-                            <span className="text-[10px] text-stone-400">
+                            <span className="text-[10px] text-stone-400 dark:text-zinc-500">
                               {new Date(c.created_at).toLocaleTimeString('vi-VN', {
                                 hour: '2-digit',
                                 minute: '2-digit',
@@ -1481,19 +1494,19 @@ export default function CommunityPage() {
                             </span>
                           </div>
 
-                          <p className="text-stone-700 mt-1 whitespace-pre-wrap">{c.content}</p>
+                          <p className="text-stone-700 dark:text-zinc-300 mt-1 whitespace-pre-wrap">{c.content}</p>
 
-                          <div className="flex items-center justify-end gap-3 mt-2 pt-1 border-t border-stone-100">
+                          <div className="flex items-center justify-end gap-3 mt-2 pt-1 border-t border-stone-100 dark:border-zinc-700/60">
                             <button
                               onClick={() => setReplyParent(c)}
-                              className="text-[11px] font-semibold text-emerald-800 hover:underline flex items-center gap-1"
+                              className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-400 hover:underline flex items-center gap-1"
                             >
                               <CornerDownRight size={12} /> Trả lời
                             </button>
                             {!isAuthor && (
                               <button
                                 onClick={() => router.push(`/messages?user=${c.user_id}`)}
-                                className="text-[11px] text-stone-400 hover:text-emerald-700 flex items-center gap-1 transition-colors cursor-pointer"
+                                className="text-[11px] text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 flex items-center gap-1 transition-colors cursor-pointer"
                                 title="Nhắn tin cho tác giả bình luận"
                               >
                                 <MessageSquare size={11} /> Nhắn tin
@@ -1501,7 +1514,7 @@ export default function CommunityPage() {
                             )}
                             <button
                               onClick={() => handleOpenReport('comment', c.id, c.content)}
-                              className="text-[11px] text-stone-400 hover:text-amber-600 flex items-center gap-1 transition-colors"
+                              className="text-[11px] text-stone-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-1 transition-colors"
                               title="Báo cáo bình luận"
                             >
                               <Flag size={11} /> Báo cáo
@@ -1509,7 +1522,7 @@ export default function CommunityPage() {
                             {!isAuthor && (
                               <button
                                 onClick={() => handleOpenBlock(c.user_id, c.user_name)}
-                                className="text-[11px] text-stone-400 hover:text-red-600 flex items-center gap-1 transition-colors"
+                                className="text-[11px] text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-1 transition-colors"
                                 title="Chặn người dùng này"
                               >
                                 <UserX size={11} /> Chặn
@@ -1528,28 +1541,28 @@ export default function CommunityPage() {
 
                         {/* Nested Replies */}
                         {c.replies && c.replies.length > 0 && (
-                          <div className="pl-6 space-y-2 border-l-2 border-emerald-100">
+                          <div className="pl-6 space-y-2 border-l-2 border-emerald-100 dark:border-emerald-800">
                             {c.replies.map((reply) => {
                               const isReplyAuthor = activeUser && activeUser.id === reply.user_id;
                               return (
                                 <div
                                   key={reply.id}
-                                  className="p-2.5 bg-stone-100/70 rounded-xl border border-stone-200/60 text-xs"
+                                  className="p-2.5 bg-stone-100/70 dark:bg-zinc-800/60 rounded-xl border border-stone-200/60 dark:border-zinc-700 text-xs"
                                 >
                                   <div className="flex items-center justify-between mb-1">
-                                    <span className="font-bold text-stone-800">{reply.user_name}</span>
-                                    <span className="text-[10px] text-stone-400">
+                                    <span className="font-bold text-stone-800 dark:text-zinc-200">{reply.user_name}</span>
+                                    <span className="text-[10px] text-stone-400 dark:text-zinc-500">
                                       {new Date(reply.created_at).toLocaleTimeString('vi-VN', {
                                         hour: '2-digit',
                                         minute: '2-digit',
                                       })}
                                     </span>
                                   </div>
-                                  <p className="text-stone-700 whitespace-pre-wrap">{reply.content}</p>
+                                  <p className="text-stone-700 dark:text-zinc-300 whitespace-pre-wrap">{reply.content}</p>
                                   <div className="flex items-center justify-end gap-2 mt-1">
                                     <button
                                       onClick={() => handleOpenReport('comment', reply.id, reply.content)}
-                                      className="text-[10px] text-stone-400 hover:text-amber-600 flex items-center gap-0.5 transition-colors"
+                                      className="text-[10px] text-stone-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-0.5 transition-colors"
                                       title="Báo cáo câu trả lời"
                                     >
                                       <Flag size={10} /> Báo cáo
@@ -1557,7 +1570,7 @@ export default function CommunityPage() {
                                     {!isReplyAuthor && (
                                       <button
                                         onClick={() => router.push(`/messages?user=${reply.user_id}`)}
-                                        className="text-[10px] text-stone-400 hover:text-emerald-700 flex items-center gap-0.5 transition-colors cursor-pointer"
+                                        className="text-[10px] text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 flex items-center gap-0.5 transition-colors cursor-pointer"
                                         title="Nhắn tin cho người trả lời"
                                       >
                                         <MessageSquare size={10} /> Nhắn tin
@@ -1566,7 +1579,7 @@ export default function CommunityPage() {
                                     {!isReplyAuthor && (
                                       <button
                                         onClick={() => handleOpenBlock(reply.user_id, reply.user_name)}
-                                        className="text-[10px] text-stone-400 hover:text-red-600 flex items-center gap-0.5 transition-colors"
+                                        className="text-[10px] text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-0.5 transition-colors"
                                         title="Chặn người này"
                                       >
                                         <UserX size={10} /> Chặn
@@ -1593,11 +1606,11 @@ export default function CommunityPage() {
               </div>
 
               {/* Comment Input Footer */}
-              <div className="p-3 border-t border-stone-200 bg-stone-50">
+              <div className="p-3 border-t border-stone-200 dark:border-zinc-800 bg-stone-50 dark:bg-zinc-900">
                 {replyParent && (
-                  <div className="flex items-center justify-between px-2 py-1 mb-2 bg-emerald-50 rounded-lg text-xs text-emerald-800">
+                  <div className="flex items-center justify-between px-2 py-1 mb-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg text-xs text-emerald-800 dark:text-emerald-300">
                     <span className="truncate">Đang trả lời <strong>@{replyParent.user_name}</strong></span>
-                    <button onClick={() => setReplyParent(null)} className="text-emerald-700 hover:text-emerald-900">
+                    <button onClick={() => setReplyParent(null)} className="text-emerald-700 dark:text-emerald-400 hover:text-emerald-900">
                       <X size={14} />
                     </button>
                   </div>
@@ -1615,12 +1628,12 @@ export default function CommunityPage() {
                     disabled={!isAuthenticated || isSubmittingComment}
                     value={commentInput}
                     onChange={(e) => setCommentInput(e.target.value)}
-                    className="flex-1 px-3 py-2 text-xs bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                    className="flex-1 px-3 py-2 text-xs bg-white dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 text-stone-900 dark:text-zinc-100 placeholder:text-stone-400 dark:placeholder:text-zinc-500 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                   />
                   <button
                     type="submit"
                     disabled={!isAuthenticated || !commentInput.trim() || isSubmittingComment}
-                    className="p-2 bg-[#1a3a2a] text-white rounded-xl hover:bg-[#12281d] disabled:opacity-40 transition-colors"
+                    className="p-2 bg-[#1a3a2a] dark:bg-emerald-700 text-white rounded-xl hover:bg-[#12281d] dark:hover:bg-emerald-600 disabled:opacity-40 transition-colors"
                   >
                     <Send size={15} />
                   </button>
@@ -1639,24 +1652,24 @@ export default function CommunityPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200"
+              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800"
             >
-              <div className="flex items-center justify-between pb-4 border-b border-stone-100">
-                <div className="flex items-center gap-2 text-amber-700">
+              <div className="flex items-center justify-between pb-4 border-b border-stone-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
                   <Flag size={20} />
-                  <h3 className="font-bold text-base text-stone-900">Báo cáo vi phạm</h3>
+                  <h3 className="font-bold text-base text-stone-900 dark:text-zinc-100">Báo cáo vi phạm</h3>
                 </div>
                 <button
                   onClick={() => setReportModalOpen(false)}
-                  className="p-1.5 rounded-full text-stone-400 hover:bg-stone-100"
+                  className="p-1.5 rounded-full text-stone-400 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
                 >
                   <X size={18} />
                 </button>
               </div>
 
               <form onSubmit={handleSubmitReport} className="mt-4 space-y-4">
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-100 text-xs text-stone-600">
-                  <span className="font-semibold text-stone-800">
+                <div className="p-3 bg-stone-50 dark:bg-zinc-800 rounded-xl border border-stone-100 dark:border-zinc-700 text-xs text-stone-600 dark:text-zinc-300">
+                  <span className="font-semibold text-stone-800 dark:text-zinc-200">
                     {reportTarget.targetType === 'resource'
                       ? 'Tài nguyên:'
                       : reportTarget.targetType === 'comment'
@@ -1667,13 +1680,13 @@ export default function CommunityPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-stone-700 dark:text-zinc-300 mb-1.5">
                     Lý do báo cáo <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={reportReason}
                     onChange={(e) => setReportReason(e.target.value as ReportReason)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 text-stone-900 dark:text-zinc-100 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                   >
                     <option value="SPAM">Tin rác / Quảng cáo trái phép (SPAM)</option>
                     <option value="INAPPROPRIATE">Nội dung phản cảm / Không phù hợp</option>
@@ -1685,7 +1698,7 @@ export default function CommunityPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-stone-700 dark:text-zinc-300 mb-1.5">
                     Mô tả chi tiết (tùy chọn)
                   </label>
                   <textarea
@@ -1694,15 +1707,15 @@ export default function CommunityPage() {
                     value={reportDetails}
                     onChange={(e) => setReportDetails(e.target.value)}
                     maxLength={1000}
-                    className="w-full px-3 py-2 text-xs bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] outline-none resize-none"
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 text-stone-900 dark:text-zinc-100 placeholder:text-stone-400 dark:placeholder:text-zinc-500 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none resize-none"
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100 dark:border-zinc-800">
                   <button
                     type="button"
                     onClick={() => setReportModalOpen(false)}
-                    className="px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-100 rounded-xl transition-colors"
+                    className="px-4 py-2 text-xs font-medium text-stone-600 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
                   >
                     Hủy bỏ
                   </button>
@@ -1728,32 +1741,32 @@ export default function CommunityPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200"
+              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800"
             >
-              <div className="flex items-center justify-between pb-4 border-b border-stone-100">
-                <div className="flex items-center gap-2 text-red-600">
+              <div className="flex items-center justify-between pb-4 border-b border-stone-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
                   <UserX size={20} />
-                  <h3 className="font-bold text-base text-stone-900">Chặn người dùng</h3>
+                  <h3 className="font-bold text-base text-stone-900 dark:text-zinc-100">Chặn người dùng</h3>
                 </div>
                 <button
                   onClick={() => setBlockModalOpen(false)}
-                  className="p-1.5 rounded-full text-stone-400 hover:bg-stone-100"
+                  className="p-1.5 rounded-full text-stone-400 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
                 >
                   <X size={18} />
                 </button>
               </div>
 
               <div className="mt-4 space-y-3">
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  Bạn có chắc muốn chặn <strong className="text-stone-900">{blockTargetUser.name}</strong>? Khi bị chặn:
+                <p className="text-xs text-stone-600 dark:text-zinc-300 leading-relaxed">
+                  Bạn có chắc muốn chặn <strong className="text-stone-900 dark:text-zinc-100">{blockTargetUser.name}</strong>? Khi bị chặn:
                 </p>
-                <ul className="text-xs text-stone-500 space-y-1 list-disc pl-5">
+                <ul className="text-xs text-stone-500 dark:text-zinc-400 space-y-1 list-disc pl-5">
                   <li>Tài nguyên và bình luận của người này sẽ không còn hiển thị trên bảng tin của bạn.</li>
                   <li>Người này cũng sẽ không thấy tài nguyên và không thể bình luận, thích hoặc lưu bài của bạn.</li>
                 </ul>
 
                 <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  <label className="block text-xs font-semibold text-stone-700 dark:text-zinc-300 mb-1">
                     Lý do chặn (nội bộ của bạn)
                   </label>
                   <input
@@ -1762,15 +1775,15 @@ export default function CommunityPage() {
                     value={blockReason}
                     onChange={(e) => setBlockReason(e.target.value)}
                     maxLength={500}
-                    className="w-full px-3 py-2 text-xs bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] outline-none"
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 text-stone-900 dark:text-zinc-100 placeholder:text-stone-400 dark:placeholder:text-zinc-500 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100 dark:border-zinc-800">
                   <button
                     type="button"
                     onClick={() => setBlockModalOpen(false)}
-                    className="px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-100 rounded-xl transition-colors"
+                    className="px-4 py-2 text-xs font-medium text-stone-600 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
                   >
                     Hủy
                   </button>
@@ -1796,16 +1809,16 @@ export default function CommunityPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[85vh]"
+              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800 flex flex-col max-h-[85vh]"
             >
-              <div className="flex items-center justify-between pb-4 border-b border-stone-100">
-                <div className="flex items-center gap-2 text-stone-800">
-                  <UserX size={20} className="text-stone-500" />
-                  <h3 className="font-bold text-base text-stone-900">Danh sách người dùng đã chặn</h3>
+              <div className="flex items-center justify-between pb-4 border-b border-stone-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2 text-stone-800 dark:text-zinc-200">
+                  <UserX size={20} className="text-stone-500 dark:text-zinc-400" />
+                  <h3 className="font-bold text-base text-stone-900 dark:text-zinc-100">Danh sách người dùng đã chặn</h3>
                 </div>
                 <button
                   onClick={() => setBlockedUsersModalOpen(false)}
-                  className="p-1.5 rounded-full text-stone-400 hover:bg-stone-100"
+                  className="p-1.5 rounded-full text-stone-400 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
                 >
                   <X size={18} />
                 </button>
@@ -1813,31 +1826,31 @@ export default function CommunityPage() {
 
               <div className="flex-1 overflow-y-auto py-4 space-y-3">
                 {loadingBlockedUsers ? (
-                  <div className="py-12 text-center text-xs text-stone-400">
-                    <div className="w-6 h-6 border-2 border-[#1a3a2a] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <div className="py-12 text-center text-xs text-stone-400 dark:text-zinc-500">
+                    <div className="w-6 h-6 border-2 border-[#1a3a2a] dark:border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     Đang tải danh sách chặn...
                   </div>
                 ) : blockedUsers.length === 0 ? (
-                  <div className="py-12 text-center text-xs text-stone-400">
+                  <div className="py-12 text-center text-xs text-stone-400 dark:text-zinc-500">
                     Bạn hiện chưa chặn người dùng nào.
                   </div>
                 ) : (
                   blockedUsers.map((b) => (
                     <div
                       key={b.block_id}
-                      className="p-3 bg-stone-50 rounded-2xl border border-stone-200/80 flex items-center justify-between gap-3 text-xs"
+                      className="p-3 bg-stone-50 dark:bg-zinc-800 rounded-2xl border border-stone-200/80 dark:border-zinc-700 flex items-center justify-between gap-3 text-xs"
                     >
                       <div className="flex items-center gap-2.5 truncate">
                         {b.avatar_url ? (
                           <img src={b.avatar_url} alt={b.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
                         ) : (
-                          <div className="w-8 h-8 rounded-full bg-stone-200 text-stone-700 flex items-center justify-center font-bold text-xs shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-stone-200 dark:bg-zinc-700 text-stone-700 dark:text-zinc-300 flex items-center justify-center font-bold text-xs shrink-0">
                             {b.name.charAt(0).toUpperCase()}
                           </div>
                         )}
                         <div className="truncate">
-                          <p className="font-bold text-stone-900 truncate">{b.name}</p>
-                          <p className="text-[11px] text-stone-400 truncate">
+                          <p className="font-bold text-stone-900 dark:text-zinc-100 truncate">{b.name}</p>
+                          <p className="text-[11px] text-stone-400 dark:text-zinc-500 truncate">
                             {b.reason ? `Lý do: ${b.reason}` : `Đã chặn ngày ${new Date(b.created_at).toLocaleDateString('vi-VN')}`}
                           </p>
                         </div>
@@ -1846,7 +1859,7 @@ export default function CommunityPage() {
                       <button
                         onClick={() => handleUnblockUser(b.blocked_id, b.name)}
                         disabled={isUnblockingId === b.blocked_id}
-                        className="px-3 py-1.5 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-100 font-semibold text-xs whitespace-nowrap transition-colors disabled:opacity-50"
+                        className="px-3 py-1.5 rounded-xl border border-stone-300 dark:border-zinc-600 text-stone-700 dark:text-zinc-300 hover:bg-stone-100 dark:hover:bg-zinc-700 font-semibold text-xs whitespace-nowrap transition-colors disabled:opacity-50"
                       >
                         {isUnblockingId === b.blocked_id ? 'Đang mở...' : 'Bỏ chặn'}
                       </button>
@@ -1855,10 +1868,10 @@ export default function CommunityPage() {
                 )}
               </div>
 
-              <div className="pt-3 border-t border-stone-100 text-right">
+              <div className="pt-3 border-t border-stone-100 dark:border-zinc-800 text-right">
                 <button
                   onClick={() => setBlockedUsersModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold bg-stone-100 text-stone-700 hover:bg-stone-200 rounded-xl transition-colors"
+                  className="px-4 py-2 text-xs font-semibold bg-stone-100 dark:bg-zinc-800 text-stone-700 dark:text-zinc-300 hover:bg-stone-200 dark:hover:bg-zinc-700 rounded-xl transition-colors"
                 >
                   Đóng
                 </button>

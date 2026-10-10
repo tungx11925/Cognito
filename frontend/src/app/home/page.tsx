@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStudy } from '@/context/StudyContext';
 import { Navbar } from '@/components/landing/Navbar';
@@ -10,7 +10,6 @@ import { StatsSection } from '@/components/landing/StatsSection';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
 import { ProgressStatsSection } from '@/components/landing/ProgressStatsSection';
 import { CtaSection } from '@/components/landing/CtaSection';
-import { Footer } from '@/components/landing/Footer';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, User, Eye, EyeOff, Phone, CheckCircle2, XCircle, Circle } from 'lucide-react';
 import RegisterModal from '@/components/auth/RegisterModal';
@@ -25,7 +24,12 @@ function LandingPageContent() {
     triggerMessage,
   } = useStudy();
 
+  const [isMounted, setIsMounted] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated && activeUser) {
@@ -41,14 +45,14 @@ function LandingPageContent() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f3ee", color: "#0d1a14", overflowX: "hidden" }}>
+    <div className="min-h-screen bg-[#f5f3ee] dark:bg-[#0B0F17] text-[#0d1a14] dark:text-zinc-100 overflow-x-hidden transition-colors duration-200" suppressHydrationWarning>
       
       {/* 🔔 Toast notifications */}
-      {globalMessage.text && (
+      {isMounted && globalMessage.text && (
         <div className={`fixed top-6 right-6 z-[99999] px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 border transition-all duration-300 ${
           globalMessage.type === 'success' 
-            ? 'bg-white text-emerald-700 border-emerald-200' 
-            : 'bg-white text-rose-700 border-rose-200'
+            ? 'bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' 
+            : 'bg-white dark:bg-zinc-900 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
         }`}>
           <div className={`w-2.5 h-2.5 rounded-full animate-ping ${globalMessage.type === 'success' ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
           <span className="font-semibold text-sm">{globalMessage.text}</span>
@@ -86,8 +90,6 @@ function LandingPageContent() {
         }}
         onExploreClick={handleDemoScroll}
       />
-
-      <Footer />
 
       <AnimatePresence>
         {showLoginModal && (

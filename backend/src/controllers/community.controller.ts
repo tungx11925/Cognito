@@ -16,7 +16,7 @@ export const getCommunityFeed = async (req: AuthRequest, res: Response) => {
     return res.status(200).json(result);
   } catch (error: any) {
     if (error.name === 'ZodError') {
-      return res.status(400).json({ error: error.errors[0]?.message || 'Dữ liệu truy vấn không hợp lệ' });
+      return res.status(400).json({ error: error.errors?.[0]?.message || error.issues?.[0]?.message || 'Dữ liệu truy vấn không hợp lệ' });
     }
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi tải bảng tin cộng đồng' });
   }
@@ -47,7 +47,7 @@ export const publishResource = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.name === 'ZodError') {
-      return res.status(400).json({ error: error.errors[0]?.message || 'Dữ liệu đăng bài không hợp lệ' });
+      return res.status(400).json({ error: error.errors?.[0]?.message || error.issues?.[0]?.message || 'Dữ liệu đăng bài không hợp lệ' });
     }
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi đăng tài nguyên' });
   }
@@ -110,7 +110,7 @@ export const reshareResource = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.name === 'ZodError') {
-      return res.status(400).json({ error: error.errors[0]?.message || 'Dữ liệu không hợp lệ' });
+      return res.status(400).json({ error: error.errors?.[0]?.message || error.issues?.[0]?.message || 'Dữ liệu không hợp lệ' });
     }
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi chia sẻ lại tài nguyên' });
   }
@@ -131,7 +131,7 @@ export const addComment = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.name === 'ZodError') {
-      return res.status(400).json({ error: error.errors[0]?.message || 'Nội dung bình luận không hợp lệ' });
+      return res.status(400).json({ error: error.errors?.[0]?.message || error.issues?.[0]?.message || 'Nội dung bình luận không hợp lệ' });
     }
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi thêm bình luận' });
   }
@@ -144,8 +144,10 @@ export const listComments = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'ID tài nguyên không hợp lệ' });
     }
     const userId = req.user?.id || null;
-    const comments = await communityService.listComments(resourceId, userId);
-    return res.status(200).json({ comments });
+    const limit = req.query.limit ? Math.max(1, Math.min(200, Number(req.query.limit))) : 50;
+    const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
+    const comments = await communityService.listComments(resourceId, userId, limit, page);
+    return res.status(200).json({ comments, page, limit });
   } catch (error: any) {
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi tải danh sách bình luận' });
   }

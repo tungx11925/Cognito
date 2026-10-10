@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate';
+import { rateLimiter } from '../middlewares/rateLimiter.middleware';
 import { createMindmapSchema, updateMindmapSchema, getMindmapsQuerySchema } from '../schemas/mindmap.schema';
 import * as MindmapController from '../controllers/mindmap.controller';
 
@@ -12,7 +13,7 @@ router.use(authenticate);
 router.get('/', validate(getMindmapsQuerySchema), MindmapController.getUserMindmaps);
 
 // Create mindmap (standalone or attached to document)
-router.post('/', validate(createMindmapSchema), MindmapController.createMindmap);
+router.post('/', rateLimiter(60 * 1000, 30), validate(createMindmapSchema), MindmapController.createMindmap);
 
 // Get mindmaps by document
 router.get('/document/:docId', MindmapController.getMindmapsByDocument);

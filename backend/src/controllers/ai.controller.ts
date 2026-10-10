@@ -3,9 +3,12 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 import { aiService } from '../services/ai.service';
 import { db } from '../db';
 import { generateMindmapWithAI } from '../utils/ai-engine.service';
-import { sanitizeUserInstruction } from '../schemas/question-generation.schema';
+import { sanitizeUserInstruction } from '../utils/ai-security';
+import { entitlementService } from '../services/entitlement.service';
+import { aiProviderService } from '../services/ai-provider.service';
 
 export const chatWithDocument = async (req: AuthRequest, res: Response, next: any) => {
+  let reservation: any = null;
   try {
     const { document_id, context_mode, message, history, image, images } = req.body;
     const userId = req.user!.id;
@@ -15,9 +18,25 @@ export const chatWithDocument = async (req: AuthRequest, res: Response, next: an
        return res.status(400).json({ error: 'Endpoint deprecated for direct context. Use document_id instead.' });
     }
 
-    // 1. Prompt Injection Protection
+    // 1. Prompt Injection Protection (Dual-Tier Filter: English & Vietnamese)
     if (message) {
       sanitizeUserInstruction(message, 4000);
+    }
+
+    // 2. Pre-check Global System Daily Budget Cap (Phase 27 - Cost Control)
+    // Chặn trước để không trừ oan hạn ngạch cá nhân của user khi hệ thống hết ngân sách
+    await aiProviderService.checkGlobalDailyBudget();
+
+    // 3. Entitlement / Daily Quota Check with Atomic Reservation (Phase 20)
+    reservation = await entitlementService.checkAndReserveDailyUsage(userId, 'ai_chat_daily');
+    if (!reservation.allowed) {
+      return res.status(403).json({
+        error: 'LIMIT_EXCEEDED',
+        message: `Bạn đã đạt giới hạn ${reservation.limit} tin nhắn chat AI trong ngày của gói Miễn phí. Vui lòng nâng cấp lên gói Pro để tiếp tục trò chuyện không giới hạn.`,
+        feature: 'ai_chat_daily',
+        limit: reservation.limit,
+        current: reservation.current,
+      });
     }
 
     let document = null;
@@ -30,6 +49,9 @@ export const chatWithDocument = async (req: AuthRequest, res: Response, next: an
         [document_id, userId]
       );
       if (docResult.rows.length === 0) {
+        if (reservation?.reserved) {
+          await entitlementService.refundDailyUsage(userId, 'ai_chat_daily');
+        }
         return res.status(403).json({ error: 'Không có quyền truy cập tài liệu này hoặc tài liệu không tồn tại' });
       }
       document = docResult.rows[0];
@@ -37,9 +59,19 @@ export const chatWithDocument = async (req: AuthRequest, res: Response, next: an
       effectiveMode = 'GENERAL';
     }
 
-    const reply = await aiService.chatWithDocument(document, message || '', history, images || image, userId, effectiveMode);
-    res.status(200).json({ reply, context_mode: effectiveMode });
+    const chatResult = await aiService.chatWithDocument(document, message || '', history, images || image, userId, effectiveMode);
+    res.setHeader('X-AI-Provider', chatResult.metadata.provider);
+    res.setHeader('X-AI-Model', chatResult.metadata.model);
+    res.setHeader('X-AI-Is-LLM', String(chatResult.metadata.isLLMGenerated));
+    res.status(200).json({
+      reply: chatResult.reply,
+      context_mode: effectiveMode,
+      metadata: chatResult.metadata,
+    });
   } catch (error) {
+    if (reservation?.reserved) {
+      await entitlementService.refundDailyUsage(req.user!.id, 'ai_chat_daily');
+    }
     next(error);
   }
 };

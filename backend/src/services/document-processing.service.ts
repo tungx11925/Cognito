@@ -102,10 +102,19 @@ class DocumentProcessingService {
    */
   async fetchFileBuffer(docUrl: string): Promise<Buffer> {
     if (!docUrl) throw new Error('Không có đường dẫn tài liệu');
+    if (docUrl.startsWith('data:')) {
+      const commaIdx = docUrl.indexOf(',');
+      const meta = docUrl.substring(0, commaIdx);
+      const data = docUrl.substring(commaIdx + 1);
+      if (meta.includes('base64')) {
+        return Buffer.from(data, 'base64');
+      }
+      return Buffer.from(decodeURIComponent(data), 'utf-8');
+    }
     if (docUrl.startsWith('http://') || docUrl.startsWith('https://')) {
       const response = await axios.get(docUrl, {
         responseType: 'arraybuffer',
-        timeout: 60000,
+        timeout: 10000,
       });
       return Buffer.from(response.data);
     }
@@ -422,6 +431,31 @@ class DocumentProcessingService {
   async processDocument(documentId: number): Promise<void> {
     this.queue.push(documentId);
     setImmediate(() => this.processNext());
+  }
+
+  /**
+   * GAP-08: Tự động phục hồi hàng đợi khi server khởi động lại
+   * Quét cơ sở dữ liệu để tìm các tài liệu đang ở trạng thái 'PENDING' hoặc 'PROCESSING' bị ngắt quãng.
+   */
+  async recoverPendingJobs(): Promise<number> {
+    try {
+      const res = await db.query(
+        `SELECT id FROM documents 
+         WHERE status IN ('PENDING', 'PROCESSING')
+         ORDER BY updated_at ASC`
+      );
+      if (res.rows.length === 0) return 0;
+      console.log(`[DocProcessing] 🔄 GAP-08: Phát hiện ${res.rows.length} tài liệu PENDING/PROCESSING cần phục hồi vào hàng đợi.`);
+      for (const row of res.rows) {
+        if (!this.queue.includes(row.id)) {
+          this.processDocument(row.id);
+        }
+      }
+      return res.rows.length;
+    } catch (err: any) {
+      console.warn('[DocProcessing] Quét phục hồi hàng đợi thất bại:', err?.message);
+      return 0;
+    }
   }
 
   private async processNext(): Promise<void> {

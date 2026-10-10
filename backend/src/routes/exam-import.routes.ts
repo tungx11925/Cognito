@@ -13,14 +13,21 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+import { generateSafeFileName } from '../utils/file-security';
+
+const allowedExts = ['.docx', '.doc', '.pdf', '.xlsx', '.xls', '.csv', '.txt', '.md'];
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadDir);
   },
   filename: (_req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = path.extname(file.originalname);
-    cb(null, `exam-${uniqueSuffix}${ext}`);
+    try {
+      const safeName = generateSafeFileName('exam', file.originalname, allowedExts);
+      cb(null, safeName);
+    } catch (err: any) {
+      cb(err, '');
+    }
   },
 });
 

@@ -1,13 +1,4 @@
-const DEFAULT_API_BASE_URL = 'http://localhost:5000/api';
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
-
-const getAuthHeaders = (): HeadersInit => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-};
+import { apiFetch } from './api';
 
 export interface StreakData {
   currentStreak: number;
@@ -66,25 +57,19 @@ export interface ProgressSummary {
 
 export const progressService = {
   async getSummary(): Promise<ProgressSummary> {
-    const res = await fetch(`${API_BASE_URL}/progress/summary`, {
-      headers: getAuthHeaders(),
-      cache: 'no-store',
-    });
-    if (!res.ok) {
-      throw new Error('Không thể tải dữ liệu tiến độ học tập');
+    const data = await apiFetch('/progress/summary');
+    if (data?.error) {
+      throw new Error(data.error || 'Không thể tải dữ liệu tiến độ học tập');
     }
-    return res.json();
+    return data;
   },
 
   async getStreak(): Promise<StreakData> {
-    const res = await fetch(`${API_BASE_URL}/progress/streak`, {
-      headers: getAuthHeaders(),
-      cache: 'no-store',
-    });
-    if (!res.ok) {
-      throw new Error('Không thể tải chuỗi ngày học');
+    const data = await apiFetch('/progress/streak');
+    if (data?.error) {
+      throw new Error(data.error || 'Không thể tải chuỗi ngày học');
     }
-    return res.json();
+    return data;
   },
 
   async listActivities(params: { limit?: number; offset?: number; activityType?: string; subject?: string } = {}) {
@@ -94,14 +79,12 @@ export const progressService = {
     if (params.activityType) query.append('activity_type', params.activityType);
     if (params.subject) query.append('subject', params.subject);
 
-    const res = await fetch(`${API_BASE_URL}/learning-activities?${query.toString()}`, {
-      headers: getAuthHeaders(),
-      cache: 'no-store',
-    });
-    if (!res.ok) {
-      throw new Error('Không thể tải nhật ký hoạt động');
+    const queryString = query.toString() ? `?${query.toString()}` : '';
+    const data = await apiFetch(`/learning-activities${queryString}`);
+    if (data?.error) {
+      throw new Error(data.error || 'Không thể tải nhật ký hoạt động');
     }
-    return res.json();
+    return data;
   },
 
   async logActivity(data: {
@@ -113,27 +96,23 @@ export const progressService = {
     details?: Record<string, any>;
     idempotency_key?: string;
   }) {
-    const res = await fetch(`${API_BASE_URL}/learning-activities`, {
+    const res = await apiFetch('/learning-activities', {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Không thể ghi nhận hoạt động học');
+    if (res?.error) {
+      throw new Error(res.error || 'Không thể ghi nhận hoạt động học');
     }
-    return res.json();
+    return res;
   },
 
   async listGoals(): Promise<LearningGoal[]> {
-    const res = await fetch(`${API_BASE_URL}/learning-goals`, {
-      headers: getAuthHeaders(),
-      cache: 'no-store',
-    });
-    if (!res.ok) {
-      throw new Error('Không thể tải mục tiêu học tập');
+    const data = await apiFetch('/learning-goals');
+    if (data?.error) {
+      throw new Error(data.error || 'Không thể tải mục tiêu học tập');
     }
-    return res.json();
+    return data;
   },
 
   async createGoal(data: {
@@ -143,40 +122,36 @@ export const progressService = {
     target_value: number;
     period?: 'daily' | 'weekly';
   }): Promise<LearningGoal> {
-    const res = await fetch(`${API_BASE_URL}/learning-goals`, {
+    const res = await apiFetch('/learning-goals', {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Không thể tạo mục tiêu');
+    if (res?.error) {
+      throw new Error(res.error || 'Không thể tạo mục tiêu');
     }
-    return res.json();
+    return res;
   },
 
   async updateGoal(id: number, data: Partial<LearningGoal>): Promise<LearningGoal> {
-    const res = await fetch(`${API_BASE_URL}/learning-goals/${id}`, {
+    const res = await apiFetch(`/learning-goals/${id}`, {
       method: 'PUT',
-      headers: getAuthHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Không thể cập nhật mục tiêu');
+    if (res?.error) {
+      throw new Error(res.error || 'Không thể cập nhật mục tiêu');
     }
-    return res.json();
+    return res;
   },
 
   async deleteGoal(id: number): Promise<{ success: boolean; id: number }> {
-    const res = await fetch(`${API_BASE_URL}/learning-goals/${id}`, {
+    const res = await apiFetch(`/learning-goals/${id}`, {
       method: 'DELETE',
-      headers: getAuthHeaders(),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Không thể xóa mục tiêu');
+    if (res?.error) {
+      throw new Error(res.error || 'Không thể xóa mục tiêu');
     }
-    return res.json();
+    return res;
   },
 };

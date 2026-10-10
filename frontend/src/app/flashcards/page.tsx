@@ -25,8 +25,8 @@ import {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useStudy } from "@/context/StudyContext";
+import dynamic from "next/dynamic";
 import { Navbar } from "@/components/landing/Navbar";
-import RegisterModal from "@/components/auth/RegisterModal";
 import {
   getDecks,
   createDeck,
@@ -34,7 +34,42 @@ import {
   createFlashcard
 } from "@/services/flashcard.service";
 import { Background, BackgroundStyle } from "@/components/flashcards/Background";
-import ShareModal from "@/components/documents/ShareModal";
+
+const RegisterModal = dynamic(
+  () => import("@/components/auth/RegisterModal"),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
+
+const ShareModal = dynamic(
+  () => import("@/components/documents/ShareModal"),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
+
+const AIFlashcardModal = dynamic(
+  () => import("@/components/flashcards/AIFlashcardModal"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -245,6 +280,7 @@ export default function FlashcardsPage() {
   const [dark, setDark] = useState(false);
   
   // Modals
+  const [showAILab, setShowAILab] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [shareDeck, setShareDeck] = useState<Deck | null>(null);
 
@@ -267,21 +303,23 @@ export default function FlashcardsPage() {
   useEffect(() => {
     const savedTheme = localStorage.getItem("app-theme") || "light";
     setDark(savedTheme === "dark");
-    if (typeof window !== "undefined") {
-      if (savedTheme === "dark") {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
+
+    const onThemeChange = (e: any) => {
+      if (e.detail?.theme) {
+        setDark(e.detail.theme === "dark");
       }
-    }
+    };
+    window.addEventListener("cognito:theme_change", onThemeChange);
     
     const savedMute = localStorage.getItem("flashcard-muted") === "true";
     setMuted(savedMute);
     
     const savedBg = (localStorage.getItem("flashcard-bg") as BackgroundStyle) || "nebula";
     setBgStyle(savedBg);
-    
-    fetchDecks();
+
+    return () => {
+      window.removeEventListener("cognito:theme_change", onThemeChange);
+    };
   }, []);
 
   // Refetch decks when authentication state changes
@@ -291,10 +329,16 @@ export default function FlashcardsPage() {
     } else {
       setDecks([]);
       setDeckCounts({});
+      setLoadingDecks(false);
     }
   }, [isAuthenticated]);
 
   const fetchDecks = async () => {
+    if (!isAuthenticated) {
+      setDecks([]);
+      setLoadingDecks(false);
+      return;
+    }
     try {
       setLoadingDecks(true);
       const data = await getDecks();
@@ -354,6 +398,7 @@ export default function FlashcardsPage() {
     const nextDark = !dark;
     setDark(nextDark);
     localStorage.setItem("app-theme", nextDark ? "dark" : "light");
+    window.dispatchEvent(new CustomEvent("cognito:theme_change", { detail: { theme: nextDark ? "dark" : "light" } }));
     if (typeof window !== "undefined") {
       if (nextDark) {
         document.documentElement.classList.add("dark");
@@ -534,15 +579,34 @@ export default function FlashcardsPage() {
                 Ôn luyện thông minh với thuật toán lặp lại ngắt quãng (Spaced Repetition)
               </p>
             </div>
-            {isAuthenticated && (
+            {isAuthenticated ? (
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setShowCreateModal(true)}
+                  onClick={() => setShowAILab(true)}
+                  className="px-4 py-2 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 active:scale-[0.98]"
+                >
+                  <Sparkles size={14} className="text-emerald-500" />
+                  Tạo bằng AI
+                </button>
+                <button
+                  onClick={() => router.push('/flashcards/new')}
                   className="px-4 py-2 bg-[#1a2e1c] hover:opacity-90 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
                   style={{ background: primaryColor }}
                 >
                   <Plus size={14} />
                   Tạo bộ thẻ
+                </button>
+              </div>
+
+            ) : (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="px-4 py-2 bg-[#1a2e1c] hover:opacity-90 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+                  style={{ background: primaryColor }}
+                >
+                  <Plus size={14} />
+                  Đăng nhập để tạo thẻ
                 </button>
               </div>
             )}
@@ -787,6 +851,42 @@ export default function FlashcardsPage() {
             isOpen={showLoginModal}
             onClose={() => setShowLoginModal(false)}
             triggerMessage={triggerMessage}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* AI Flashcard Lab Modal */}
+      <AnimatePresence>
+        {showAILab && (
+          <AIFlashcardModal
+            onClose={() => setShowAILab(false)}
+            onSaveDeck={async (cards, deckName) => {
+              try {
+                const resDeck = await createDeck(
+                  deckName || "Bộ thẻ từ tài liệu",
+                  "Bộ thẻ được tạo tự động bằng AI từ tài liệu của bạn"
+                );
+
+                if (!resDeck || resDeck.error || !resDeck.id) {
+                  throw new Error(resDeck?.error || "Không thể khởi tạo bộ thẻ.");
+                }
+
+                const insertPromises = cards.map((card) =>
+                  createFlashcard(resDeck.id, card.front, card.back)
+                );
+                await Promise.all(insertPromises);
+
+                triggerMessage(
+                  `Đã lưu ${cards.length} thẻ vào bộ "${resDeck.name || deckName}" thành công!`,
+                  "success"
+                );
+                setShowAILab(false);
+                fetchDecks();
+              } catch (err: any) {
+                console.error("Lỗi khi lưu thẻ:", err);
+                triggerMessage(err.message || "Lỗi khi lưu bộ thẻ vào cơ sở dữ liệu.", "error");
+              }
+            }}
           />
         )}
       </AnimatePresence>

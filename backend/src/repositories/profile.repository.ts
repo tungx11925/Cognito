@@ -111,21 +111,23 @@ class ProfileRepository {
     return result.rows[0];
   }
 
-  async getDocuments(userId: number) {
+  async getDocuments(userId: number, limit: number = 50) {
+    const safeLimit = Math.min(100, Math.max(1, limit));
     const documentsResult = await db.query(
-      'SELECT * FROM documents WHERE user_id = $1 ORDER BY created_at DESC',
-      [userId]
+      'SELECT * FROM documents WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2',
+      [userId, safeLimit]
     );
     return documentsResult.rows;
   }
 
-  async getPublicDocuments(userId: number) {
+  async getPublicDocuments(userId: number, limit: number = 50) {
+    const safeLimit = Math.min(100, Math.max(1, limit));
     const documentsResult = await db.query(
       `SELECT id, user_id, title, description, category, created_at, file_type, file_size, status
        FROM documents 
        WHERE user_id = $1 AND (visibility = 'public' OR share_status = 'public')
-       ORDER BY created_at DESC`,
-      [userId]
+       ORDER BY created_at DESC LIMIT $2`,
+      [userId, safeLimit]
     );
     return documentsResult.rows;
   }

@@ -1,17 +1,26 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import mermaid from 'mermaid';
 import { Copy, Check, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'forest',
-  securityLevel: 'strict',
-  fontFamily: 'var(--font-sans), sans-serif',
-  suppressErrorRendering: true,
-});
+let mermaidPromise: Promise<any> | null = null;
+function getMermaid() {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then((mod) => {
+      const mermaidInstance = mod.default;
+      mermaidInstance.initialize({
+        startOnLoad: false,
+        theme: 'forest',
+        securityLevel: 'strict',
+        fontFamily: 'var(--font-sans), sans-serif',
+        suppressErrorRendering: true,
+      });
+      return mermaidInstance;
+    });
+  }
+  return mermaidPromise;
+}
 
 function sanitizeMindmapCode(raw: string): string {
   if (!raw) return '';
@@ -68,6 +77,7 @@ export default function MermaidViewer({ chartCode }: MermaidViewerProps) {
           const cleanedCode = chartCode.trim().startsWith('mindmap')
             ? sanitizeMindmapCode(chartCode)
             : chartCode.trim();
+          const mermaid = await getMermaid();
           const { svg } = await mermaid.render(uniqueId, cleanedCode);
           if (isMounted && containerRef.current) {
             containerRef.current.innerHTML = svg;

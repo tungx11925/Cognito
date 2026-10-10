@@ -3,10 +3,33 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStudy } from '@/context/StudyContext';
+import dynamic from 'next/dynamic';
 import { Navbar } from '@/components/landing/Navbar';
-import RegisterModal from '@/components/auth/RegisterModal';
-import PremiumModal from '@/components/layout/PremiumModal';
 import { AnimatePresence } from 'framer-motion';
+
+const RegisterModal = dynamic(
+  () => import('@/components/auth/RegisterModal'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
+
+const PremiumModal = dynamic(
+  () => import('@/components/layout/PremiumModal'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const {

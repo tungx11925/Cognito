@@ -1,0 +1,332 @@
+{
+  "timestamp": "2026-10-10T04:23:15.462Z",
+  "totalRoutesCount": 19,
+  "roundsCompleted": 3,
+  "routesChecked": [
+    {
+      "round": 1,
+      "route": "/",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/home",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/search",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/library",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/ai-test",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/notes",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/mindmap",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/flashcards",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/focus",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/study-sessions",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/progress",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/leaderboard",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/community",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/messages",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/profile",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/settings",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/premium",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/reset-password",
+      "status": "OK"
+    },
+    {
+      "round": 1,
+      "route": "/viewer/10038",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/home",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/search",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/library",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/ai-test",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/notes",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/mindmap",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/flashcards",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/focus",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/study-sessions",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/progress",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/leaderboard",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/community",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/messages",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/profile",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/settings",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/premium",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/reset-password",
+      "status": "OK"
+    },
+    {
+      "round": 2,
+      "route": "/viewer/10038",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/home",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/search",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/library",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/ai-test",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/notes",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/mindmap",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/flashcards",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/focus",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/study-sessions",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/progress",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/leaderboard",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/community",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/messages",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/profile",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/settings",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/premium",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/reset-password",
+      "status": "OK"
+    },
+    {
+      "round": 3,
+      "route": "/viewer/10038",
+      "status": "OK"
+    }
+  ],
+  "authErrors401": [
+    {
+      "currentRoute": "http://localhost:3000/",
+      "url": "http://localhost:3000/api/auth/me",
+      "status": 401
+    },
+    {
+      "currentRoute": "http://localhost:3000/profile",
+      "url": "http://localhost:3000/api/auth/me",
+      "status": 401
+    },
+    {
+      "currentRoute": "http://localhost:3000/home",
+      "url": "http://localhost:3000/api/auth/me",
+      "status": 401
+    },
+    {
+      "currentRoute": "http://localhost:3000/library",
+      "url": "http://localhost:3000/api/auth/me",
+      "status": 401
+    }
+  ],
+  "accessErrors403": [],
+  "serverErrors5xx": [],
+  "sessionMaintained3Rounds": true,
+  "reloadTested": true,
+  "tab2Tested": true,
+  "errorCodeSimulationPassed": true,
+  "subEndpoint401NonLogoutPassed": true,
+  "subEndpoint429NonLogoutPassed": true,
+  "autoRefreshShortTTLPassed": true,
+  "sessionExpiredNoticeAndReturnUrlPassed": false,
+  "adminRouteUserBlocked403Passed": true,
+  "adminRouteAdminAccess200Passed": true,
+  "unauthenticatedPublicRoutesPassed": true,
+  "unauthenticatedProtectedRedirectPassed": true,
+  "unauthenticatedProfileRedirectPassed": true,
+  "unauthenticatedHomeRedirectPassed": true,
+  "returnUrlSafeValidationPassed": true,
+  "viewerDocumentRenderPassed": true
+}

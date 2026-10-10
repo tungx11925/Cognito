@@ -11,10 +11,7 @@ import {
 
 const router = Router();
 
-// 1. Real-time SSE stream for messages
-router.get('/stream', (req, res) => messageController.streamMessages(req, res));
-
-// 2. Global unread count badge
+// 1. Global unread count badge
 router.get('/unread-count', authenticate, (req, res, next) =>
   messageController.getUnreadCount(req, res, next)
 );

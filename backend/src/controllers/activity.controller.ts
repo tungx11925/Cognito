@@ -53,38 +53,11 @@ export const getProfile = async (req: AuthRequest, res: Response, next: any) => 
 // ==========================================
 // REAL-TIME NOTIFICATIONS (SSE)
 // ==========================================
+import { notificationController } from './notification.controller';
 
 // Real-time Server-Sent Events stream for tasks, streak & live notifications
 export const streamNotifications = async (req: Request, res: Response) => {
-  let token = req.headers.authorization?.split(' ')[1] || (req.query.token as string);
-  if (!token && req.headers.cookie) {
-    const match = req.headers.cookie.match(/token=([^;]+)/);
-    if (match) token = match[1];
-  }
-
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: missing token for SSE' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY || 'your_64_character_secret_key_here') as any;
-    const userId = decoded.id;
-
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no'
-    });
-
-    sseService.addClient(userId, res);
-
-    req.on('close', () => {
-      sseService.removeClient(res);
-    });
-  } catch (err: any) {
-    return res.status(401).json({ error: 'Invalid authentication token' });
-  }
+  return notificationController.streamNotifications(req, res);
 };
 
 // ==========================================

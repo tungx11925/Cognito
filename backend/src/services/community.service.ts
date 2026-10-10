@@ -1,7 +1,8 @@
-import { db } from '../db';
+import { db, withTransaction } from '../db';
 import { AppError } from '../utils/AppError';
 import { PublishResourceInput, CommunityFeedQuery } from '../schemas/community.schema';
 import { safetyService } from './safety.service';
+import { notificationService } from './notification.service';
 
 export class CommunityService {
   /**
@@ -62,54 +63,56 @@ export class CommunityService {
     await safetyService.checkPublishRateLimit(userId);
     const underlying = await this.verifyUnderlyingOwnership(userId, input.resourceType, input.resourceId);
 
-    // If publishing document, mark document as public & community_published
-    if (input.resourceType === 'document') {
-      await db.query(
-        `UPDATE documents SET is_community_published = true, visibility = 'public' WHERE id = $1`,
-        [input.resourceId]
-      );
-    } else if (input.resourceType === 'flashcard_deck') {
-      await db.query(
-        `UPDATE flashcard_decks SET visibility = 'public' WHERE id = $1`,
-        [input.resourceId]
-      );
-    }
-
     const title = input.title?.trim() || underlying.title || 'Tài nguyên học tập';
     const description = input.description !== undefined ? input.description : (underlying.description || '');
     const category = input.category || underlying.category || 'Chung';
     const tags = Array.isArray(input.tags) ? input.tags : [];
     const isPublic = input.isPublic !== undefined ? input.isPublic : true;
 
-    // Check if already published by this user
-    const existing = await db.query(
-      `SELECT id FROM community_resources 
-       WHERE user_id = $1 AND resource_type = $2 AND resource_id = $3 AND is_reshare = false`,
-      [userId, input.resourceType, input.resourceId]
-    );
+    return await withTransaction(async (client) => {
+      // If publishing document, mark document as public & community_published
+      if (input.resourceType === 'document') {
+        await client.query(
+          `UPDATE documents SET is_community_published = true, visibility = 'public' WHERE id = $1`,
+          [input.resourceId]
+        );
+      } else if (input.resourceType === 'flashcard_deck') {
+        await client.query(
+          `UPDATE flashcard_decks SET visibility = 'public' WHERE id = $1`,
+          [input.resourceId]
+        );
+      }
 
-    let published;
-    if (existing.rows.length > 0) {
-      const updateRes = await db.query(
-        `UPDATE community_resources 
-         SET title = $1, description = $2, category = $3, tags = $4, is_public = $5, updated_at = NOW()
-         WHERE id = $6
-         RETURNING *`,
-        [title, description, category, tags, isPublic, existing.rows[0].id]
+      // Check if already published by this user
+      const existing = await client.query(
+        `SELECT id FROM community_resources 
+         WHERE user_id = $1 AND resource_type = $2 AND resource_id = $3 AND is_reshare = false`,
+        [userId, input.resourceType, input.resourceId]
       );
-      published = updateRes.rows[0];
-    } else {
-      const insertRes = await db.query(
-        `INSERT INTO community_resources (
-          user_id, resource_type, resource_id, title, description, category, tags, is_public
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING *`,
-        [userId, input.resourceType, input.resourceId, title, description, category, tags, isPublic]
-      );
-      published = insertRes.rows[0];
-    }
 
-    return published;
+      let published;
+      if (existing.rows.length > 0) {
+        const updateRes = await client.query(
+          `UPDATE community_resources 
+           SET title = $1, description = $2, category = $3, tags = $4, is_public = $5, updated_at = NOW()
+           WHERE id = $6
+           RETURNING *`,
+          [title, description, category, tags, isPublic, existing.rows[0].id]
+        );
+        published = updateRes.rows[0];
+      } else {
+        const insertRes = await client.query(
+          `INSERT INTO community_resources (
+            user_id, resource_type, resource_id, title, description, category, tags, is_public
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          RETURNING *`,
+          [userId, input.resourceType, input.resourceId, title, description, category, tags, isPublic]
+        );
+        published = insertRes.rows[0];
+      }
+
+      return published;
+    });
   }
 
   /**
@@ -129,17 +132,19 @@ export class CommunityService {
       throw new AppError('Bạn không có quyền gỡ tài nguyên này', 403);
     }
 
-    await db.query('DELETE FROM community_resources WHERE id = $1', [resourceId]);
+    return await withTransaction(async (client) => {
+      await client.query('DELETE FROM community_resources WHERE id = $1', [resourceId]);
 
-    // If it was a primary document publication, update documents table
-    if (!resource.is_reshare && resource.resource_type === 'document') {
-      await db.query(
-        `UPDATE documents SET is_community_published = false WHERE id = $1`,
-        [resource.resource_id]
-      );
-    }
+      // If it was a primary document publication, update documents table
+      if (!resource.is_reshare && resource.resource_type === 'document') {
+        await client.query(
+          `UPDATE documents SET is_community_published = false WHERE id = $1`,
+          [resource.resource_id]
+        );
+      }
 
-    return { success: true, message: 'Đã gỡ tài nguyên khỏi cộng đồng' };
+      return { success: true, message: 'Đã gỡ tài nguyên khỏi cộng đồng' };
+    });
   }
 
   /**
@@ -389,6 +394,26 @@ export class CommunityService {
       await db.query('INSERT INTO community_likes (resource_id, user_id) VALUES ($1, $2)', [resourceId, userId]);
       await db.query('UPDATE community_resources SET like_count = like_count + 1 WHERE id = $1', [resourceId]);
       liked = true;
+
+      // Notify resource owner (if not self-like)
+      if (resource.user_id !== userId) {
+        try {
+          const actorRes = await db.query('SELECT name FROM users WHERE id = $1', [userId]);
+          const actorName = actorRes.rows[0]?.name || 'Một người dùng';
+          const titleRes = await db.query('SELECT title FROM community_resources WHERE id = $1', [resourceId]);
+          const resTitle = titleRes.rows[0]?.title || 'tài liệu';
+          await notificationService.createNotification({
+            userId: resource.user_id,
+            type: 'like',
+            title: 'Lượt thích mới',
+            content: `${actorName} đã thích tài liệu "${resTitle}" của bạn`,
+            link: `/community?resource=${resourceId}`,
+            actorId: userId,
+          });
+        } catch (err) {
+          console.error('Error creating like notification:', err);
+        }
+      }
     }
 
     const updated = await db.query('SELECT like_count FROM community_resources WHERE id = $1', [resourceId]);
@@ -496,6 +521,24 @@ export class CommunityService {
       ]
     );
 
+    // Notify target author (if not self-reshare)
+    if (target.user_id !== userId) {
+      try {
+        const actorRes = await db.query('SELECT name FROM users WHERE id = $1', [userId]);
+        const actorName = actorRes.rows[0]?.name || 'Một người dùng';
+        await notificationService.createNotification({
+          userId: target.user_id,
+          type: 'reshare',
+          title: 'Lượt chia sẻ mới',
+          content: `${actorName} đã chia sẻ lại tài liệu "${target.title}" của bạn`,
+          link: `/community?resource=${insertRes.rows[0].id}`,
+          actorId: userId,
+        });
+      } catch (err) {
+        console.error('Error creating reshare notification:', err);
+      }
+    }
+
     return insertRes.rows[0];
   }
 
@@ -549,6 +592,41 @@ export class CommunityService {
     await db.query('UPDATE community_resources SET comment_count = comment_count + 1 WHERE id = $1', [resourceId]);
 
     const userRes = await db.query('SELECT name as author_name, avatar_url as author_avatar FROM users WHERE id = $1', [userId]);
+    const authorName = userRes.rows[0]?.author_name || 'Một người dùng';
+
+    // Trigger Notifications
+    try {
+      const snippet = content.trim().substring(0, 50) + (content.trim().length > 50 ? '...' : '');
+      let parentAuthorId: number | null = null;
+      if (parentId) {
+        const parentAuthorRes = await db.query('SELECT user_id FROM community_comments WHERE id = $1', [parentId]);
+        parentAuthorId = parentAuthorRes.rows[0]?.user_id;
+        if (parentAuthorId && parentAuthorId !== userId) {
+          await notificationService.createNotification({
+            userId: parentAuthorId,
+            type: 'comment_reply',
+            title: 'Phản hồi bình luận mới',
+            content: `${authorName} đã trả lời: "${snippet}"`,
+            link: `/community?resource=${resourceId}`,
+            actorId: userId,
+          });
+        }
+      }
+
+      // Notify resource owner (if not commenter, and not already notified as parent author)
+      if (resource.user_id !== userId && (!parentId || resource.user_id !== parentAuthorId)) {
+        await notificationService.createNotification({
+          userId: resource.user_id,
+          type: 'comment',
+          title: 'Bình luận mới',
+          content: `${authorName} đã bình luận: "${snippet}"`,
+          link: `/community?resource=${resourceId}`,
+          actorId: userId,
+        });
+      }
+    } catch (err) {
+      console.error('Error creating comment notification:', err);
+    }
 
     return {
       ...insertRes.rows[0],
@@ -557,7 +635,7 @@ export class CommunityService {
     };
   }
 
-  async listComments(resourceId: number, viewerId?: number | null) {
+  async listComments(resourceId: number, viewerId?: number | null, limit: number = 50, page: number = 1) {
     const params: any[] = [resourceId];
     let blockFilter = '';
 
@@ -570,6 +648,15 @@ export class CommunityService {
       )`;
     }
 
+    const safeLimit = Math.min(200, Math.max(1, limit));
+    const safePage = Math.max(1, page);
+    const offset = (safePage - 1) * safeLimit;
+
+    params.push(safeLimit);
+    const limitIdx = params.length;
+    params.push(offset);
+    const offsetIdx = params.length;
+
     const res = await db.query(
       `SELECT 
         cc.*,
@@ -579,7 +666,8 @@ export class CommunityService {
        JOIN users u ON u.id = cc.user_id
        WHERE cc.resource_id = $1 AND cc.is_hidden = false
        ${blockFilter}
-       ORDER BY cc.created_at ASC`,
+       ORDER BY cc.created_at ASC
+       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       params
     );
     return res.rows;

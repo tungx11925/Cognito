@@ -2,6 +2,7 @@ import { activityRepository } from '../repositories/activity.repository';
 import { getVietnamDateString } from '../utils/date.util';
 import { sseService } from '../utils/sse.service';
 import { streakService } from './streak.service';
+import { notificationService } from './notification.service';
 
 class ActivityService {
   async updateUserStreak(userId: number) {
@@ -95,6 +96,15 @@ class ActivityService {
             rewardXP: 50,
             timestamp: new Date().toISOString()
           });
+
+          // Insert persistent task completion notification in DB
+          notificationService.createNotification({
+            userId,
+            type: 'task',
+            title: 'Nhiệm vụ hoàn thành!',
+            content: `Bạn đã hoàn thành nhiệm vụ "${completedTask.title}" (+50 XP)`,
+            link: '/progress',
+          }).catch(err => console.error('Error creating task completion notification:', err));
 
           return { task: completedTask, justCompleted: true };
         }

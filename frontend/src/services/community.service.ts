@@ -87,10 +87,14 @@ export const getCommunityFeed = async (params: {
   if (params.offset) queryParams.set('offset', String(params.offset));
 
   const url = `/community/feed?${queryParams.toString()}`;
-  return apiFetch(url, {
+  const data: any = await apiFetch(url, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
+  if (data && Array.isArray(data.resources) && !data.items) {
+    data.items = data.resources;
+  }
+  return data;
 };
 
 export const getResourceDetail = async (id: number): Promise<{ resource: CommunityResourceItem; error?: string }> => {

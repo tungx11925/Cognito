@@ -9,14 +9,21 @@ export const startFocusSessionSchema = z.object({
   }),
 });
 
-export const recordDistractionEventSchema = z.object({
-  body: z.object({
-    event_type: z.enum(['TAB_SWITCH', 'PAGE_BLUR', 'PAGE_HIDDEN', 'IDLE', 'RETURNED'], {
-      message: 'Loại sự kiện mất tập trung không hợp lệ',
-    }),
-    duration_seconds: z.number().int().min(0).default(0).optional(),
-    details: z.record(z.string(), z.any()).optional(),
+const singleDistractionEvent = z.object({
+  event_type: z.enum(['TAB_SWITCH', 'PAGE_BLUR', 'PAGE_HIDDEN', 'IDLE', 'RETURNED'], {
+    message: 'Loại sự kiện mất tập trung không hợp lệ',
   }),
+  duration_seconds: z.number().int().min(0).default(0).optional(),
+  details: z.record(z.string(), z.any()).optional(),
+});
+
+export const recordDistractionEventSchema = z.object({
+  body: z.union([
+    singleDistractionEvent,
+    z.object({
+      events: z.array(singleDistractionEvent).min(1, { message: 'Danh sách sự kiện không được rỗng' }),
+    }),
+  ]),
 });
 
 export const finishFocusSessionSchema = z.object({

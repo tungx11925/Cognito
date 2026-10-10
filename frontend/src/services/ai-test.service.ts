@@ -35,16 +35,6 @@ export const getDocumentContent = (docId: number) =>
 export const getTestSets = () =>
   apiFetch('/test-sets', { headers: getAuthHeaders() });
 
-export const generateTestSet = (payload: {
-  configKey: string;
-  documentContent: string;
-  name?: string;
-}) =>
-  apiFetch('/test-sets/generate', {
-    method: 'POST',
-    headers: authJson(),
-    body: JSON.stringify(payload),
-  });
 
 export const toggleTestSetStatus = (id: number, is_active: boolean) =>
   apiFetch(`/test-sets/${id}/status`, {

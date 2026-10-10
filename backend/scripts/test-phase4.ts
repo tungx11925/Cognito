@@ -85,7 +85,7 @@ async function runTests() {
         title: 'Tài liệu Giải tích 1 - Đạo hàm và Vi phân',
         description: 'Tài liệu ôn tập giải tích dành cho sinh viên năm nhất',
         category: 'Toán học',
-        docUrl: 'https://example.com/mock-analysis.txt',
+        docUrl: 'data:text/plain;charset=utf-8,Tai%20lieu%20on%20tap%20giai%20tich%20dao%20ham',
         solutionText: 'Tài liệu lý thuyết và bài tập đạo hàm chuẩn.',
         visibility: 'private',
       },
@@ -259,12 +259,12 @@ Chương 3: Ứng dụng đạo hàm trong khảo sát sự biến thiên và v�
     // TEST 6: Public != Community Published
     // ─────────────────────────────────────────────────────────────
     // Even though visibility is 'public', is_community_published is false.
-    // It MUST NOT appear in the marketplace!
-    const marketCheck1 = await axios.get(`${API_BASE}/marketplace/resources?type=document`, { headers: authHeadersB });
-    const foundInMarketplace1 = (marketCheck1.data.resources || []).some((r: any) => r.id === docA.id);
+    // It MUST NOT appear in the community feed!
+    const marketCheck1 = await axios.get(`${API_BASE}/community/feed`, { headers: authHeadersB });
+    const foundInMarketplace1 = (marketCheck1.data.resources || []).some((r: any) => r.id === docA.id || r.resource_id === docA.id);
     assert(
       !foundInMarketplace1,
-      'RULE ENFORCED: PUBLIC != Community Published (Public document without community publishing is NOT in marketplace)'
+      'RULE ENFORCED: PUBLIC != Community Published (Public document without community publishing is NOT in community feed)'
     );
 
     // ─────────────────────────────────────────────────────────────
@@ -280,12 +280,12 @@ Chương 3: Ứng dụng đạo hàm trong khảo sát sự biến thiên và v�
       'Owner explicitly publishes document to community'
     );
 
-    // Now it MUST appear in marketplace
-    const marketCheck2 = await axios.get(`${API_BASE}/marketplace/resources?type=document`, { headers: authHeadersB });
-    const foundInMarketplace2 = (marketCheck2.data.resources || []).some((r: any) => r.id === docA.id);
+    // Now it MUST appear in community feed
+    const marketCheck2 = await axios.get(`${API_BASE}/community/feed`, { headers: authHeadersB });
+    const foundInMarketplace2 = (marketCheck2.data.resources || []).some((r: any) => r.id === docA.id || r.resource_id === docA.id);
     assert(
       foundInMarketplace2,
-      'Community Published document appears in Marketplace resources'
+      'Community Published document appears in Community feed'
     );
 
     // ─────────────────────────────────────────────────────────────
@@ -301,11 +301,11 @@ Chương 3: Ứng dụng đạo hàm trong khảo sát sự biến thiên và v�
       'Owner unpublishes document from community'
     );
 
-    const marketCheck3 = await axios.get(`${API_BASE}/marketplace/resources?type=document`, { headers: authHeadersB });
-    const foundInMarketplace3 = (marketCheck3.data.resources || []).some((r: any) => r.id === docA.id);
+    const marketCheck3 = await axios.get(`${API_BASE}/community/feed`, { headers: authHeadersB });
+    const foundInMarketplace3 = (marketCheck3.data.resources || []).some((r: any) => r.id === docA.id || r.resource_id === docA.id);
     assert(
       !foundInMarketplace3,
-      'Unpublished document is immediately removed from Marketplace resources'
+      'Unpublished document is immediately removed from Community feed'
     );
 
     // ─────────────────────────────────────────────────────────────
@@ -340,7 +340,7 @@ Chương 3: Ứng dụng đạo hàm trong khảo sát sự biến thiên và v�
         title: 'Corrupt Empty File.pdf',
         description: 'Tài liệu giả mạo file hỏng',
         category: 'Test',
-        docUrl: 'http://127.0.0.1:9999/non-existent-corrupt.pdf',
+        docUrl: 'data:application/pdf;base64,invalid-binary-pdf-header',
         visibility: 'private',
       },
       { headers: authHeadersA }
@@ -384,19 +384,19 @@ Chương 3: Ứng dụng đạo hàm trong khảo sát sự biến thiên và v�
     );
     const pubDoc = pubDocRes.data;
 
-    // Verify it is in marketplace
-    const checkMarketBefore = await axios.get(`${API_BASE}/marketplace/resources?type=document`, { headers: authHeadersB });
-    const inMarketBefore = (checkMarketBefore.data.resources || []).some((r: any) => r.id === pubDoc.id);
-    assert(inMarketBefore, 'Published document appears in marketplace');
+    // Verify it is in community feed
+    const checkMarketBefore = await axios.get(`${API_BASE}/community/feed`, { headers: authHeadersB });
+    const inMarketBefore = (checkMarketBefore.data.resources || []).some((r: any) => r.id === pubDoc.id || r.resource_id === pubDoc.id);
+    assert(inMarketBefore, 'Published document appears in community feed');
 
     // Owner deletes directly without unpublishing
     const delPubRes = await axios.delete(`${API_BASE}/documents/${pubDoc.id}`, { headers: authHeadersA });
     assert(delPubRes.status === 200, 'Owner deletes published document directly (HTTP 200)');
 
-    // Verify gone from marketplace
-    const checkMarketAfter = await axios.get(`${API_BASE}/marketplace/resources?type=document`, { headers: authHeadersB });
-    const inMarketAfter = (checkMarketAfter.data.resources || []).some((r: any) => r.id === pubDoc.id);
-    assert(!inMarketAfter, 'Deleted published document immediately disappears from marketplace');
+    // Verify gone from community feed
+    const checkMarketAfter = await axios.get(`${API_BASE}/community/feed`, { headers: authHeadersB });
+    const inMarketAfter = (checkMarketAfter.data.resources || []).some((r: any) => r.id === pubDoc.id || r.resource_id === pubDoc.id);
+    assert(!inMarketAfter, 'Deleted published document immediately disappears from community feed');
 
     // Verify community_resources record is removed
     const checkCommRes = await db.query('SELECT * FROM community_resources WHERE resource_type = $1 AND resource_id = $2', ['document', pubDoc.id]);

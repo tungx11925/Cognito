@@ -25,7 +25,17 @@ export const recordDistraction = async (req: AuthRequest, res: Response, next: N
   try {
     const userId = req.user!.id;
     const sessionId = parseInt(req.params.id, 10);
-    const { event_type, duration_seconds, details } = req.body;
+    const { event_type, duration_seconds, details, events } = req.body;
+
+    if (events && Array.isArray(events)) {
+      const mappedEvents = events.map((e: any) => ({
+        eventType: e.event_type || e.eventType,
+        durationSeconds: e.duration_seconds || e.durationSeconds || 0,
+        details: e.details || {}
+      }));
+      const batchResult = await focusService.recordDistractionBatch(userId, sessionId, mappedEvents);
+      return res.status(200).json(batchResult);
+    }
 
     const result = await focusService.recordDistraction(userId, sessionId, {
       eventType: event_type,

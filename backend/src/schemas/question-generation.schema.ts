@@ -99,29 +99,5 @@ export const GenerateQuestionsOutputSchema = z.object({
 export type GeneratedQuestionOutput = z.infer<typeof GeneratedQuestionSchema>;
 
 // ─────────────────────────── Sanitize user instruction (chống prompt injection) ───────────────────────────
+export { INJECTION_PATTERNS, sanitizeUserInstruction, wrapInstructionBoundary } from '../utils/ai-security';
 
-const INJECTION_PATTERNS = [
-  /ignore\s+(all\s+)?previous\s+instructions?/i,
-  /bỏ\s*qua\s+(tất\s*cả\s+)?(các\s+)?hướng\s+dẫn/i,
-  /qua\s+mặt\s+(các\s+)?quy\s+tắc/i,
-  /reveal\s+(the\s+)?system\s+prompt/i,
-  /cho\s+tôi\s+xem\s+system\s+prompt/i,
-  /đổi\s+vai\s+trò/i,
-  /you\s+are\s+now\s+a/i,
-  /disregard\s+(all\s+)?(previous|above)\s+(instructions|rules)/i,
-  /<\s*script/i,
-];
-
-export function sanitizeUserInstruction(raw?: string | null, maxLength = 500): string | null {
-  const value = (raw || '').trim();
-  if (!value) return null;
-  if (value.length > maxLength) {
-    throw new AppError(`Nội dung tối đa ${maxLength} ký tự`, 400);
-  }
-  for (const pattern of INJECTION_PATTERNS) {
-    if (pattern.test(value)) {
-      throw new AppError('Nội dung chứa chỉ dẫn không được phép (cố tình ghi đè hoặc trích xuất cấu hình hệ thống)', 400);
-    }
-  }
-  return value;
-}

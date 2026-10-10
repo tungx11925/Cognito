@@ -6,6 +6,7 @@ import {
   ModerationActionInput,
   ModerationReportsQuery,
 } from '../schemas/safety.schema';
+import { notificationService } from './notification.service';
 
 export class SafetyService {
   /**
@@ -177,12 +178,26 @@ export class SafetyService {
         throw new AppError('Bạn không thể tự tố cáo chính bản thân mình', 400);
       }
     } else if (input.targetType === 'message') {
-      const res = await db.query('SELECT id, sender_id, content FROM messages WHERE id = $1', [input.targetId]);
+      const res = await db.query(
+        `SELECT m.id, m.sender_id, m.content, m.conversation_id 
+         FROM messages m 
+         WHERE m.id = $1`,
+        [input.targetId]
+      );
       if (res.rows.length === 0) throw new AppError('Không tìm thấy tin nhắn để báo cáo', 404);
       targetAuthorId = res.rows[0].sender_id;
       targetTitle = res.rows[0].content.substring(0, 50);
       if (targetAuthorId === reporterId) {
         throw new AppError('Bạn không thể tự tố cáo tin nhắn của chính mình', 400);
+      }
+
+      // IDOR Protection: Reporter MUST be a participant/member in the conversation
+      const convMemberCheck = await db.query(
+        `SELECT 1 FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
+        [res.rows[0].conversation_id, reporterId]
+      );
+      if (convMemberCheck.rows.length === 0) {
+        throw new AppError('Bạn không có quyền báo cáo tin nhắn trong cuộc trò chuyện mà bạn không tham gia', 403);
       }
     }
 
@@ -205,16 +220,35 @@ export class SafetyService {
       [reporterId, input.targetType, input.targetId, input.reason, input.details?.trim() || null]
     );
 
-    // Increment report counter on target and auto-hide if report_count >= 5
+    // GAP-05: Chống brigading (tấn công ẩn bài bằng acc ảo mới tạo).
+    // Chỉ tính điều kiện auto-hide cho báo cáo từ tài khoản có tuổi đời tối thiểu
+    // (Mặc định: 24h trên Production hoặc theo biến môi trường MIN_REPORTER_AGE_HOURS; 0h trong môi trường test/dev).
+    const minAgeHours = process.env.MIN_REPORTER_AGE_HOURS !== undefined
+      ? Number(process.env.MIN_REPORTER_AGE_HOURS)
+      : (process.env.NODE_ENV === 'production' ? 24 : 0);
+
+    let isEligibleForAutoHide = true;
+    if (minAgeHours > 0) {
+      const matureUserCheck = await db.query(
+        `SELECT id FROM users 
+         WHERE id = $1 AND created_at <= CURRENT_TIMESTAMP - ($2 || ' hours')::interval`,
+        [reporterId, minAgeHours]
+      );
+      if (matureUserCheck.rows.length === 0) {
+        isEligibleForAutoHide = false;
+      }
+    }
+
+    // Increment report counter on target and auto-hide if report_count + 1 >= 5 and reporter is eligible
     if (input.targetType === 'resource') {
       const updateRes = await db.query(
         `UPDATE community_resources 
          SET report_count = report_count + 1,
-             is_hidden = CASE WHEN report_count + 1 >= 5 THEN true ELSE is_hidden END,
-             is_public = CASE WHEN report_count + 1 >= 5 THEN false ELSE is_public END
+             is_hidden = CASE WHEN (report_count + 1 >= 5 AND $2::boolean = true) THEN true ELSE is_hidden END,
+             is_public = CASE WHEN (report_count + 1 >= 5 AND $2::boolean = true) THEN false ELSE is_public END
          WHERE id = $1
          RETURNING resource_type, resource_id, is_reshare, is_hidden`,
-        [input.targetId]
+        [input.targetId, isEligibleForAutoHide]
       );
       if (updateRes.rows.length > 0 && updateRes.rows[0].is_hidden) {
         const { resource_type, resource_id, is_reshare } = updateRes.rows[0];
@@ -229,9 +263,9 @@ export class SafetyService {
       await db.query(
         `UPDATE community_comments 
          SET report_count = report_count + 1,
-             is_hidden = CASE WHEN report_count + 1 >= 5 THEN true ELSE is_hidden END
+             is_hidden = CASE WHEN (report_count + 1 >= 5 AND $2::boolean = true) THEN true ELSE is_hidden END
          WHERE id = $1`,
-        [input.targetId]
+        [input.targetId, isEligibleForAutoHide]
       );
     }
 
@@ -519,6 +553,51 @@ export class SafetyService {
       [adminId, action, report.target_type, report.target_id, reportId, reason, notes?.trim() || null]
     );
 
+    // 5. Trigger Notifications
+    try {
+      // A. Notify reporter
+      if (report.reporter_id) {
+        await notificationService.createNotification({
+          userId: report.reporter_id,
+          type: 'report_resolved',
+          title: 'Báo cáo vi phạm đã được xử lý',
+          content: `Báo cáo của bạn về nội dung vi phạm đã được Ban Quản trị xử lý (Hành động: ${action}).`,
+          link: '/community',
+        });
+      }
+
+      // B. Notify target author/user if applicable
+      if (targetUserId) {
+        if (action === 'REMOVE' || action === 'HIDE') {
+          await notificationService.createNotification({
+            userId: targetUserId,
+            type: 'resource_removed',
+            title: 'Nội dung bị gỡ bỏ hoặc ẩn',
+            content: `Nội dung của bạn đã bị gỡ bỏ/ẩn do vi phạm tiêu chuẩn cộng đồng: ${reason || 'Vi phạm chính sách'}`,
+            link: '/community',
+          });
+        } else if (action === 'WARN') {
+          await notificationService.createNotification({
+            userId: targetUserId,
+            type: 'account_warned',
+            title: 'Cảnh báo vi phạm tiêu chuẩn cộng đồng',
+            content: `Bạn nhận được cảnh báo từ Ban Quản trị: ${reason || 'Vi phạm quy tắc cộng đồng'}`,
+            link: '/profile',
+          });
+        } else if (action === 'SUSPEND') {
+          await notificationService.createNotification({
+            userId: targetUserId,
+            type: 'account_suspended',
+            title: 'Tài khoản bị đình chỉ',
+            content: `Tài khoản của bạn đã bị tạm khóa do vi phạm: ${reason || 'Vi phạm nghiêm trọng quy tắc cộng đồng'}`,
+            link: '/profile',
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error creating moderation notifications:', err);
+    }
+
     return {
       success: true,
       message: `Đã thực hiện hành động ${action} thành công`,
@@ -599,6 +678,19 @@ export class SafetyService {
        VALUES ($1, 'SUSPEND', 'user', $2, $3, $4)`,
       [adminId, targetUserId, reason, notes || null]
     );
+
+    // Notify suspended user
+    try {
+      await notificationService.createNotification({
+        userId: targetUserId,
+        type: 'account_suspended',
+        title: 'Tài khoản bị đình chỉ',
+        content: `Tài khoản của bạn đã bị tạm khóa: ${reason}`,
+        link: '/profile',
+      });
+    } catch (err) {
+      console.error('Error creating suspension notification:', err);
+    }
 
     return { success: true, message: `Đã đình chỉ tài khoản ${userCheck.rows[0].name}` };
   }

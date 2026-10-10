@@ -43,6 +43,16 @@ export interface MessageItem {
   };
 }
 
+export const getStreamTicket = async (): Promise<{ ticket?: string; error?: string }> => {
+  return apiFetch('/messages/stream-ticket', {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
+    },
+  });
+};
+
 export const getConversations = async (): Promise<{ conversations?: ConversationItem[]; error?: string }> => {
   return apiFetch('/messages/conversations', {
     headers: {
@@ -118,11 +128,14 @@ export const markAsRead = async (
   });
 };
 
-export const getUnreadCount = async (): Promise<{ total_unread?: number; error?: string }> => {
-  return apiFetch('/messages/unread-count', {
-    headers: {
-      ...getAuthHeaders(),
-      'Content-Type': 'application/json',
-    },
-  });
+let unreadCache: { timestamp: number; data: { total_unread?: number; error?: string } } | null = null;
+
+export const getUnreadCount = async (force = false): Promise<{ total_unread?: number; error?: string }> => {
+  const now = Date.now();
+  if (!force && unreadCache && (now - unreadCache.timestamp < 15000)) {
+    return unreadCache.data;
+  }
+  const data = await apiFetch('/messages/unread-count');
+  unreadCache = { timestamp: now, data };
+  return data;
 };

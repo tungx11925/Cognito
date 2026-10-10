@@ -3,6 +3,7 @@ import fs from 'fs';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { examParserService, ParsedExamQuestion } from '../services/exam-parser.service';
 import { AppError } from '../utils/AppError';
+import { validateFileContent } from '../utils/file-security';
 
 export class ExamImportController {
   /**
@@ -22,6 +23,10 @@ export class ExamImportController {
 
       let result;
       if (file) {
+        // Security Hardening: Validate magic bytes & reject spoofed executables / scripts
+        const fileBuffer = fs.readFileSync(file.path);
+        validateFileContent(fileBuffer, file.originalname);
+
         result = await examParserService.parseExam({
           filePath: file.path,
           originalName: file.originalname,

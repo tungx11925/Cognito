@@ -16,13 +16,10 @@ export const getLectureById = (id: string | number) => apiFetch(`/lectures/${id}
 });
 
 export const uploadLecture = async (formData: FormData) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  const res = await fetch('/api/lectures/upload', {
+  return await apiFetch('/lectures/upload', {
     method: 'POST',
-    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
     body: formData
   });
-  return await res.json();
 };
 
 export const updateSlide = (lectureId: number, slideId: number, data: any) => apiFetch(`/lectures/${lectureId}/slides/${slideId}`, {

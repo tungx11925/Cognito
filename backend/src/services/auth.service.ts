@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
+import { signToken, verifyToken } from '../utils/jwt';
 import { userRepository } from '../repositories/user.repository';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/mailer';
 import { streakService } from './streak.service';
@@ -39,9 +41,8 @@ export class AuthService {
       name,
     });
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'user' }, 
-      process.env.JWT_SECRET_KEY!, 
+    const token = signToken(
+      { id: user.id, email: user.email, role: user.role || 'user', jti: randomUUID() },
       { expiresIn: '24h' }
     );
 
@@ -77,16 +78,15 @@ export class AuthService {
       return { requires2FA: true, email: user.email };
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'user' }, 
-      process.env.JWT_SECRET_KEY!, 
+    const token = signToken(
+      { id: user.id, email: user.email, role: user.role || 'user', jti: randomUUID() },
       { expiresIn: '24h' }
     );
 
     const streakInfo = await streakService.calculateUserStreak(user.id);
     const updatedUserRes = await userRepository.findById(user.id);
 
-    const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = updatedUserRes;
+    const { password: _p, verification_code: _v, code_expires_at: _c, reset_password_token: _r, reset_password_expires: _re, ...safeUser } = updatedUserRes;
 
     return { 
       requires2FA: false,
@@ -119,13 +119,12 @@ export class AuthService {
     const streakInfo = await streakService.calculateUserStreak(user.id);
     const updatedUserRes = await userRepository.findById(user.id);
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'user' }, 
-      process.env.JWT_SECRET_KEY!, 
+    const token = signToken(
+      { id: user.id, email: user.email, role: user.role || 'user', jti: randomUUID() },
       { expiresIn: '24h' }
     );
 
-    const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = updatedUserRes;
+    const { password: _p, verification_code: _v, code_expires_at: _c, reset_password_token: _r, reset_password_expires: _re, ...safeUser } = updatedUserRes;
 
     return { 
       token, 
@@ -161,16 +160,15 @@ export class AuthService {
       });
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'user' }, 
-      process.env.JWT_SECRET_KEY!, 
+    const token = signToken(
+      { id: user.id, email: user.email, role: user.role || 'user', jti: randomUUID() },
       { expiresIn: '24h' }
     );
 
     const streakInfo = await streakService.calculateUserStreak(user.id);
     const updatedUserRes = await userRepository.findById(user.id);
 
-    const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = updatedUserRes;
+    const { password: _p, verification_code: _v, code_expires_at: _c, reset_password_token: _r, reset_password_expires: _re, ...safeUser } = updatedUserRes;
 
     return { 
       token, 
@@ -189,7 +187,7 @@ export class AuthService {
     if (!user) throw new Error('Người dùng không tồn tại');
 
     const streakInfo = await streakService.calculateUserStreak(userId);
-    const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = user;
+    const { password: _p, verification_code: _v, code_expires_at: _c, reset_password_token: _r, reset_password_expires: _re, ...safeUser } = user;
     return { 
       ...safeUser, 
       streak: streakInfo.currentStreak,
@@ -209,7 +207,7 @@ export class AuthService {
 
     let decoded: any;
     try {
-      decoded = jwt.verify(oldToken, process.env.JWT_SECRET_KEY);
+      decoded = verifyToken(oldToken);
     } catch (err: any) {
       throw new Error('Token không hợp lệ hoặc đã hết hạn');
     }
@@ -223,14 +221,13 @@ export class AuthService {
       throw new Error('Người dùng không tồn tại');
     }
 
-    const newToken = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'user' },
-      process.env.JWT_SECRET_KEY,
+    const newToken = signToken(
+      { id: user.id, email: user.email, role: user.role || 'user', jti: randomUUID() },
       { expiresIn: '24h' }
     );
 
     const studyDates = await this.getUserStudyDates(user.id);
-    const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = user;
+    const { password: _p, verification_code: _v, code_expires_at: _c, reset_password_token: _r, reset_password_expires: _re, ...safeUser } = user;
     return { token: newToken, user: { ...safeUser, study_dates: studyDates } };
   }
 

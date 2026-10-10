@@ -1,13 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
-const getAuthHeaders = (): Record<string, string> => {
-  if (typeof window === 'undefined') return { 'Content-Type': 'application/json' };
-  const token = localStorage.getItem('token') || '';
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-};
+import { apiFetch } from './api';
 
 export interface FocusSession {
   id: number;
@@ -50,22 +41,18 @@ export const focusService = {
     quiz_id?: number | null;
     learning_goal_id?: number | null;
   }): Promise<FocusSession> {
-    const res = await fetch(`${API_BASE_URL}/focus/start`, {
+    const data = await apiFetch('/focus/start', {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Lỗi khi bắt đầu phiên tập trung');
+    if (data?.error) throw new Error(data.error || 'Lỗi khi bắt đầu phiên tập trung');
     return data;
   },
 
   async getActiveSession(): Promise<{ activeSession: FocusSession | null }> {
-    const res = await fetch(`${API_BASE_URL}/focus/active`, {
-      headers: getAuthHeaders(),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Lỗi khi lấy phiên đang chạy');
+    const data = await apiFetch('/focus/active');
+    if (data?.error) throw new Error(data.error || 'Lỗi khi lấy phiên đang chạy');
     return data;
   },
 
@@ -77,24 +64,39 @@ export const focusService = {
       details?: Record<string, any>;
     }
   ): Promise<{ sessionId: number; eventType: string; distractionCount: number }> {
-    const res = await fetch(`${API_BASE_URL}/focus/${id}/distraction`, {
+    const data = await apiFetch(`/focus/${id}/distraction`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Lỗi ghi nhận xao nhãng');
+    if (data?.error) throw new Error(data.error || 'Lỗi ghi nhận xao nhãng');
+    return data;
+  },
+
+  async recordDistractionsBatch(
+    id: number,
+    events: Array<{
+      event_type: 'TAB_SWITCH' | 'PAGE_BLUR' | 'PAGE_HIDDEN' | 'IDLE' | 'RETURNED';
+      duration_seconds?: number;
+      details?: Record<string, any>;
+    }>
+  ): Promise<{ sessionId: number; addedCount: number; distractionCount: number }> {
+    const data = await apiFetch(`/focus/${id}/distraction`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events }),
+    });
+    if (data?.error) throw new Error(data.error || 'Lỗi ghi nhận xao nhãng theo lô');
     return data;
   },
 
   async pingActive(id: number, seconds: number): Promise<{ active_seconds: number; status: string }> {
-    const res = await fetch(`${API_BASE_URL}/focus/${id}/ping`, {
+    const data = await apiFetch(`/focus/${id}/ping`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ seconds }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Lỗi ping thời gian');
+    if (data?.error) throw new Error(data.error || 'Lỗi ping thời gian');
     return data;
   },
 
@@ -105,13 +107,12 @@ export const focusService = {
       actual_duration_seconds: number;
     }
   ): Promise<{ session: FocusSession; summary: FocusSummary }> {
-    const res = await fetch(`${API_BASE_URL}/focus/${id}/finish`, {
+    const data = await apiFetch(`/focus/${id}/finish`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Lỗi khi kết thúc phiên tập trung');
+    if (data?.error) throw new Error(data.error || 'Lỗi khi kết thúc phiên tập trung');
     return data;
   },
 
@@ -119,13 +120,12 @@ export const focusService = {
     id: number,
     actualDurationSeconds?: number
   ): Promise<{ session: FocusSession; summary: FocusSummary }> {
-    const res = await fetch(`${API_BASE_URL}/focus/${id}/interrupt`, {
+    const data = await apiFetch(`/focus/${id}/interrupt`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ actual_duration_seconds: actualDurationSeconds }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Lỗi khi ngắt phiên tập trung');
+    if (data?.error) throw new Error(data.error || 'Lỗi khi ngắt phiên tập trung');
     return data;
   },
 
@@ -134,11 +134,8 @@ export const focusService = {
     events: any[];
     summary: FocusSummary;
   }> {
-    const res = await fetch(`${API_BASE_URL}/focus/${id}/summary`, {
-      headers: getAuthHeaders(),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Lỗi tải báo cáo phiên tập trung');
+    const data = await apiFetch(`/focus/${id}/summary`);
+    if (data?.error) throw new Error(data.error || 'Lỗi tải báo cáo phiên tập trung');
     return data;
   },
 };

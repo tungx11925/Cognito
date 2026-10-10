@@ -170,19 +170,14 @@ function MessagesContent() {
       .finally(() => setLoadingMessages(false));
   }, [activeConversation?.id]);
 
-  // 4. Real-time SSE Connection
+  // 4. Real-time events multiplexed via unified SSE connection in StudyContext (No redundant EventSource)
   useEffect(() => {
     if (!isAuthenticated || typeof window === 'undefined') return;
 
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    const streamUrl = `${API_BASE_URL}/messages/stream?token=${encodeURIComponent(token)}`;
-    const eventSource = new EventSource(streamUrl);
-
-    eventSource.addEventListener('NEW_MESSAGE', (e: MessageEvent) => {
+    const handleNewMessage = (e: Event) => {
       try {
-        const payload = JSON.parse(e.data);
+        const payload = (e as CustomEvent).detail;
+        if (!payload) return;
         const { conversation_id, message, last_message_text, last_message_at } = payload;
 
         // Update active conversation timeline if matching
@@ -220,11 +215,12 @@ function MessagesContent() {
       } catch (err) {
         console.error('Error handling SSE NEW_MESSAGE:', err);
       }
-    });
+    };
 
-    eventSource.addEventListener('MESSAGES_READ', (e: MessageEvent) => {
+    const handleMessagesRead = (e: Event) => {
       try {
-        const payload = JSON.parse(e.data);
+        const payload = (e as CustomEvent).detail;
+        if (!payload) return;
         const { conversation_id } = payload;
         if (activeConvIdRef.current === conversation_id) {
           setMessages((prev) =>
@@ -234,14 +230,14 @@ function MessagesContent() {
       } catch (err) {
         console.error('Error handling SSE MESSAGES_READ:', err);
       }
-    });
-
-    eventSource.onerror = () => {
-      // EventSource will auto-reconnect
     };
 
+    window.addEventListener('cognito:new_message', handleNewMessage);
+    window.addEventListener('cognito:messages_read', handleMessagesRead);
+
     return () => {
-      eventSource.close();
+      window.removeEventListener('cognito:new_message', handleNewMessage);
+      window.removeEventListener('cognito:messages_read', handleMessagesRead);
     };
   }, [isAuthenticated, activeUser?.id, fetchConversationsList]);
 
@@ -410,7 +406,7 @@ function MessagesContent() {
   // Auth gate check
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#f5f3ee] flex flex-col justify-between">
+      <div className="min-h-screen bg-[#f5f3ee] dark:bg-[#0B0F17] flex flex-col justify-between">
         <Navbar
           isLoggedIn={false}
           onSignInClick={() => setShowLoginModal(true)}
@@ -418,16 +414,16 @@ function MessagesContent() {
           activeUser={null}
         />
         <div className="max-w-md mx-auto my-auto px-4 py-16 text-center">
-          <div className="w-16 h-16 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-5 text-[#1a3d28]">
+          <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-950/60 rounded-3xl flex items-center justify-center mx-auto mb-5 text-[#1a3d28] dark:text-emerald-400">
             <MessageSquare size={32} />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Đăng nhập để xem tin nhắn</h2>
-          <p className="text-sm text-gray-600 mb-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-zinc-100 mb-2">Đăng nhập để xem tin nhắn</h2>
+          <p className="text-sm text-gray-600 dark:text-zinc-400 mb-6">
             Bạn cần đăng nhập tài khoản Cognito để kết nối và trao đổi trực tiếp với cộng đồng người học.
           </p>
           <button
             onClick={() => setShowLoginModal(true)}
-            className="w-full py-3 bg-[#1a3d28] text-white font-bold rounded-2xl hover:bg-[#122b1c] transition-all shadow-md cursor-pointer"
+            className="w-full py-3 bg-[#1a3d28] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white font-bold rounded-2xl hover:bg-[#122b1c] transition-all shadow-md cursor-pointer"
           >
             Đăng nhập ngay
           </button>
@@ -437,7 +433,7 @@ function MessagesContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f3ee] flex flex-col">
+    <div className="min-h-screen bg-[#f5f3ee] dark:bg-[#0B0F17] flex flex-col">
       <Navbar
         isLoggedIn={true}
         onSignInClick={() => {}}
@@ -447,27 +443,27 @@ function MessagesContent() {
 
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-20 pb-6 flex-1 flex flex-col">
         {/* Main Messenger Container */}
-        <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden flex flex-1 h-[calc(100vh-120px)] max-h-[850px]">
+        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-stone-200 dark:border-zinc-800 shadow-sm overflow-hidden flex flex-1 h-[calc(100vh-120px)] max-h-[850px]">
           {/* ────────────────────────────────────────────────────────── */}
           {/* LEFT SIDEBAR: Conversations List */}
           {/* ────────────────────────────────────────────────────────── */}
           <div
-            className={`w-full md:w-80 lg:w-96 border-r border-stone-200 flex flex-col bg-stone-50/50 ${
+            className={`w-full md:w-80 lg:w-96 border-r border-stone-200 dark:border-zinc-800 flex flex-col bg-stone-50/50 dark:bg-zinc-900/60 ${
               mobileView === 'chat' ? 'hidden md:flex' : 'flex'
             }`}
           >
             {/* Sidebar Header */}
-            <div className="p-4 border-b border-stone-200/80 bg-white">
+            <div className="p-4 border-b border-stone-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-[#1a3d28] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-[#1a3d28] dark:text-emerald-400 flex items-center justify-center">
                     <MessageSquare size={18} />
                   </div>
-                  <h1 className="text-lg font-bold text-stone-900">Tin nhắn</h1>
+                  <h1 className="text-lg font-bold text-stone-900 dark:text-zinc-100">Tin nhắn</h1>
                 </div>
                 <button
                   onClick={fetchConversationsList}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+                  className="p-1.5 rounded-lg text-stone-400 dark:text-zinc-500 hover:text-stone-700 dark:hover:text-zinc-200 hover:bg-stone-100 dark:hover:bg-zinc-800 transition-colors"
                   title="Làm mới"
                 >
                   <RefreshCw size={15} />
@@ -476,31 +472,31 @@ function MessagesContent() {
 
               {/* Search Bar */}
               <div className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 dark:text-zinc-500" />
                 <input
                   type="text"
                   placeholder="Tìm kiếm người nhắn tin..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-stone-100 rounded-xl text-xs text-stone-800 placeholder:text-stone-400 focus:bg-white focus:ring-2 focus:ring-[#1a3d28] border-none outline-none transition-all"
+                  className="w-full pl-9 pr-3 py-2 bg-stone-100 dark:bg-zinc-800 rounded-xl text-xs text-stone-800 dark:text-zinc-200 placeholder:text-stone-400 dark:placeholder:text-zinc-500 focus:bg-white dark:focus:bg-zinc-800 focus:ring-2 focus:ring-[#1a3d28] dark:focus:ring-emerald-500 border border-transparent dark:border-zinc-700 outline-none transition-all"
                 />
               </div>
             </div>
 
             {/* Conversation Items */}
-            <div className="flex-1 overflow-y-auto divide-y divide-stone-100">
+            <div className="flex-1 overflow-y-auto divide-y divide-stone-100 dark:divide-zinc-800">
               {loadingConversations ? (
-                <div className="p-8 text-center text-xs text-stone-400">
-                  <RefreshCw size={18} className="animate-spin mx-auto mb-2 text-stone-300" />
+                <div className="p-8 text-center text-xs text-stone-400 dark:text-zinc-500">
+                  <RefreshCw size={18} className="animate-spin mx-auto mb-2 text-stone-300 dark:text-zinc-600" />
                   Đang tải cuộc trò chuyện...
                 </div>
               ) : filteredConversations.length === 0 ? (
                 <div className="p-8 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-stone-100 text-stone-300 flex items-center justify-center mx-auto mb-3">
+                  <div className="w-12 h-12 rounded-2xl bg-stone-100 dark:bg-zinc-800 text-stone-300 dark:text-zinc-600 flex items-center justify-center mx-auto mb-3">
                     <MessageSquare size={22} />
                   </div>
-                  <p className="text-xs font-semibold text-stone-700">Chưa có cuộc trò chuyện nào</p>
-                  <p className="text-[11px] text-stone-400 mt-1">
+                  <p className="text-xs font-semibold text-stone-700 dark:text-zinc-300">Chưa có cuộc trò chuyện nào</p>
+                  <p className="text-[11px] text-stone-400 dark:text-zinc-500 mt-1">
                     Bắt đầu nhắn tin từ trang cá nhân hoặc học liệu cộng đồng.
                   </p>
                 </div>
@@ -518,8 +514,8 @@ function MessagesContent() {
                       }}
                       className={`w-full p-3.5 flex items-center gap-3 text-left transition-all ${
                         isSelected
-                          ? 'bg-emerald-50/70 border-l-4 border-l-[#1a3d28]'
-                          : 'hover:bg-stone-100/60'
+                          ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-l-4 border-l-[#1a3d28] dark:border-l-emerald-500'
+                          : 'hover:bg-stone-100/60 dark:hover:bg-zinc-800/60'
                       }`}
                     >
                       {/* Avatar */}
@@ -528,16 +524,16 @@ function MessagesContent() {
                           <img
                             src={other.avatar_url}
                             alt={other.name}
-                            className="w-11 h-11 rounded-2xl object-cover border border-stone-200"
+                            className="w-11 h-11 rounded-2xl object-cover border border-stone-200 dark:border-zinc-700"
                           />
                         ) : (
-                          <div className="w-11 h-11 rounded-2xl bg-[#1a3d28] text-white font-bold flex items-center justify-center text-sm shadow-xs">
+                          <div className="w-11 h-11 rounded-2xl bg-[#1a3d28] dark:bg-emerald-700 text-white font-bold flex items-center justify-center text-sm shadow-xs">
                             {other.name.charAt(0).toUpperCase()}
                           </div>
                         )}
                         {conv.is_blocked && (
                           <span
-                            className="absolute -bottom-1 -right-1 bg-red-600 text-white rounded-full p-0.5 border border-white"
+                            className="absolute -bottom-1 -right-1 bg-red-600 text-white rounded-full p-0.5 border border-white dark:border-zinc-900"
                             title="Đã chặn"
                           >
                             <Lock size={10} />
@@ -548,10 +544,10 @@ function MessagesContent() {
                       {/* Content Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-0.5">
-                          <span className="text-xs font-bold text-stone-900 truncate">
+                          <span className="text-xs font-bold text-stone-900 dark:text-zinc-100 truncate">
                             {other.name}
                           </span>
-                          <span className="text-[10px] text-stone-400 shrink-0 ml-1">
+                          <span className="text-[10px] text-stone-400 dark:text-zinc-500 shrink-0 ml-1">
                             {formatTime(conv.last_message_at)}
                           </span>
                         </div>
@@ -560,8 +556,8 @@ function MessagesContent() {
                           <p
                             className={`text-xs truncate ${
                               conv.unread_count > 0
-                                ? 'font-bold text-stone-900'
-                                : 'text-stone-500'
+                                ? 'font-bold text-stone-900 dark:text-zinc-100'
+                                : 'text-stone-500 dark:text-zinc-400'
                             }`}
                           >
                             {conv.last_sender_id === activeUser?.id && 'Bạn: '}
@@ -569,7 +565,7 @@ function MessagesContent() {
                           </p>
 
                           {conv.unread_count > 0 && (
-                            <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-[#1a3d28] text-white text-[10px] font-black min-w-[18px] text-center">
+                            <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-[#1a3d28] dark:bg-emerald-700 text-white text-[10px] font-black min-w-[18px] text-center">
                               {conv.unread_count}
                             </span>
                           )}
@@ -586,19 +582,19 @@ function MessagesContent() {
           {/* RIGHT CHAT AREA */}
           {/* ────────────────────────────────────────────────────────── */}
           <div
-            className={`flex-1 flex flex-col bg-white ${
+            className={`flex-1 flex flex-col bg-white dark:bg-zinc-900 ${
               mobileView === 'list' ? 'hidden md:flex' : 'flex'
             }`}
           >
             {activeConversation ? (
               <>
                 {/* Chat Top Header */}
-                <div className="p-3.5 border-b border-stone-200 flex items-center justify-between bg-stone-50/70">
+                <div className="p-3.5 border-b border-stone-200 dark:border-zinc-800 flex items-center justify-between bg-stone-50/70 dark:bg-zinc-900/90">
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Mobile Back Button */}
                     <button
                       onClick={() => setMobileView('list')}
-                      className="md:hidden p-1.5 rounded-xl hover:bg-stone-200/70 text-stone-600"
+                      className="md:hidden p-1.5 rounded-xl hover:bg-stone-200/70 dark:hover:bg-zinc-800 text-stone-600 dark:text-zinc-300"
                     >
                       <ArrowLeft size={18} />
                     </button>
@@ -609,10 +605,10 @@ function MessagesContent() {
                         <img
                           src={activeConversation.other_user.avatar_url}
                           alt={activeConversation.other_user.name}
-                          className="w-10 h-10 rounded-2xl object-cover border border-stone-200"
+                          className="w-10 h-10 rounded-2xl object-cover border border-stone-200 dark:border-zinc-700"
                         />
                       ) : (
-                        <div className="w-10 h-10 rounded-2xl bg-[#1a3d28] text-white font-bold flex items-center justify-center text-sm shadow-xs">
+                        <div className="w-10 h-10 rounded-2xl bg-[#1a3d28] dark:bg-emerald-700 text-white font-bold flex items-center justify-center text-sm shadow-xs">
                           {activeConversation.other_user.name.charAt(0).toUpperCase()}
                         </div>
                       )}
@@ -620,16 +616,16 @@ function MessagesContent() {
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h2 className="text-sm font-bold text-stone-900 truncate">
+                        <h2 className="text-sm font-bold text-stone-900 dark:text-zinc-100 truncate">
                           {activeConversation.other_user.name}
                         </h2>
                         {activeConversation.is_blocked && (
-                          <span className="px-2 py-0.5 rounded-md bg-red-100 text-red-700 text-[10px] font-bold">
+                          <span className="px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400 text-[10px] font-bold">
                             Bị chặn
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-stone-500 truncate">
+                      <p className="text-[11px] text-stone-500 dark:text-zinc-400 truncate">
                         {activeConversation.other_user.headline || activeConversation.other_user.email}
                       </p>
                     </div>
@@ -639,7 +635,7 @@ function MessagesContent() {
                   <div className="relative">
                     <button
                       onClick={() => setActionsMenuOpen(!actionsMenuOpen)}
-                      className="p-2 rounded-xl text-stone-500 hover:text-stone-800 hover:bg-stone-200/60 transition-colors"
+                      className="p-2 rounded-xl text-stone-500 dark:text-zinc-400 hover:text-stone-800 dark:hover:text-zinc-200 hover:bg-stone-200/60 dark:hover:bg-zinc-800 transition-colors"
                       title="Tùy chọn cuộc trò chuyện"
                     >
                       <MoreVertical size={18} />
@@ -651,16 +647,16 @@ function MessagesContent() {
                           initial={{ opacity: 0, scale: 0.95, y: 5 }}
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95, y: 5 }}
-                          className="absolute right-0 mt-2 w-48 rounded-2xl bg-white border border-stone-200 shadow-xl py-1.5 z-50 text-xs text-stone-700"
+                          className="absolute right-0 mt-2 w-48 rounded-2xl bg-white dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 shadow-xl py-1.5 z-50 text-xs text-stone-700 dark:text-zinc-200"
                         >
                           <button
                             onClick={() => {
                               setActionsMenuOpen(false);
                               router.push(`/profile/${activeConversation.other_user.id}`);
                             }}
-                            className="w-full px-3.5 py-2 text-left hover:bg-stone-100 flex items-center gap-2"
+                            className="w-full px-3.5 py-2 text-left hover:bg-stone-100 dark:hover:bg-zinc-700 flex items-center gap-2"
                           >
-                            <ExternalLink size={14} className="text-stone-400" />
+                            <ExternalLink size={14} className="text-stone-400 dark:text-zinc-500" />
                             Xem hồ sơ công khai
                           </button>
 
@@ -673,7 +669,7 @@ function MessagesContent() {
                                 activeConversation.other_user.name
                               );
                             }}
-                            className="w-full px-3.5 py-2 text-left hover:bg-stone-100 flex items-center gap-2 text-amber-700 font-semibold"
+                            className="w-full px-3.5 py-2 text-left hover:bg-stone-100 dark:hover:bg-zinc-750 flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold"
                           >
                             <Flag size={14} />
                             Báo cáo người dùng
@@ -684,7 +680,7 @@ function MessagesContent() {
                               setActionsMenuOpen(false);
                               handleToggleBlock();
                             }}
-                            className="w-full px-3.5 py-2 text-left hover:bg-stone-100 flex items-center gap-2 text-red-600 font-semibold"
+                            className="w-full px-3.5 py-2 text-left hover:bg-stone-100 dark:hover:bg-zinc-750 flex items-center gap-2 text-red-600 dark:text-red-400 font-semibold"
                           >
                             {activeConversation.is_blocked ? (
                               <>
@@ -704,9 +700,9 @@ function MessagesContent() {
 
                 {/* Block Warning Notice */}
                 {activeConversation.is_blocked && (
-                  <div className="bg-red-50 border-b border-red-200 p-3 flex items-center justify-between text-xs text-red-800">
+                  <div className="bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-900/50 p-3 flex items-center justify-between text-xs text-red-800 dark:text-red-300">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle size={16} className="text-red-600 shrink-0" />
+                      <AlertTriangle size={16} className="text-red-600 dark:text-red-400 shrink-0" />
                       <span>Cuộc trò chuyện này đang bị khóa do thiết lập chặn hai chiều.</span>
                     </div>
                     <button
@@ -719,19 +715,19 @@ function MessagesContent() {
                 )}
 
                 {/* Messages Timeline */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#faf9f6]">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#faf9f6] dark:bg-[#0E131F]">
                   {loadingMessages ? (
-                    <div className="py-12 text-center text-xs text-stone-400">
-                      <RefreshCw size={18} className="animate-spin mx-auto mb-2 text-stone-300" />
+                    <div className="py-12 text-center text-xs text-stone-400 dark:text-zinc-500">
+                      <RefreshCw size={18} className="animate-spin mx-auto mb-2 text-stone-300 dark:text-zinc-600" />
                       Đang tải tin nhắn...
                     </div>
                   ) : messages.length === 0 ? (
                     <div className="py-16 text-center">
-                      <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-[#1a3d28] flex items-center justify-center mx-auto mb-3">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-[#1a3d28] dark:text-emerald-400 flex items-center justify-center mx-auto mb-3">
                         <Sparkles size={20} />
                       </div>
-                      <h3 className="text-sm font-bold text-stone-800">Bắt đầu trò chuyện</h3>
-                      <p className="text-xs text-stone-500 mt-1 max-w-xs mx-auto">
+                      <h3 className="text-sm font-bold text-stone-800 dark:text-zinc-200">Bắt đầu trò chuyện</h3>
+                      <p className="text-xs text-stone-500 dark:text-zinc-400 mt-1 max-w-xs mx-auto">
                         Gửi lời chào để bắt đầu kết nối học tập với {activeConversation.other_user.name}.
                       </p>
                     </div>
@@ -751,10 +747,10 @@ function MessagesContent() {
                                 <img
                                   src={msg.sender.avatar_url}
                                   alt={msg.sender.name}
-                                  className="w-7 h-7 rounded-xl object-cover border border-stone-200"
+                                  className="w-7 h-7 rounded-xl object-cover border border-stone-200 dark:border-zinc-700"
                                 />
                               ) : (
-                                <div className="w-7 h-7 rounded-xl bg-stone-300 text-stone-700 font-bold flex items-center justify-center text-[11px]">
+                                <div className="w-7 h-7 rounded-xl bg-stone-300 dark:bg-zinc-700 text-stone-700 dark:text-zinc-200 font-bold flex items-center justify-center text-[11px]">
                                   {msg.sender.name.charAt(0).toUpperCase()}
                                 </div>
                               )}
@@ -766,8 +762,8 @@ function MessagesContent() {
                             <div
                               className={`relative px-4 py-2.5 rounded-2xl text-xs shadow-xs break-words whitespace-pre-wrap leading-relaxed ${
                                 isMe
-                                  ? 'bg-[#1a3d28] text-white rounded-br-xs'
-                                  : 'bg-white text-stone-900 border border-stone-200/90 rounded-bl-xs'
+                                  ? 'bg-[#1a3d28] dark:bg-emerald-700 text-white rounded-br-xs'
+                                  : 'bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 border border-stone-200/90 dark:border-zinc-700 rounded-bl-xs'
                               }`}
                             >
                               {msg.content}
@@ -778,7 +774,7 @@ function MessagesContent() {
                                   onClick={() =>
                                     handleOpenReport('message', msg.id, msg.content.substring(0, 40))
                                   }
-                                  className="opacity-0 group-hover:opacity-100 absolute -right-6 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-amber-600 transition-opacity"
+                                  className="opacity-0 group-hover:opacity-100 absolute -right-6 top-1/2 -translate-y-1/2 p-1 text-stone-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400 transition-opacity"
                                   title="Tố cáo tin nhắn này"
                                 >
                                   <Flag size={12} />
@@ -787,14 +783,14 @@ function MessagesContent() {
                             </div>
 
                             {/* Timestamp & Read Receipt */}
-                            <div className="flex items-center gap-1 mt-1 px-1 text-[10px] text-stone-400">
+                            <div className="flex items-center gap-1 mt-1 px-1 text-[10px] text-stone-400 dark:text-zinc-500">
                               <span>{formatTime(msg.created_at)}</span>
                               {isMe && (
                                 <span title={msg.is_read ? 'Đã xem' : 'Đã gửi'}>
                                   {msg.is_read ? (
-                                    <CheckCheck size={12} className="text-emerald-700" />
+                                    <CheckCheck size={12} className="text-emerald-700 dark:text-emerald-400" />
                                   ) : (
-                                    <Check size={12} className="text-stone-400" />
+                                    <Check size={12} className="text-stone-400 dark:text-zinc-500" />
                                   )}
                                 </span>
                               )}
@@ -808,7 +804,7 @@ function MessagesContent() {
                 </div>
 
                 {/* Input Area */}
-                <div className="p-3 border-t border-stone-200 bg-white">
+                <div className="p-3 border-t border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
                   <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                     <input
                       type="text"
@@ -820,7 +816,7 @@ function MessagesContent() {
                       disabled={activeConversation.is_blocked || sendingMessage}
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
-                      className="flex-1 px-4 py-2.5 text-xs bg-stone-100 rounded-2xl border border-stone-200/80 focus:bg-white focus:ring-2 focus:ring-[#1a3d28] outline-none disabled:bg-stone-50 disabled:cursor-not-allowed transition-all"
+                      className="flex-1 px-4 py-2.5 text-xs bg-stone-100 dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 rounded-2xl border border-stone-200/80 dark:border-zinc-700 focus:bg-white dark:focus:bg-zinc-800 focus:ring-2 focus:ring-[#1a3d28] dark:focus:ring-emerald-500 outline-none disabled:bg-stone-50 dark:disabled:bg-zinc-850 disabled:cursor-not-allowed transition-all"
                     />
 
                     <button
@@ -830,7 +826,7 @@ function MessagesContent() {
                         !messageInput.trim() ||
                         sendingMessage
                       }
-                      className="p-2.5 bg-[#1a3d28] text-white rounded-2xl hover:bg-[#122b1c] disabled:opacity-40 transition-colors shadow-xs cursor-pointer"
+                      className="p-2.5 bg-[#1a3d28] dark:bg-emerald-700 text-white rounded-2xl hover:bg-[#122b1c] dark:hover:bg-emerald-600 disabled:opacity-40 transition-colors shadow-xs cursor-pointer"
                       title="Gửi tin nhắn"
                     >
                       <Send size={16} />
@@ -839,12 +835,12 @@ function MessagesContent() {
                 </div>
               </>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#faf9f6]">
-                <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-[#1a3d28] flex items-center justify-center mb-4">
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#faf9f6] dark:bg-[#0E131F]">
+                <div className="w-16 h-16 rounded-3xl bg-emerald-100 dark:bg-emerald-950/60 text-[#1a3d28] dark:text-emerald-400 flex items-center justify-center mb-4">
                   <MessageSquare size={30} />
                 </div>
-                <h3 className="text-base font-bold text-stone-900">Hộp thoại tin nhắn</h3>
-                <p className="text-xs text-stone-500 mt-1 max-w-sm">
+                <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100">Hộp thoại tin nhắn</h3>
+                <p className="text-xs text-stone-500 dark:text-zinc-400 mt-1 max-w-sm">
                   Chọn một cuộc trò chuyện từ danh sách bên trái hoặc nhắn tin trực tiếp cho bạn bè từ hồ sơ cá nhân của họ.
                 </p>
               </div>
@@ -858,34 +854,34 @@ function MessagesContent() {
       {/* ────────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {reportModalOpen && (
-          <div className="fixed inset-0 z-[120] bg-black/50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[120] bg-black/50 dark:bg-black/70 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-stone-200"
+              className="bg-white dark:bg-zinc-900 rounded-3xl p-6 max-w-md w-full shadow-2xl border border-stone-200 dark:border-zinc-800"
             >
-              <div className="flex items-center gap-3 mb-4 text-amber-600">
-                <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center">
+              <div className="flex items-center gap-3 mb-4 text-amber-600 dark:text-amber-400">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center">
                   <ShieldAlert size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-stone-900">
+                  <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100">
                     Báo cáo {reportTarget?.type === 'user' ? 'người dùng' : 'tin nhắn vi phạm'}
                   </h3>
-                  <p className="text-xs text-stone-500">Mục tiêu: {reportTarget?.title}</p>
+                  <p className="text-xs text-stone-500 dark:text-zinc-400">Mục tiêu: {reportTarget?.title}</p>
                 </div>
               </div>
 
               <form onSubmit={handleSubmitReport} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wide mb-1.5">
+                  <label className="block text-xs font-bold text-stone-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">
                     Lý do báo cáo
                   </label>
                   <select
                     value={reportReason}
                     onChange={(e) => setReportReason(e.target.value as ReportReason)}
-                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-[#1a3d28] outline-none"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-stone-900 dark:text-zinc-100 focus:ring-2 focus:ring-[#1a3d28] dark:focus:ring-emerald-500 outline-none"
                   >
                     <option value="HARASSMENT">Quấy rối / Lăng mạ (HARASSMENT)</option>
                     <option value="SPAM">Tin nhắn rác / Spam (SPAM)</option>
@@ -896,7 +892,7 @@ function MessagesContent() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wide mb-1.5">
+                  <label className="block text-xs font-bold text-stone-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">
                     Chi tiết vi phạm {reportReason === 'OTHER' && <span className="text-red-500">*</span>}
                   </label>
                   <textarea
@@ -904,7 +900,7 @@ function MessagesContent() {
                     placeholder="Mô tả cụ thể hành vi vi phạm..."
                     value={reportDetails}
                     onChange={(e) => setReportDetails(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-[#1a3d28] outline-none"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-stone-900 dark:text-zinc-100 focus:ring-2 focus:ring-[#1a3d28] dark:focus:ring-emerald-500 outline-none"
                   />
                 </div>
 
@@ -912,7 +908,7 @@ function MessagesContent() {
                   <button
                     type="button"
                     onClick={() => setReportModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:bg-stone-100"
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
                   >
                     Hủy bỏ
                   </button>
@@ -935,31 +931,31 @@ function MessagesContent() {
       {/* ────────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {blockModalOpen && (
-          <div className="fixed inset-0 z-[120] bg-black/50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[120] bg-black/50 dark:bg-black/70 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-stone-200"
+              className="bg-white dark:bg-zinc-900 rounded-3xl p-6 max-w-md w-full shadow-2xl border border-stone-200 dark:border-zinc-800"
             >
-              <div className="flex items-center gap-3 mb-4 text-red-600">
-                <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center">
+              <div className="flex items-center gap-3 mb-4 text-red-600 dark:text-red-400">
+                <div className="w-10 h-10 rounded-2xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center">
                   <UserX size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-stone-900">
+                  <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100">
                     Chặn người dùng {blockTargetUser?.name}
                   </h3>
-                  <p className="text-xs text-stone-500">Chặn hai chiều toàn diện</p>
+                  <p className="text-xs text-stone-500 dark:text-zinc-400">Chặn hai chiều toàn diện</p>
                 </div>
               </div>
 
-              <p className="text-xs text-stone-600 leading-relaxed mb-4">
+              <p className="text-xs text-stone-600 dark:text-zinc-300 leading-relaxed mb-4">
                 Khi chặn người dùng này, cả hai sẽ không thể gửi tin nhắn cho nhau, không thấy tương tác hoặc bài đăng cộng đồng của nhau. Bạn có thể bỏ chặn bất kỳ lúc nào.
               </p>
 
               <div className="mb-4">
-                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wide mb-1.5">
+                <label className="block text-xs font-bold text-stone-700 dark:text-zinc-300 uppercase tracking-wide mb-1.5">
                   Lý do chặn (không bắt buộc)
                 </label>
                 <input
@@ -967,7 +963,7 @@ function MessagesContent() {
                   placeholder="Ví dụ: Spam tin nhắn, không muốn liên lạc..."
                   value={blockReason}
                   onChange={(e) => setBlockReason(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-[#1a3d28] outline-none"
+                  className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-stone-900 dark:text-zinc-100 focus:ring-2 focus:ring-[#1a3d28] dark:focus:ring-emerald-500 outline-none"
                 />
               </div>
 
@@ -975,7 +971,7 @@ function MessagesContent() {
                 <button
                   type="button"
                   onClick={() => setBlockModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:bg-stone-100"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
                 >
                   Hủy
                 </button>
@@ -1000,8 +996,8 @@ export default function MessagesPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#f5f3ee] flex items-center justify-center">
-          <div className="w-10 h-10 border-4 border-[#1a3d28] border-t-transparent rounded-full animate-spin" />
+        <div className="min-h-screen bg-[#f5f3ee] dark:bg-[#0B0F17] flex items-center justify-center">
+          <div className="w-10 h-10 border-4 border-[#1a3d28] dark:border-emerald-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >

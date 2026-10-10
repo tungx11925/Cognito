@@ -3,7 +3,7 @@ import { communityRepository } from '../repositories/community.repository';
 import { AppError } from '../utils/AppError';
 import cloudinary from '../config/cloudinary';
 import { documentProcessingService } from './document-processing.service';
-import { db } from '../db';
+import { db, withTransaction } from '../db';
 
 class DocumentService {
   /**
@@ -54,7 +54,7 @@ class DocumentService {
     publicId?: string;
   }) {
     const visibility = data.visibility === 'public' ? 'public' : 'private';
-    const isCommunityPublished = !!data.isCommunityPublished;
+    const isCommunityPublished = Boolean(data.isCommunityPublished ?? (data as any).is_community_published);
 
     const document = await documentRepository.createDocument({
       userId: data.userId,
@@ -73,7 +73,7 @@ class DocumentService {
 
     // If community published is explicitly requested, publish to community_resources
     if (isCommunityPublished && visibility === 'public') {
-      communityRepository.publishResource({
+      await communityRepository.publishResource({
         userId: data.userId,
         resourceType: 'document',
         resourceId: document.id,
@@ -119,8 +119,14 @@ class DocumentService {
     return { id: doc.id, status: 'PROCESSING' };
   }
 
-  async getDocuments(userId: number, search?: string, category?: string) {
-    const documents = await documentRepository.findDocuments(userId, search, category);
+  async getDocuments(
+    userId: number, 
+    search?: string, 
+    category?: string, 
+    limit: number = 50, 
+    offset: number = 0
+  ) {
+    const documents = await documentRepository.findDocuments(userId, search, category, undefined, limit, offset);
     return documents.map(d => this.formatDocument(d));
   }
 
@@ -177,14 +183,18 @@ class DocumentService {
 
     const doc = result.rows[0];
     if (isCommunityPublished && visibility === 'public') {
-      communityRepository.publishResource({
-        userId: data.userId,
-        resourceType: 'document',
-        resourceId: doc.id,
-        title: doc.title,
-        description: doc.description,
-        isPublic: true,
-      }).catch(() => {});
+      try {
+        await communityRepository.publishResource({
+          userId: data.userId,
+          resourceType: 'document',
+          resourceId: doc.id,
+          title: doc.title,
+          description: doc.description,
+          isPublic: true,
+        });
+      } catch (err) {
+        console.error('[CommunityPublish] Create publish error:', err);
+      }
     }
 
     return this.formatDocument(doc);
@@ -213,7 +223,7 @@ class DocumentService {
       const isNowPublic = (data.visibility !== undefined ? data.visibility === 'public' : updated.visibility === 'public');
       const isNowPublished = (data.is_community_published !== undefined ? data.is_community_published : updated.is_community_published);
       if (isNowPublic && isNowPublished) {
-        communityRepository.publishResource({
+        await communityRepository.publishResource({
           userId,
           resourceType: 'document',
           resourceId: docId,
@@ -222,7 +232,7 @@ class DocumentService {
           isPublic: true,
         }).catch(err => console.error('[CommunityPublish] Update publish error:', err));
       } else {
-        db.query(
+        await db.query(
           `UPDATE community_resources SET is_public = false WHERE resource_type = 'document' AND resource_id = $1`,
           [docId]
         ).catch(() => {});
@@ -241,13 +251,17 @@ class DocumentService {
       throw new AppError('Bạn không có quyền xóa tài liệu này', 403);
     }
 
-    // Unlink or delete from community_resources
-    await db.query(
-      `DELETE FROM community_resources WHERE resource_type = 'document' AND resource_id = $1`,
-      [docId]
-    ).catch(() => {});
+    // Safely delete within an atomic transaction
+    await withTransaction(async (client) => {
+      // 1. Delete associated community resources
+      await client.query(
+        `DELETE FROM community_resources WHERE resource_type = 'document' AND resource_id = $1`,
+        [docId]
+      );
 
-    await documentRepository.deleteDocument(docId, userId);
+      // 2. Delete document
+      await documentRepository.deleteDocument(docId, userId, client);
+    });
 
     // Delete from Cloudinary (non-blocking — best-effort)
     const cloudinaryPublicId = doc.cloudinary_public_id;

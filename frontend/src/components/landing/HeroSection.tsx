@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowRight, Play, Hourglass, BookText, MessageSquare, Layers, FileText, Search, Bell } from "lucide-react";
 
@@ -12,8 +13,9 @@ interface HeroSectionProps {
 }
 
 export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
+  const router = useRouter();
   return (
-    <section className="relative pb-[250px] lg:pb-[350px] bg-white overflow-hidden">
+    <section className="relative pb-[250px] lg:pb-[350px] bg-white overflow-hidden" suppressHydrationWarning>
       
       {/* Main Rounded Container */}
       <div 
@@ -94,7 +96,7 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
             </span>
-            <span style={{ color: "#1a3d28", fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.05em", uppercase: "true" } as any} className="tracking-wider uppercase">
+            <span style={{ color: "#1a3d28", fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }} className="tracking-wider uppercase">
               EduShare AI • KHÔNG GIAN HỌC THẾ HỆ MỚI
             </span>
           </motion.div>
@@ -201,24 +203,36 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
                 
                 <div className="space-y-1">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 pl-2">KHÔNG GIAN HỌC</div>
-                  <div className="flex items-center gap-2.5 px-3 py-2 bg-white rounded-lg shadow-sm border border-gray-100 text-sm text-[#1a3d28] font-semibold">
+                  <button 
+                    onClick={() => router.push('/library')}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 bg-white rounded-lg shadow-sm border border-gray-100 text-sm text-[#1a3d28] font-semibold hover:bg-emerald-50/50 transition-colors cursor-pointer text-left"
+                  >
                     <BookText size={15} /> Tài liệu
-                  </div>
-                  <div className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-600 font-medium hover:bg-gray-100 rounded-lg cursor-default transition-colors">
+                  </button>
+                  <button 
+                    onClick={() => router.push('/flashcards')}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-600 font-medium hover:bg-emerald-50/50 hover:text-[#1a3d28] rounded-lg cursor-pointer transition-colors text-left"
+                  >
                     <Layers size={15} /> Flashcards
-                  </div>
-                  <div className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-600 font-medium hover:bg-gray-100 rounded-lg cursor-default transition-colors">
+                  </button>
+                  <button 
+                    onClick={() => router.push('/library')}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-600 font-medium hover:bg-emerald-50/50 hover:text-[#1a3d28] rounded-lg cursor-pointer transition-colors text-left"
+                  >
                     <MessageSquare size={15} /> Trợ lý AI
-                  </div>
+                  </button>
                 </div>
 
                 <div className="mt-auto space-y-1">
-                  <div className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-500 font-medium hover:bg-gray-100 rounded-lg cursor-default">
+                  <button 
+                    onClick={onStartClick}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-500 font-medium hover:bg-gray-100 rounded-lg cursor-pointer transition-colors text-left"
+                  >
                     <div className="w-5 h-5 rounded-full bg-gray-200 overflow-hidden">
                       <img src="https://ui-avatars.com/api/?name=User&background=random" alt="Avatar" />
                     </div>
                     Tài khoản
-                  </div>
+                  </button>
                 </div>
               </div>
 
@@ -226,21 +240,39 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
               <div className="flex-1 p-6 lg:p-8 bg-white flex flex-col relative overflow-hidden">
                 {/* Topbar */}
                 <div className="flex justify-between items-center mb-8">
-                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-full px-4 py-2 w-1/2">
+                  <button 
+                    onClick={() => router.push('/search')}
+                    className="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-full px-4 py-2 w-1/2 cursor-pointer transition-colors text-left"
+                  >
                     <Search size={14} className="text-gray-400" />
                     <span className="text-xs text-gray-400 font-medium">Tìm kiếm tài liệu, flashcard...</span>
-                  </div>
-                  <div className="flex gap-3 text-gray-400">
+                  </button>
+                  <button 
+                    onClick={() => router.push('/library')}
+                    className="flex gap-3 text-gray-400 hover:text-[#1a3d28] cursor-pointer transition-colors p-1"
+                    title="Thông báo"
+                  >
                     <Bell size={18} />
-                  </div>
+                  </button>
                 </div>
 
-                <h3 className="text-lg font-bold text-gray-800 mb-4 font-sans">Tài liệu gần đây</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-800 font-sans">Tài liệu gần đây</h3>
+                  <button 
+                    onClick={() => router.push('/library')}
+                    className="text-xs font-bold text-[#1a3d28] hover:underline cursor-pointer"
+                  >
+                    Xem tất cả →
+                  </button>
+                </div>
 
                 {/* Grid of Cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
                   {/* Card 1: Red (Toán) */}
-                  <div className="bg-[#fff1f2] border border-[#ffe4e6] rounded-2xl p-5 flex flex-col hover:shadow-md transition-shadow cursor-default">
+                  <div 
+                    onClick={() => router.push('/library')}
+                    className="bg-[#fff1f2] border border-[#ffe4e6] rounded-2xl p-5 flex flex-col hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
+                  >
                     <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-rose-500 mb-4">
                       <BookText size={20} strokeWidth={2.5}/>
                     </div>
@@ -258,7 +290,10 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
                   </div>
 
                   {/* Card 2: Blue (Vật lý) */}
-                  <div className="bg-[#eff6ff] border border-[#dbeafe] rounded-2xl p-5 flex flex-col hover:shadow-md transition-shadow cursor-default">
+                  <div 
+                    onClick={() => router.push('/flashcards')}
+                    className="bg-[#eff6ff] border border-[#dbeafe] rounded-2xl p-5 flex flex-col hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
+                  >
                     <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-blue-500 mb-4">
                       <Layers size={20} strokeWidth={2.5}/>
                     </div>
@@ -276,7 +311,10 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
                   </div>
 
                   {/* Card 3: Green (Lịch sử - AI Chat) */}
-                  <div className="bg-[#f0fdf4] border border-[#dcfce7] rounded-2xl p-5 flex flex-col hover:shadow-md transition-shadow cursor-default hidden sm:flex">
+                  <div 
+                    onClick={() => router.push('/library')}
+                    className="bg-[#f0fdf4] border border-[#dcfce7] rounded-2xl p-5 flex flex-col hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer hidden sm:flex"
+                  >
                     <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-green-500 mb-4">
                       <MessageSquare size={20} strokeWidth={2.5}/>
                     </div>
@@ -291,7 +329,10 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
                   </div>
                   
                   {/* Card 4: Yellow (Ghi chú) */}
-                  <div className="bg-[#fef9c3] border border-[#fde047] rounded-2xl p-5 flex flex-col hover:shadow-md transition-shadow cursor-default hidden lg:flex">
+                  <div 
+                    onClick={() => router.push('/notes')}
+                    className="bg-[#fef9c3] border border-[#fde047] rounded-2xl p-5 flex flex-col hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer hidden lg:flex"
+                  >
                     <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-yellow-600 mb-4">
                       <FileText size={20} strokeWidth={2.5}/>
                     </div>
@@ -311,7 +352,8 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
 
           {/* Floating Badge - Top Right (Memory Score) */}
           <motion.div
-            className="absolute -top-6 -right-4 md:-right-8 px-6 py-4 rounded-2xl flex flex-col justify-center items-center backdrop-blur-md"
+            onClick={() => router.push('/flashcards')}
+            className="absolute -top-6 -right-4 md:-right-8 px-6 py-4 rounded-2xl flex flex-col justify-center items-center backdrop-blur-md cursor-pointer hover:scale-105 transition-transform"
             style={{ background: "rgba(26,61,40,0.95)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 15px 35px rgba(26,61,40,0.4)" }}
             animate={{ y: [0, -8, 0] }}
             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
@@ -326,7 +368,8 @@ export function HeroSection({ onStartClick, onDemoClick }: HeroSectionProps) {
 
           {/* Floating Badge - Bottom Left (Pomodoro) */}
           <motion.div
-            className="absolute -bottom-6 -left-4 md:-left-8 px-5 py-3.5 rounded-2xl flex items-center gap-3 backdrop-blur-md"
+            onClick={() => router.push('/focus')}
+            className="absolute -bottom-6 -left-4 md:-left-8 px-5 py-3.5 rounded-2xl flex items-center gap-3 backdrop-blur-md cursor-pointer hover:scale-105 transition-transform"
             style={{ background: "rgba(255,255,255,0.95)", boxShadow: "0 15px 35px rgba(0,0,0,0.15)", border: "1px solid rgba(0,0,0,0.05)" }}
             animate={{ y: [0, 8, 0] }}
             transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}

@@ -43,3 +43,15 @@ backend/uploads/
 
 
 frontend/tsconfig.tsbuildinfo
+
+# Scratch, Backups & Dev Logs
+backend/*.log
+backend/backend-dev-smoke.log
+backend/backups/
+backend/scripts/dead-code-audit-results.json
+scripts/dev/
+backend/scripts/dev/
+backend/scratch/
+scratch/
+**/.env.production
+

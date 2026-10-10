@@ -19,19 +19,19 @@ import RegisterModal from '@/components/auth/RegisterModal';
 import { progressService, ProgressSummary, LearningGoal } from '@/services/progress.service';
 
 const TARGET_TYPE_LABELS: Record<string, { label: string; unit: string; icon: any; color: string }> = {
-  study_time_minutes: { label: 'Thời gian học tập', unit: 'phút', icon: Clock, color: 'text-blue-600 bg-blue-50 border-blue-200' },
-  quizzes_completed: { label: 'Luyện đề trắc nghiệm', unit: 'bài thi', icon: HelpCircle, color: 'text-purple-600 bg-purple-50 border-purple-200' },
-  flashcards_reviewed: { label: 'Ôn tập Flashcards', unit: 'thẻ', icon: Layers, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-  documents_read: { label: 'Đọc tài liệu', unit: 'tài liệu', icon: BookOpen, color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  study_time_minutes: { label: 'Thời gian học tập', unit: 'phút', icon: Clock, color: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800' },
+  quizzes_completed: { label: 'Luyện đề trắc nghiệm', unit: 'bài thi', icon: HelpCircle, color: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800' },
+  flashcards_reviewed: { label: 'Ôn tập Flashcards', unit: 'thẻ', icon: Layers, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800' },
+  documents_read: { label: 'Đọc tài liệu', unit: 'tài liệu', icon: BookOpen, color: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800' },
 };
 
 const ACTIVITY_TYPE_LABELS: Record<string, { label: string; icon: any; badgeClass: string }> = {
-  take_quiz: { label: 'Làm bài trắc nghiệm', icon: HelpCircle, badgeClass: 'bg-purple-100 text-purple-800 border-purple-200' },
-  read_doc: { label: 'Đọc tài liệu', icon: BookOpen, badgeClass: 'bg-blue-100 text-blue-800 border-blue-200' },
-  study_flashcards: { label: 'Ôn tập Flashcards', icon: Layers, badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  focus_session: { label: 'Phiên học tập trung', icon: Clock, badgeClass: 'bg-amber-100 text-amber-800 border-amber-200' },
-  daily_checkin: { label: 'Điểm danh học tập', icon: Flame, badgeClass: 'bg-orange-100 text-orange-800 border-orange-200' },
-  create_note: { label: 'Ghi chú tài liệu', icon: FileText, badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  take_quiz: { label: 'Làm bài trắc nghiệm', icon: HelpCircle, badgeClass: 'bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800' },
+  read_doc: { label: 'Đọc tài liệu', icon: BookOpen, badgeClass: 'bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800' },
+  study_flashcards: { label: 'Ôn tập Flashcards', icon: Layers, badgeClass: 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' },
+  focus_session: { label: 'Phiên học tập trung', icon: Clock, badgeClass: 'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
+  daily_checkin: { label: 'Điểm danh học tập', icon: Flame, badgeClass: 'bg-orange-100 dark:bg-orange-950/40 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800' },
+  create_note: { label: 'Ghi chú tài liệu', icon: FileText, badgeClass: 'bg-indigo-100 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' },
 };
 
 export default function ProgressPage() {
@@ -184,8 +184,8 @@ export default function ProgressPage() {
           <div
             key={i}
             title={`Hôm nay (${cellStr}): ${hasStudied ? 'Đã học 🔥' : 'Chưa học'}`}
-            className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-bold ring-2 ring-[#1a2e1c] ${
-              hasStudied ? 'bg-[#1a2e1c] text-white shadow-sm' : 'bg-orange-50 text-orange-600 border border-orange-300'
+            className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-bold ring-2 ring-[#1a2e1c] dark:ring-emerald-500 ${
+              hasStudied ? 'bg-[#1a2e1c] dark:bg-emerald-700 text-white shadow-sm' : 'bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border border-orange-300 dark:border-orange-800'
             }`}
           >
             {hasStudied ? '🔥' : '!'}
@@ -198,7 +198,7 @@ export default function ProgressPage() {
           <div
             key={i}
             title={`Ngày tương lai (${cellStr})`}
-            className="aspect-square rounded-lg border border-dashed border-gray-200 bg-gray-50/50"
+            className="aspect-square rounded-lg border border-dashed border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/20"
           />
         );
       }
@@ -210,7 +210,7 @@ export default function ProgressPage() {
           className={`aspect-square rounded-lg transition-colors ${
             hasStudied
               ? 'bg-gradient-to-br from-emerald-500 to-[#1a2e1c] text-white flex items-center justify-center text-[10px]'
-              : 'bg-gray-100 hover:bg-gray-200'
+              : 'bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700'
           }`}
         >
           {hasStudied ? '✓' : ''}
@@ -225,7 +225,7 @@ export default function ProgressPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#f5f3ee] text-[#0d1a14] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#f5f3ee] dark:bg-[#0B0F17] text-[#0d1a14] dark:text-zinc-100 flex flex-col font-sans transition-colors duration-300">
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
@@ -235,21 +235,21 @@ export default function ProgressPage() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
         {/* Header Banner */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)]">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 dark:border-zinc-800 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)] dark:shadow-none">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#1a2e1c]/10 text-[#1a2e1c] border border-[#1a2e1c]/20">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#1a2e1c]/10 text-[#1a2e1c] border border-[#1a2e1c]/20 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/40">
                 <TrendingUp size={13} />
                 Tiến độ học tập thật 100%
               </span>
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800">
                 Múi giờ UTC+7 (Việt Nam)
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0d1a14] tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0d1a14] dark:text-zinc-100 tracking-tight">
               Tiến độ & Mục tiêu học tập cá nhân
             </h1>
-            <p className="text-sm text-gray-600 mt-1 max-w-2xl">
+            <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1 max-w-2xl">
               Theo dõi chuỗi ngày học liên tục (Study Streak), tiến độ hoàn thành mục tiêu ngày và toàn bộ nhật ký học tập thực tế từ các module.
             </p>
           </div>
@@ -258,14 +258,21 @@ export default function ProgressPage() {
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm font-semibold transition-all shadow-xs active:scale-95 disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-200 hover:bg-gray-50 dark:hover:bg-zinc-700 text-sm font-semibold transition-all shadow-xs active:scale-95 disabled:opacity-50"
             >
               <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
               Làm mới dữ liệu
             </button>
             <button
-              onClick={() => setIsModalOpen(true)}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a2e1c] text-white hover:bg-[#2d5a3d] text-sm font-bold transition-all shadow-md active:scale-95"
+              onClick={() => {
+                if (!isAuthenticated) {
+                  setShowLoginModal(true);
+                  triggerMessage('Vui lòng đăng nhập để đặt mục tiêu học tập', 'error');
+                  return;
+                }
+                setIsModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a2e1c] hover:bg-[#2d5a3d] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white text-sm font-bold transition-all shadow-md active:scale-95"
             >
               <Plus size={16} />
               Đặt mục tiêu mới
@@ -275,21 +282,21 @@ export default function ProgressPage() {
 
         {/* Unauthenticated Alert Banner */}
         {!isAuthenticated && (
-          <div className="mb-8 p-6 bg-amber-50 border-2 border-amber-200 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="mb-8 p-6 bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-200 dark:border-amber-800/40 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
                 <AlertCircle size={22} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-amber-900">Bạn chưa đăng nhập</h3>
-                <p className="text-xs text-amber-700 mt-0.5">
+                <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200">Bạn chưa đăng nhập</h3>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                   Vui lòng đăng nhập để lưu trữ nhật ký học tập, theo dõi chuỗi ngày học liên tục và đồng bộ tiến độ mục tiêu cá nhân.
                 </p>
               </div>
             </div>
             <button
               onClick={() => setShowLoginModal(true)}
-              className="px-5 py-2.5 rounded-xl bg-[#1a2e1c] text-white hover:bg-[#2d5a3d] text-xs font-bold shrink-0 transition-all shadow-sm"
+              className="px-5 py-2.5 rounded-xl bg-[#1a2e1c] hover:bg-[#2d5a3d] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white text-xs font-bold shrink-0 transition-all shadow-sm"
             >
               Đăng nhập ngay
             </button>
@@ -298,19 +305,19 @@ export default function ProgressPage() {
 
         {/* Error Alert Banner */}
         {error && !summary && (
-          <div className="mb-8 p-6 bg-rose-50 border-2 border-rose-200 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="mb-8 p-6 bg-rose-50 dark:bg-rose-950/30 border-2 border-rose-200 dark:border-rose-800/40 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 flex items-center justify-center shrink-0">
                 <AlertCircle size={22} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-rose-900">Không thể tải dữ liệu tiến độ</h3>
-                <p className="text-xs text-rose-700 mt-0.5">{error}</p>
+                <h3 className="text-sm font-bold text-rose-900 dark:text-rose-200">Không thể tải dữ liệu tiến độ</h3>
+                <p className="text-xs text-rose-700 dark:text-rose-400 mt-0.5">{error}</p>
               </div>
             </div>
             <button
               onClick={handleRefresh}
-              className="px-5 py-2.5 rounded-xl bg-rose-700 text-white hover:bg-rose-800 text-xs font-bold shrink-0 transition-all shadow-sm flex items-center gap-2"
+              className="px-5 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold shrink-0 transition-all shadow-sm flex items-center gap-2"
             >
               <RefreshCw size={14} />
               Thử lại
@@ -323,24 +330,24 @@ export default function ProgressPage() {
           <div className="space-y-8 animate-pulse">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-32 bg-white rounded-2xl border border-gray-200 p-5 flex flex-col justify-between">
-                  <div className="h-3 w-16 bg-gray-200 rounded" />
-                  <div className="h-8 w-24 bg-gray-200 rounded mt-2" />
+                <div key={i} className="h-32 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-5 flex flex-col justify-between">
+                  <div className="h-3 w-16 bg-gray-200 dark:bg-zinc-800 rounded" />
+                  <div className="h-8 w-24 bg-gray-200 dark:bg-zinc-800 rounded mt-2" />
                 </div>
               ))}
             </div>
-            <div className="h-48 bg-white rounded-3xl border border-gray-200 p-6 flex flex-col justify-between">
-              <div className="h-4 w-48 bg-gray-200 rounded" />
-              <div className="h-24 bg-gray-100 rounded-2xl" />
+            <div className="h-48 bg-white dark:bg-zinc-900 rounded-3xl border border-gray-200 dark:border-zinc-800 p-6 flex flex-col justify-between">
+              <div className="h-4 w-48 bg-gray-200 dark:bg-zinc-800 rounded" />
+              <div className="h-24 bg-gray-100 dark:bg-zinc-800/50 rounded-2xl" />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 h-72 bg-white rounded-3xl border border-gray-200 p-6">
-                <div className="h-4 w-56 bg-gray-200 rounded mb-4" />
-                <div className="h-48 bg-gray-100 rounded-2xl" />
+              <div className="lg:col-span-2 h-72 bg-white dark:bg-zinc-900 rounded-3xl border border-gray-200 dark:border-zinc-800 p-6">
+                <div className="h-4 w-56 bg-gray-200 dark:bg-zinc-800 rounded mb-4" />
+                <div className="h-48 bg-gray-100 dark:bg-zinc-800/50 rounded-2xl" />
               </div>
-              <div className="h-72 bg-white rounded-3xl border border-gray-200 p-6">
-                <div className="h-4 w-40 bg-gray-200 rounded mb-4" />
-                <div className="h-48 bg-gray-100 rounded-2xl" />
+              <div className="h-72 bg-white dark:bg-zinc-900 rounded-3xl border border-gray-200 dark:border-zinc-800 p-6">
+                <div className="h-4 w-40 bg-gray-200 dark:bg-zinc-800 rounded mb-4" />
+                <div className="h-48 bg-gray-100 dark:bg-zinc-800/50 rounded-2xl" />
               </div>
             </div>
           </div>
@@ -349,105 +356,105 @@ export default function ProgressPage() {
             {/* Top 5 Metrics Cards */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           {/* Streak Card */}
-          <div className="col-span-2 sm:col-span-1 bg-white p-5 rounded-2xl border-2 border-orange-200 shadow-[3px_3px_0px_0px_rgba(249,115,22,0.15)] flex flex-col justify-between">
+          <div className="col-span-2 sm:col-span-1 bg-white dark:bg-zinc-900 p-5 rounded-2xl border-2 border-orange-200 dark:border-orange-900/50 shadow-[3px_3px_0px_0px_rgba(249,115,22,0.15)] dark:shadow-none flex flex-col justify-between">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Chuỗi Streak</span>
-              <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+              <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Chuỗi Streak</span>
+              <div className="w-8 h-8 rounded-lg bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400 flex items-center justify-center">
                 <Flame size={18} className="fill-orange-500" />
               </div>
             </div>
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl sm:text-4xl font-black text-orange-600">
+                <span className="text-3xl sm:text-4xl font-black text-orange-600 dark:text-orange-400">
                   {summary?.streak?.currentStreak || 0}
                 </span>
-                <span className="text-xs font-semibold text-gray-500">ngày liên tục</span>
+                <span className="text-xs font-semibold text-gray-500 dark:text-zinc-400">ngày liên tục</span>
               </div>
-              <p className="text-[11px] text-gray-400 mt-1">
-                Kỷ lục: <strong className="text-gray-700">{summary?.streak?.longestStreak || 0} ngày</strong> • {summary?.streak?.studiedToday ? '✓ Đã học hôm nay' : '⚡ Chưa học hôm nay'}
+              <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1">
+                Kỷ lục: <strong className="text-gray-700 dark:text-zinc-300">{summary?.streak?.longestStreak || 0} ngày</strong> • {summary?.streak?.studiedToday ? '✓ Đã học hôm nay' : '⚡ Chưa học hôm nay'}
               </p>
             </div>
           </div>
 
           {/* Total Study Time */}
-          <div className="bg-white p-5 rounded-2xl border-2 border-[#1a2e1c]/20 shadow-[3px_3px_0px_0px_rgba(26,46,28,0.08)] flex flex-col justify-between">
+          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border-2 border-[#1a2e1c]/20 dark:border-zinc-800 shadow-[3px_3px_0px_0px_rgba(26,46,28,0.08)] dark:shadow-none flex flex-col justify-between">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Thời gian học</span>
-              <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Thời gian học</span>
+              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                 <Clock size={17} />
               </div>
             </div>
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl sm:text-4xl font-black text-[#0d1a14]">
+                <span className="text-3xl sm:text-4xl font-black text-[#0d1a14] dark:text-zinc-100">
                   {summary?.total_study_minutes || 0}
                 </span>
-                <span className="text-xs font-semibold text-gray-500">phút</span>
+                <span className="text-xs font-semibold text-gray-500 dark:text-zinc-400">phút</span>
               </div>
-              <p className="text-[11px] text-gray-400 mt-1">
+              <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1">
                 Tương đương {((summary?.total_study_minutes || 0) / 60).toFixed(1)} giờ thực tế
               </p>
             </div>
           </div>
 
           {/* Quizzes Completed */}
-          <div className="bg-white p-5 rounded-2xl border-2 border-[#1a2e1c]/20 shadow-[3px_3px_0px_0px_rgba(26,46,28,0.08)] flex flex-col justify-between">
+          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border-2 border-[#1a2e1c]/20 dark:border-zinc-800 shadow-[3px_3px_0px_0px_rgba(26,46,28,0.08)] dark:shadow-none flex flex-col justify-between">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Bài trắc nghiệm</span>
-              <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+              <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Bài trắc nghiệm</span>
+              <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
                 <HelpCircle size={17} />
               </div>
             </div>
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl sm:text-4xl font-black text-[#0d1a14]">
+                <span className="text-3xl sm:text-4xl font-black text-[#0d1a14] dark:text-zinc-100">
                   {summary?.total_quizzes_completed || 0}
                 </span>
-                <span className="text-xs font-semibold text-gray-500">lượt nộp</span>
+                <span className="text-xs font-semibold text-gray-500 dark:text-zinc-400">lượt nộp</span>
               </div>
-              <p className="text-[11px] text-gray-400 mt-1">
+              <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1">
                 Chấm điểm tự động và lưu lịch sử
               </p>
             </div>
           </div>
 
           {/* Flashcards Reviewed */}
-          <div className="bg-white p-5 rounded-2xl border-2 border-[#1a2e1c]/20 shadow-[3px_3px_0px_0px_rgba(26,46,28,0.08)] flex flex-col justify-between">
+          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border-2 border-[#1a2e1c]/20 dark:border-zinc-800 shadow-[3px_3px_0px_0px_rgba(26,46,28,0.08)] dark:shadow-none flex flex-col justify-between">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Thẻ Flashcard</span>
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Thẻ Flashcard</span>
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                 <Layers size={17} />
               </div>
             </div>
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl sm:text-4xl font-black text-[#0d1a14]">
+                <span className="text-3xl sm:text-4xl font-black text-[#0d1a14] dark:text-zinc-100">
                   {summary?.total_flashcards_reviewed || 0}
                 </span>
-                <span className="text-xs font-semibold text-gray-500">lượt ôn</span>
+                <span className="text-xs font-semibold text-gray-500 dark:text-zinc-400">lượt ôn</span>
               </div>
-              <p className="text-[11px] text-gray-400 mt-1">
+              <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1">
                 Lặp lại ngắt quãng SM-2
               </p>
             </div>
           </div>
 
           {/* Documents Read */}
-          <div className="bg-white p-5 rounded-2xl border-2 border-[#1a2e1c]/20 shadow-[3px_3px_0px_0px_rgba(26,46,28,0.08)] flex flex-col justify-between">
+          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border-2 border-[#1a2e1c]/20 dark:border-zinc-800 shadow-[3px_3px_0px_0px_rgba(26,46,28,0.08)] dark:shadow-none flex flex-col justify-between">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tài liệu học</span>
-              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Tài liệu học</span>
+              <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
                 <BookOpen size={17} />
               </div>
             </div>
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl sm:text-4xl font-black text-[#0d1a14]">
+                <span className="text-3xl sm:text-4xl font-black text-[#0d1a14] dark:text-zinc-100">
                   {summary?.total_documents_read || 0}
                 </span>
-                <span className="text-xs font-semibold text-gray-500">tài liệu</span>
+                <span className="text-xs font-semibold text-gray-500 dark:text-zinc-400">tài liệu</span>
               </div>
-              <p className="text-[11px] text-gray-400 mt-1">
+              <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1">
                 Đã xử lý & học tập trong kho
               </p>
             </div>
@@ -455,20 +462,27 @@ export default function ProgressPage() {
         </div>
 
         {/* Section 1: Learning Goals */}
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)] mb-8">
+        <div className="bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 dark:border-zinc-800 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)] dark:shadow-none mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
             <div>
               <div className="flex items-center gap-2">
-                <Target className="text-[#1a2e1c]" size={22} />
-                <h2 className="text-xl font-bold text-[#0d1a14]">Mục tiêu học tập cá nhân (Learning Goals)</h2>
+                <Target className="text-[#1a2e1c] dark:text-emerald-400" size={22} />
+                <h2 className="text-xl font-bold text-[#0d1a14] dark:text-zinc-100">Mục tiêu học tập cá nhân (Learning Goals)</h2>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1">
                 Tiến độ hôm nay được tính tự động từ dữ liệu hoạt động học tập thực tế (Asia/Ho_Chi_Minh).
               </p>
             </div>
             <button
-              onClick={() => setIsModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1a2e1c] hover:underline"
+              onClick={() => {
+                if (!isAuthenticated) {
+                  setShowLoginModal(true);
+                  triggerMessage('Vui lòng đăng nhập để đặt mục tiêu học tập', 'error');
+                  return;
+                }
+                setIsModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1a2e1c] dark:text-emerald-400 hover:underline"
             >
               <Plus size={14} /> Thêm mục tiêu mới
             </button>
@@ -481,7 +495,7 @@ export default function ProgressPage() {
                   label: goal.target_type,
                   unit: '',
                   icon: Target,
-                  color: 'text-gray-700 bg-gray-50 border-gray-200'
+                  color: 'text-gray-700 dark:text-zinc-300 bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700'
                 };
                 const IconComponent = typeConfig.icon;
 
@@ -490,8 +504,8 @@ export default function ProgressPage() {
                     key={goal.id}
                     className={`p-5 rounded-2xl border-2 transition-all flex flex-col justify-between ${
                       goal.is_completed
-                        ? 'border-emerald-300 bg-emerald-50/40 shadow-xs'
-                        : 'border-gray-200 bg-white hover:border-[#1a2e1c]/40 shadow-xs'
+                        ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-xs'
+                        : 'border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 hover:border-[#1a2e1c]/40 dark:hover:border-zinc-700 shadow-xs'
                     }`}
                   >
                     <div>
@@ -503,53 +517,53 @@ export default function ProgressPage() {
                         <button
                           onClick={() => handleDeleteGoal(goal.id)}
                           title="Xóa mục tiêu này"
-                          className="text-gray-400 hover:text-rose-600 transition-colors p-1"
+                          className="text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors p-1"
                         >
                           <Trash2 size={14} />
                         </button>
                       </div>
 
-                      <h3 className="font-bold text-gray-900 text-base leading-snug line-clamp-1">
+                      <h3 className="font-bold text-gray-900 dark:text-zinc-100 text-base leading-snug line-clamp-1">
                         {goal.title}
                       </h3>
                       {goal.subject && (
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Chủ đề: <span className="font-semibold text-gray-700">{goal.subject}</span>
+                        <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
+                          Chủ đề: <span className="font-semibold text-gray-700 dark:text-zinc-300">{goal.subject}</span>
                         </p>
                       )}
                     </div>
 
                     <div className="mt-4">
                       <div className="flex items-baseline justify-between text-xs mb-1.5">
-                        <span className="text-gray-500 font-medium">
-                          Hôm nay: <strong className="text-gray-900 font-bold">{goal.current_value}</strong> / {goal.target_value} {typeConfig.unit}
+                        <span className="text-gray-500 dark:text-zinc-400 font-medium">
+                          Hôm nay: <strong className="text-gray-900 dark:text-zinc-100 font-bold">{goal.current_value}</strong> / {goal.target_value} {typeConfig.unit}
                         </span>
-                        <span className={`font-bold ${goal.is_completed ? 'text-emerald-700' : 'text-[#1a2e1c]'}`}>
+                        <span className={`font-bold ${goal.is_completed ? 'text-emerald-700 dark:text-emerald-400' : 'text-[#1a2e1c] dark:text-emerald-400'}`}>
                           {goal.progress_percentage}%
                         </span>
                       </div>
 
-                      <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden border border-gray-200/60">
+                      <div className="w-full h-3 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden border border-gray-200/60 dark:border-zinc-700">
                         <div
                           className={`h-full rounded-full transition-all duration-500 ${
                             goal.is_completed
                               ? 'bg-gradient-to-r from-emerald-500 to-emerald-600'
-                              : 'bg-gradient-to-r from-orange-400 to-[#1a2e1c]'
+                              : 'bg-gradient-to-r from-orange-400 to-[#1a2e1c] dark:to-emerald-600'
                           }`}
                           style={{ width: `${Math.min(100, goal.progress_percentage)}%` }}
                         />
                       </div>
 
                       <div className="flex items-center justify-between mt-2.5 text-[11px]">
-                        <span className="text-gray-400 uppercase tracking-wider">
+                        <span className="text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
                           Chu kỳ: {goal.period === 'weekly' ? 'Hàng tuần' : 'Mỗi ngày'}
                         </span>
                         {goal.is_completed ? (
-                          <span className="inline-flex items-center gap-1 font-bold text-emerald-700">
+                          <span className="inline-flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-400">
                             <CheckCircle2 size={13} /> Hoàn thành 🎉
                           </span>
                         ) : (
-                          <span className="text-gray-500 font-medium">
+                          <span className="text-gray-500 dark:text-zinc-400 font-medium">
                             Còn {Math.max(0, goal.target_value - goal.current_value)} {typeConfig.unit}
                           </span>
                         )}
@@ -560,12 +574,12 @@ export default function ProgressPage() {
               })}
             </div>
           ) : (
-            <div className="text-center py-10 px-4 bg-[#fdfcfb] rounded-2xl border border-dashed border-gray-300">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto mb-3">
+            <div className="text-center py-10 px-4 bg-[#fdfcfb] dark:bg-zinc-900/40 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-800">
+              <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center mx-auto mb-3">
                 <Target size={24} />
               </div>
-              <h3 className="text-base font-bold text-gray-800">Bạn chưa đặt mục tiêu học tập nào</h3>
-              <p className="text-xs text-gray-500 max-w-md mx-auto mt-1 mb-5">
+              <h3 className="text-base font-bold text-gray-800 dark:text-zinc-200">Bạn chưa đặt mục tiêu học tập nào</h3>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 max-w-md mx-auto mt-1 mb-5">
                 Thiết lập mục tiêu hàng ngày (ví dụ 60 phút học, 2 bài trắc nghiệm) giúp bạn duy trì kỷ luật và nâng cao hiệu quả ôn luyện.
               </p>
 
@@ -573,21 +587,21 @@ export default function ProgressPage() {
                 <button
                   onClick={() => handleQuickCreate('Học 60 phút mỗi ngày', 'Tất cả môn', 'study_time_minutes', 60)}
                   disabled={savingGoal}
-                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white border border-gray-300 hover:border-[#1a2e1c] hover:bg-gray-50 transition-all text-gray-700 shadow-2xs"
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 hover:border-[#1a2e1c] dark:hover:border-emerald-500 hover:bg-gray-50 dark:hover:bg-zinc-700 transition-all text-gray-700 dark:text-zinc-200 shadow-2xs"
                 >
                   ⚡ Mẫu: Học 60 phút/ngày
                 </button>
                 <button
                   onClick={() => handleQuickCreate('Luyện 2 bài trắc nghiệm', 'Toán học', 'quizzes_completed', 2)}
                   disabled={savingGoal}
-                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white border border-gray-300 hover:border-[#1a2e1c] hover:bg-gray-50 transition-all text-gray-700 shadow-2xs"
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 hover:border-[#1a2e1c] dark:hover:border-emerald-500 hover:bg-gray-50 dark:hover:bg-zinc-700 transition-all text-gray-700 dark:text-zinc-200 shadow-2xs"
                 >
                   ⚡ Mẫu: Luyện 2 bài quiz/ngày
                 </button>
                 <button
                   onClick={() => handleQuickCreate('Ôn tập 20 thẻ Flashcard', 'Từ vựng', 'flashcards_reviewed', 20)}
                   disabled={savingGoal}
-                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white border border-gray-300 hover:border-[#1a2e1c] hover:bg-gray-50 transition-all text-gray-700 shadow-2xs"
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 hover:border-[#1a2e1c] dark:hover:border-emerald-500 hover:bg-gray-50 dark:hover:bg-zinc-700 transition-all text-gray-700 dark:text-zinc-200 shadow-2xs"
                 >
                   ⚡ Mẫu: Ôn 20 flashcard/ngày
                 </button>
@@ -599,14 +613,14 @@ export default function ProgressPage() {
         {/* Section 2: Weekly Chart & Calendar Heatmap */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           {/* Weekly Minutes Chart (2 cols) */}
-          <div className="lg:col-span-2 bg-white p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)]">
+          <div className="lg:col-span-2 bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 dark:border-zinc-800 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)] dark:shadow-none">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg font-bold text-[#0d1a14] flex items-center gap-2">
-                  <BarChart3 size={20} className="text-[#1a2e1c]" />
+                <h2 className="text-lg font-bold text-[#0d1a14] dark:text-zinc-100 flex items-center gap-2">
+                  <BarChart3 size={20} className="text-[#1a2e1c] dark:text-emerald-400" />
                   Thời lượng học tập 7 ngày gần nhất
                 </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
                   Thống kê số phút học thực tế ghi nhận từ mọi hoạt động của bạn.
                 </p>
               </div>
@@ -618,11 +632,11 @@ export default function ProgressPage() {
                   <AreaChart data={summary.weekly_chart} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="progressMinutesGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#1a2e1c" stopOpacity={0.8} />
-                        <stop offset="95%" stopColor="#1a2e1c" stopOpacity={0.05} />
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.05} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#88888820" />
                     <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#6b7280' }} />
                     <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} unit="m" />
                     <Tooltip
@@ -631,12 +645,12 @@ export default function ProgressPage() {
                         const item = items?.[0]?.payload;
                         return item ? `${lbl} (${item.date}) - ${item.quizzes_count || 0} bài quiz` : lbl;
                       }}
-                      contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                      contentStyle={{ backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', color: '#f4f4f5' }}
                     />
                     <Area
                       type="monotone"
                       dataKey="minutes"
-                      stroke="#1a2e1c"
+                      stroke="#10b981"
                       strokeWidth={3}
                       fillOpacity={1}
                       fill="url(#progressMinutesGradient)"
@@ -644,7 +658,7 @@ export default function ProgressPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                <div className="h-full flex items-center justify-center text-sm text-gray-400 dark:text-zinc-500">
                   Chưa có dữ liệu học tập trong tuần này
                 </div>
               )}
@@ -652,23 +666,23 @@ export default function ProgressPage() {
           </div>
 
           {/* Streak 6-week Calendar Heatmap (1 col) */}
-          <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)] flex flex-col justify-between">
+          <div className="bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 dark:border-zinc-800 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)] dark:shadow-none flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-bold text-[#0d1a14] flex items-center gap-2">
+                <h2 className="text-lg font-bold text-[#0d1a14] dark:text-zinc-100 flex items-center gap-2">
                   <Flame size={20} className="text-orange-500 fill-orange-500" />
                   Lịch điểm danh (6 tuần)
                 </h2>
-                <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
+                <span className="text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded-full border border-orange-200 dark:border-orange-800">
                   {summary?.streak?.currentStreak || 0} ngày liên tiếp
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mb-4">
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mb-4">
                 Mỗi ô tương ứng một ngày. Hoàn thành bài quiz, đọc tài liệu hoặc ôn flashcard để giữ chuỗi!
               </p>
 
               {/* Weekday headers */}
-              <div className="grid grid-cols-7 gap-1.5 text-center text-[10px] font-bold text-gray-400 mb-1.5">
+              <div className="grid grid-cols-7 gap-1.5 text-center text-[10px] font-bold text-gray-400 dark:text-zinc-500 mb-1.5">
                 <span>T2</span>
                 <span>T3</span>
                 <span>T4</span>
@@ -684,35 +698,35 @@ export default function ProgressPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-[11px] text-gray-500 pt-4 mt-4 border-t border-gray-100">
+            <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-zinc-400 pt-4 mt-4 border-t border-gray-100 dark:border-zinc-800">
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-gray-200 inline-block" /> Chưa học
+                <span className="w-2.5 h-2.5 rounded-sm bg-gray-200 dark:bg-zinc-700 inline-block" /> Chưa học
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#1a2e1c] inline-block" /> Đã học
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#1a2e1c] dark:bg-emerald-600 inline-block" /> Đã học
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-orange-100 border border-orange-300 text-orange-600 font-bold inline-flex items-center justify-center text-[8px]">!</span> Hôm nay
+                <span className="w-2.5 h-2.5 rounded-sm bg-orange-100 dark:bg-orange-950/50 border border-orange-300 dark:border-orange-800 text-orange-600 dark:text-orange-400 font-bold inline-flex items-center justify-center text-[8px]">!</span> Hôm nay
               </span>
             </div>
           </div>
         </div>
 
         {/* Section 3: Recent Learning Activities Log */}
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)]">
+        <div className="bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 dark:border-zinc-800 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)] dark:shadow-none">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
-              <h2 className="text-xl font-bold text-[#0d1a14] flex items-center gap-2">
-                <Activity size={22} className="text-[#1a2e1c]" />
+              <h2 className="text-xl font-bold text-[#0d1a14] dark:text-zinc-100 flex items-center gap-2">
+                <Activity size={22} className="text-[#1a2e1c] dark:text-emerald-400" />
                 Nhật ký hoạt động học tập thực tế (Learning Activities Log)
               </h2>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1">
                 Ghi nhận từng hành động học tập thực tế (Idempotent, không trùng lặp, chuẩn xác theo thời gian nộp).
               </p>
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+            <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-zinc-800 rounded-xl">
               {[
                 { id: 'all', label: 'Tất cả' },
                 { id: 'take_quiz', label: 'Trắc nghiệm' },
@@ -724,8 +738,8 @@ export default function ProgressPage() {
                   onClick={() => setActivityFilter(tab.id as any)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     activityFilter === tab.id
-                      ? 'bg-white text-gray-900 shadow-xs'
-                      : 'text-gray-500 hover:text-gray-900'
+                      ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-xs'
+                      : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200'
                   }`}
                 >
                   {tab.label}
@@ -747,10 +761,10 @@ export default function ProgressPage() {
                 const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} - ${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
 
                 return (
-                  <div key={act.id} className="py-4 flex items-center justify-between gap-4 hover:bg-gray-50/60 px-2 rounded-xl transition-colors">
+                  <div key={act.id} className="py-4 flex items-center justify-between gap-4 hover:bg-gray-50/60 dark:hover:bg-zinc-800/40 px-2 rounded-xl transition-colors">
                     <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-                        <IconComp size={18} className="text-gray-700" />
+                      <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+                        <IconComp size={18} className="text-gray-700 dark:text-zinc-300" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -758,19 +772,19 @@ export default function ProgressPage() {
                             {config.label}
                           </span>
                           {act.subject && (
-                            <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-md">
+                            <span className="text-xs font-semibold text-gray-600 dark:text-zinc-300 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md">
                               {act.subject}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 mt-1 truncate">
+                        <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1 truncate">
                           {act.details?.score !== undefined && (
-                            <span className="font-semibold text-gray-700 mr-2">
+                            <span className="font-semibold text-gray-700 dark:text-zinc-200 mr-2">
                               Điểm: {act.details.score}/{act.details.totalScore || 10} ({act.details.correctCount}/{act.details.totalQuestions} câu đúng)
                             </span>
                           )}
                           {act.details?.source === 'backfill' && (
-                            <span className="text-gray-400 italic mr-2">(Dữ liệu đồng bộ lịch sử)</span>
+                            <span className="text-gray-400 dark:text-zinc-500 italic mr-2">(Dữ liệu đồng bộ lịch sử)</span>
                           )}
                           Thời điểm: {timeStr}
                         </p>
@@ -779,11 +793,11 @@ export default function ProgressPage() {
 
                     <div className="text-right shrink-0">
                       {act.duration_seconds > 0 ? (
-                        <span className="text-xs font-bold text-gray-800 bg-gray-100 px-2.5 py-1 rounded-lg">
+                        <span className="text-xs font-bold text-gray-800 dark:text-zinc-200 bg-gray-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg">
                           ⏱ {Math.round(act.duration_seconds / 60)} phút ({act.duration_seconds}s)
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400 font-medium">Hoàn tất</span>
+                        <span className="text-xs text-gray-400 dark:text-zinc-500 font-medium">Hoàn tất</span>
                       )}
                     </div>
                   </div>
@@ -792,23 +806,23 @@ export default function ProgressPage() {
             </div>
           ) : (
             <div className="text-center py-12 px-4">
-              <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mx-auto mb-3">
+              <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 flex items-center justify-center mx-auto mb-3">
                 <Activity size={24} />
               </div>
-              <h3 className="text-base font-bold text-gray-700">Chưa có nhật ký hoạt động nào</h3>
-              <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1 mb-4">
+              <h3 className="text-base font-bold text-gray-700 dark:text-zinc-300">Chưa có nhật ký hoạt động nào</h3>
+              <p className="text-xs text-gray-400 dark:text-zinc-500 max-w-sm mx-auto mt-1 mb-4">
                 Khi bạn làm bài kiểm tra, ôn thẻ flashcard hoặc đọc tài liệu, toàn bộ hành trình sẽ được ghi nhận tại đây.
               </p>
               <div className="flex justify-center gap-3">
                 <button
                   onClick={() => router.push('/ai-test')}
-                  className="px-4 py-2 rounded-xl bg-[#1a2e1c] text-white hover:bg-[#2d5a3d] text-xs font-bold transition-all"
+                  className="px-4 py-2 rounded-xl bg-[#1a2e1c] hover:bg-[#2d5a3d] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white text-xs font-bold transition-all"
                 >
                   Làm bài kiểm tra ngay
                 </button>
                 <button
                   onClick={() => router.push('/library')}
-                  className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold transition-all"
+                  className="px-4 py-2 rounded-xl border border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 text-xs font-bold transition-all"
                 >
                   Mở kho tài liệu
                 </button>
@@ -823,23 +837,23 @@ export default function ProgressPage() {
       {/* Goal Creation Modal */}
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-gray-100"
+              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-gray-100 dark:border-zinc-800"
             >
-              <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-zinc-800">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-[#1a2e1c]/10 text-[#1a2e1c] flex items-center justify-center">
+                  <div className="w-9 h-9 rounded-xl bg-[#1a2e1c]/10 dark:bg-emerald-950/40 text-[#1a2e1c] dark:text-emerald-400 flex items-center justify-center">
                     <Target size={18} />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">Thiết lập mục tiêu học tập mới</h3>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-zinc-100">Thiết lập mục tiêu học tập mới</h3>
                 </div>
                 <button
                   onClick={() => setIsModalOpen(false)}
-                  className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100"
+                  className="text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800"
                 >
                   <X size={18} />
                 </button>
@@ -847,7 +861,7 @@ export default function ProgressPage() {
 
               <form onSubmit={handleCreateGoal} className="mt-5 space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
                     Tiêu đề mục tiêu <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -856,12 +870,12 @@ export default function ProgressPage() {
                     placeholder="VD: Học Java 60 phút mỗi ngày"
                     value={goalTitle}
                     onChange={(e) => setGoalTitle(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1a2e1c] text-sm"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#1a2e1c] dark:focus:ring-emerald-500 text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
                     Chủ đề / Môn học (tùy chọn)
                   </label>
                   <input
@@ -869,19 +883,19 @@ export default function ProgressPage() {
                     placeholder="VD: Java, Toán học, Tiếng Anh (để trống nếu áp dụng mọi môn)"
                     value={goalSubject}
                     onChange={(e) => setGoalSubject(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1a2e1c] text-sm"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#1a2e1c] dark:focus:ring-emerald-500 text-sm"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
                       Loại chỉ tiêu <span className="text-rose-500">*</span>
                     </label>
                     <select
                       value={goalTargetType}
                       onChange={(e) => setGoalTargetType(e.target.value as any)}
-                      className="w-full px-3 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1a2e1c] text-xs font-medium"
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#1a2e1c] dark:focus:ring-emerald-500 text-xs font-medium"
                     >
                       <option value="study_time_minutes">Thời gian học (phút)</option>
                       <option value="quizzes_completed">Bài thi trắc nghiệm (bài)</option>
@@ -891,7 +905,7 @@ export default function ProgressPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
                       Chỉ tiêu cần đạt <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -900,13 +914,13 @@ export default function ProgressPage() {
                       required
                       value={goalTargetValue}
                       onChange={(e) => setGoalTargetValue(parseInt(e.target.value, 10) || 1)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1a2e1c] text-sm font-semibold"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#1a2e1c] dark:focus:ring-emerald-500 text-sm font-semibold"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
                     Chu kỳ lặp lại
                   </label>
                   <div className="grid grid-cols-2 gap-3">
@@ -915,8 +929,8 @@ export default function ProgressPage() {
                       onClick={() => setGoalPeriod('daily')}
                       className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                         goalPeriod === 'daily'
-                          ? 'border-[#1a2e1c] bg-[#1a2e1c]/5 text-[#1a2e1c]'
-                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                          ? 'border-[#1a2e1c] dark:border-emerald-600 bg-[#1a2e1c]/5 dark:bg-emerald-950/30 text-[#1a2e1c] dark:text-emerald-400'
+                          : 'border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800'
                       }`}
                     >
                       Mỗi ngày (Daily)
@@ -926,8 +940,8 @@ export default function ProgressPage() {
                       onClick={() => setGoalPeriod('weekly')}
                       className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                         goalPeriod === 'weekly'
-                          ? 'border-[#1a2e1c] bg-[#1a2e1c]/5 text-[#1a2e1c]'
-                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                          ? 'border-[#1a2e1c] dark:border-emerald-600 bg-[#1a2e1c]/5 dark:bg-emerald-950/30 text-[#1a2e1c] dark:text-emerald-400'
+                          : 'border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800'
                       }`}
                     >
                       Mỗi tuần (Weekly)
@@ -935,18 +949,18 @@ export default function ProgressPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-zinc-800">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-bold"
+                    className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 text-xs font-bold"
                   >
                     Hủy bỏ
                   </button>
                   <button
                     type="submit"
                     disabled={savingGoal}
-                    className="px-5 py-2.5 rounded-xl bg-[#1a2e1c] text-white hover:bg-[#2d5a3d] text-xs font-bold transition-all shadow-md disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl bg-[#1a2e1c] hover:bg-[#2d5a3d] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-md disabled:opacity-50"
                   >
                     {savingGoal ? 'Đang lưu...' : 'Tạo mục tiêu'}
                   </button>

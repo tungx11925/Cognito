@@ -3,12 +3,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDocumentById } from '@/services/document.service';
-import { ArrowLeft, Share2, Download, AlertCircle, Send, Languages, PenLine, Loader2, Zap } from 'lucide-react';
+import { ArrowLeft, Share2, Download, AlertCircle, Send, Languages, PenLine, Loader2, Zap, Heart, Bookmark, Globe } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import ShareModal from '@/components/documents/ShareModal';
 
 const PomodoroWidget = dynamic(() => import('@/components/documents/PomodoroWidget'), { ssr: false });
 const SmartNotesWorkspace = dynamic(() => import('@/components/documents/SmartNotesWorkspace'), { ssr: false });
@@ -37,6 +38,103 @@ export default function DocumentViewerPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{x: number, y: number} | null>(null);
+
+  // Engagement state (Tym & Lưu)
+  const [isLiked, setIsLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [isSaved, setIsSaved] = useState(false);
+  const [saveCount, setSaveCount] = useState(0);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+  const fetchEngagement = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/documents/${docId}/engagement`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIsLiked(Boolean(data.isLiked));
+        setLikeCount(Number(data.likeCount) || 0);
+        setIsSaved(Boolean(data.isSaved));
+        setSaveCount(Number(data.saveCount) || 0);
+      }
+    } catch (e) {
+      // Ignore engagement fetch error
+    }
+  };
+
+  const handleToggleLike = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast.error('Vui lòng đăng nhập để thích tài liệu');
+      return;
+    }
+
+    // Optimistic
+    const prevLiked = isLiked;
+    const prevCount = likeCount;
+    setIsLiked(!prevLiked);
+    setLikeCount(prevLiked ? Math.max(0, prevCount - 1) : prevCount + 1);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/documents/${docId}/like`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIsLiked(Boolean(data.isLiked));
+        setLikeCount(Number(data.likeCount) || 0);
+        toast.success(data.isLiked ? 'Đã thích tài liệu' : 'Đã bỏ thích');
+      } else {
+        setIsLiked(prevLiked);
+        setLikeCount(prevCount);
+        toast.error('Không thể thực hiện thao tác');
+      }
+    } catch {
+      setIsLiked(prevLiked);
+      setLikeCount(prevCount);
+      toast.error('Lỗi kết nối máy chủ');
+    }
+  };
+
+  const handleToggleSave = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast.error('Vui lòng đăng nhập để lưu tài liệu');
+      return;
+    }
+
+    // Optimistic
+    const prevSaved = isSaved;
+    const prevCount = saveCount;
+    setIsSaved(!prevSaved);
+    setSaveCount(prevSaved ? Math.max(0, prevCount - 1) : prevCount + 1);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/documents/${docId}/save`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIsSaved(Boolean(data.isSaved));
+        setSaveCount(Number(data.saveCount) || 0);
+        toast.success(data.isSaved ? 'Đã lưu tài liệu vào danh sách học tập' : 'Đã bỏ lưu tài liệu');
+      } else {
+        setIsSaved(prevSaved);
+        setSaveCount(prevCount);
+        toast.error('Không thể thực hiện thao tác');
+      }
+    } catch {
+      setIsSaved(prevSaved);
+      setSaveCount(prevCount);
+      toast.error('Lỗi kết nối máy chủ');
+    }
+  };
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -111,6 +209,7 @@ export default function DocumentViewerPage() {
           setError(data.error);
         } else {
           setDocument(data);
+          fetchEngagement();
         }
       } catch (err) {
         setError('Không thể tải tài liệu. Vui lòng thử lại.');
@@ -153,7 +252,7 @@ export default function DocumentViewerPage() {
   }
 
   return (
-    <div className="h-screen w-full bg-[#FAF8F5] overflow-hidden flex flex-col font-sans relative">
+    <div className="h-screen w-full bg-[#FAF8F5] dark:bg-[#0B0F17] text-gray-900 dark:text-zinc-100 overflow-hidden flex flex-col font-sans relative transition-colors duration-200">
       
       {/* QUICK FLOATING TOOLBAR */}
       <AnimatePresence>
@@ -181,45 +280,85 @@ export default function DocumentViewerPage() {
       </AnimatePresence>
       
       {/* 1. FIXED TOPBAR (Full width, h-14) */}
-      <header className="h-14 px-6 bg-white border-b border-gray-200/80 flex items-center justify-between shrink-0 z-20 relative shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+      <header className="h-14 px-6 bg-white dark:bg-zinc-900 border-b border-gray-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0 z-20 relative shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-colors">
         <div className="flex items-center gap-4 min-w-0">
-          <Link href="/library" className="p-1.5 -ml-1.5 text-gray-500 hover:text-[#0D2B24] rounded-lg hover:bg-gray-100 transition-colors shrink-0">
+          <Link href="/library" className="p-1.5 -ml-1.5 text-gray-500 hover:text-[#0D2B24] dark:text-zinc-400 dark:hover:text-zinc-200 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors shrink-0">
             <ArrowLeft size={18} />
           </Link>
           <div className="min-w-0 flex items-center gap-3">
-            <h1 className="text-[15px] font-bold text-[#0D2B24] truncate max-w-lg">{document.title}</h1>
+            <h1 className="text-[15px] font-bold text-[#0D2B24] dark:text-zinc-100 truncate max-w-lg">{document.title}</h1>
             <div className="flex items-center gap-2 text-[12px] shrink-0">
-              <span className="bg-[#F5F3EE] border border-gray-200/60 px-2 py-0.5 rounded-md text-gray-700 font-medium">
+              <span className="bg-[#F5F3EE] dark:bg-zinc-800 border border-gray-200/60 dark:border-zinc-700 px-2 py-0.5 rounded-md text-gray-700 dark:text-zinc-300 font-medium">
                 {document.category || 'Khác'}
               </span>
-              <span className="text-gray-400">•</span>
-              <span className="text-gray-500">Tải lên: {new Date(document.created_at).toLocaleDateString('vi-VN')}</span>
+              {document.is_open_license && (
+                <span className="bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 px-2 py-0.5 rounded-md text-emerald-700 dark:text-emerald-300 font-semibold text-[11px]">
+                  🌿 Nguồn mở ({document.license || 'CC-BY 4.0'})
+                </span>
+              )}
+              <span className="text-gray-400 dark:text-zinc-500">•</span>
+              <span className="text-gray-500 dark:text-zinc-400">Tải lên: {new Date(document.created_at).toLocaleDateString('vi-VN')}</span>
             </div>
           </div>
         </div>
         
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Nút Tym (Like) */}
+          <button 
+            onClick={handleToggleLike}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-all font-semibold border ${
+              isLiked 
+                ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900' 
+                : 'text-gray-600 dark:text-zinc-400 hover:text-rose-600 hover:bg-rose-50/50 border-transparent hover:border-rose-200'
+            }`}
+            title="Thích tài liệu này"
+          >
+            <Heart size={15} className={isLiked ? "fill-rose-500 text-rose-500" : ""} />
+            <span>{likeCount}</span>
+          </button>
+
+          {/* Nút Lưu (Bookmark) */}
+          <button 
+            onClick={handleToggleSave}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-all font-semibold border ${
+              isSaved 
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' 
+                : 'text-gray-600 dark:text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50/50 border-transparent hover:border-emerald-200'
+            }`}
+            title="Lưu vào danh sách tài liệu học tập"
+          >
+            <Bookmark size={15} className={isSaved ? "fill-emerald-600 text-emerald-600" : ""} />
+            <span>{saveCount}</span>
+          </button>
+
           <Link
             href={`/focus?documentId=${docId}`}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded-lg transition-all font-bold shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200/80 dark:border-emerald-800 rounded-lg transition-all font-bold shadow-sm"
             title="Bắt đầu phiên học tập trung với tài liệu này"
           >
-            <Zap size={14} className="text-emerald-600 fill-emerald-600" />
+            <Zap size={14} className="text-emerald-600 dark:text-emerald-400 fill-emerald-600 dark:fill-emerald-400" />
             <span>Tập trung</span>
           </Link>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-[#0D2B24] border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded-lg transition-all font-semibold">
+
+          {/* Nút Chia sẻ */}
+          <button 
+            onClick={() => setIsShareModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm text-gray-600 dark:text-zinc-400 hover:text-[#0D2B24] dark:hover:text-zinc-200 border border-transparent hover:border-gray-200 dark:hover:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-lg transition-all font-semibold"
+          >
             <Share2 size={14} /> Chia sẻ
           </button>
-          <a href={document.doc_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-[#0D2B24] border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded-lg transition-all font-semibold">
+
+          <a href={document.doc_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm text-gray-600 dark:text-zinc-400 hover:text-[#0D2B24] dark:hover:text-zinc-200 border border-transparent hover:border-gray-200 dark:hover:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-lg transition-all font-semibold">
             <Download size={14} /> Tải xuống
           </a>
-          <div className="w-px h-4 bg-gray-200 mx-1"></div>
+
+          <div className="w-px h-4 bg-gray-200 dark:bg-zinc-700 mx-1"></div>
           <button 
             onClick={toggleSidebar}
-            className={`flex items-center gap-2 px-4 py-1.5 text-sm font-bold rounded-lg transition-all shadow-sm ${
+            className={`flex items-center gap-2 px-4 py-1.5 text-xs sm:text-sm font-bold rounded-lg transition-all shadow-sm ${
               isSidebarOpen 
-                ? 'bg-[#0D2B24] text-white hover:bg-[#154238] shadow-md hover:shadow-lg' 
-                : 'bg-white border border-gray-200 text-[#0D2B24] hover:bg-gray-50'
+                ? 'bg-[#0D2B24] text-white hover:bg-[#154238] dark:bg-emerald-700 dark:hover:bg-emerald-600 shadow-md hover:shadow-lg' 
+                : 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-[#0D2B24] dark:text-zinc-200 hover:bg-gray-50 dark:hover:bg-zinc-700'
             }`}
           >
             ✨ {isSidebarOpen ? 'Đóng Trợ lý' : 'Mở Trợ lý AI'}
@@ -235,11 +374,11 @@ export default function DocumentViewerPage() {
           {/* BÊN TRÁI: Document Viewer Pane */}
           <Panel 
             defaultSize={isSidebarOpen ? 60 : 100} 
-            className="bg-[#EBECEF] relative overflow-y-auto min-w-0 flex flex-col"
+            className="bg-[#EBECEF] dark:bg-zinc-950 relative overflow-y-auto min-w-0 flex flex-col transition-colors"
           >
-            <div className="min-h-full p-4 md:p-8 flex justify-center min-w-0 bg-[#EBECEF]">
+            <div className="min-h-full p-4 md:p-8 flex justify-center min-w-0 bg-[#EBECEF] dark:bg-zinc-950">
               {/* Document Container with soft shadow mimicking real paper */}
-              <div className="w-full max-w-5xl bg-white shadow-xl rounded-md overflow-hidden border border-gray-300/40">
+              <div className="w-full max-w-5xl bg-white dark:bg-zinc-900 shadow-xl rounded-md overflow-hidden border border-gray-300/40 dark:border-zinc-800">
                 <DocumentViewerWrapper url={document.doc_url} fileType={document.file_type} />
               </div>
             </div>
@@ -251,14 +390,14 @@ export default function DocumentViewerPage() {
               isSidebarOpen ? 'flex' : 'hidden'
             } ${isMobile ? 'h-2 w-full cursor-row-resize' : 'w-2 h-full cursor-col-resize -ml-1'}`}
           >
-            <div className={`transition-colors duration-200 ${isMobile ? 'h-[1px] w-full' : 'w-[1px] h-full'} bg-gray-200/80 group-hover:bg-[#0D2B24] group-data-[resize-handle-active]:bg-[#0D2B24]`} />
+            <div className={`transition-colors duration-200 ${isMobile ? 'h-[1px] w-full' : 'w-[1px] h-full'} bg-gray-200/80 dark:bg-zinc-800 group-hover:bg-[#0D2B24] dark:group-hover:bg-emerald-500 group-data-[resize-handle-active]:bg-[#0D2B24] dark:group-data-[resize-handle-active]:bg-emerald-500`} />
           </Separator>
  
           {/* BÊN PHẢI: AI Assistant Sidebar Pane */}
           <Panel 
             defaultSize={40}
             minSize={25}
-            className={`bg-[#EBE9E4] border-l-2 border-gray-300 overflow-hidden min-w-0 ${isMobile ? 'w-full border-t-2' : ''}`}
+            className={`bg-[#EBE9E4] dark:bg-zinc-900 border-l-2 border-gray-300 dark:border-zinc-800 overflow-hidden min-w-0 transition-colors ${isMobile ? 'w-full border-t-2' : ''}`}
           >
             <AnimatePresence initial={false}>
               {isSidebarOpen && (
@@ -267,16 +406,16 @@ export default function DocumentViewerPage() {
                   animate={{ x: 0, y: 0, opacity: 1 }}
                   exit={{ x: isMobile ? 0 : 50, y: isMobile ? 50 : 0, opacity: 0 }}
                   transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
-                  className="w-full h-full flex flex-col relative bg-[#EBE9E4]"
+                  className="w-full h-full flex flex-col relative bg-[#EBE9E4] dark:bg-zinc-900"
                 >
                   {/* AI Tabs / Header - iOS Segmented Control Style */}
-                  <div className="flex items-center bg-[#D6D3CC] p-1 rounded-xl gap-1 shrink-0 m-3.5 border border-gray-300/40">
+                  <div className="flex items-center bg-[#D6D3CC] dark:bg-zinc-800 p-1 rounded-xl gap-1 shrink-0 m-3.5 border border-gray-300/40 dark:border-zinc-700">
                     <button 
                       onClick={() => setActiveTab('ai')}
                       className={`flex-1 py-1.5 text-[12px] font-bold rounded-lg transition-all ${
                         activeTab === 'ai' 
-                          ? 'bg-white text-[#0D2B24] shadow-sm border border-gray-300/20' 
-                          : 'text-gray-600 hover:text-gray-800 hover:bg-white/30'
+                          ? 'bg-white dark:bg-zinc-700 text-[#0D2B24] dark:text-zinc-100 shadow-sm border border-gray-300/20 dark:border-zinc-600' 
+                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-200 hover:bg-white/30 dark:hover:bg-zinc-700/50'
                       }`}
                     >
                       ✨ Trợ lý AI
@@ -285,8 +424,8 @@ export default function DocumentViewerPage() {
                       onClick={() => setActiveTab('mindmap')}
                       className={`flex-1 py-1.5 text-[12px] font-bold rounded-lg transition-all ${
                         activeTab === 'mindmap' 
-                          ? 'bg-white text-[#0D2B24] shadow-sm border border-gray-300/20' 
-                          : 'text-gray-600 hover:text-gray-800 hover:bg-white/30'
+                          ? 'bg-white dark:bg-zinc-700 text-[#0D2B24] dark:text-zinc-100 shadow-sm border border-gray-300/20 dark:border-zinc-600' 
+                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-200 hover:bg-white/30 dark:hover:bg-zinc-700/50'
                       }`}
                     >
                       🧠 Mindmap AI
@@ -295,8 +434,8 @@ export default function DocumentViewerPage() {
                       onClick={() => setActiveTab('tools')}
                       className={`flex-1 py-1.5 text-[12px] font-bold rounded-lg transition-all ${
                         activeTab === 'tools' 
-                          ? 'bg-white text-[#0D2B24] shadow-sm border border-gray-300/20' 
-                          : 'text-gray-600 hover:text-gray-800 hover:bg-white/30'
+                          ? 'bg-white dark:bg-zinc-700 text-[#0D2B24] dark:text-zinc-100 shadow-sm border border-gray-300/20 dark:border-zinc-600' 
+                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-200 hover:bg-white/30 dark:hover:bg-zinc-700/50'
                       }`}
                     >
                       🛠️ Công cụ
@@ -311,12 +450,12 @@ export default function DocumentViewerPage() {
                       <MindmapWorkspace documentId={Number(docId)} documentTitle={document.title} />
                     ) : (
                       <div className="flex-1 overflow-y-auto px-4 pb-8 flex flex-col space-y-6">
-                        <div className="bg-white border border-gray-300/70 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
-                          <h3 className="text-[12px] font-bold text-gray-900 uppercase tracking-wider mb-3">Đồng hồ Pomodoro</h3>
+                        <div className="bg-white dark:bg-zinc-800 border border-gray-300/70 dark:border-zinc-700 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
+                          <h3 className="text-[12px] font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider mb-3">Đồng hồ Pomodoro</h3>
                           <PomodoroWidget documentId={Number(docId)} />
                         </div>
  
-                        <div className="bg-white border border-gray-300/70 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)] flex-1 min-h-[350px]">
+                        <div className="bg-white dark:bg-zinc-800 border border-gray-300/70 dark:border-zinc-700 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)] flex-1 min-h-[350px]">
                           <SmartNotesWorkspace documentId={Number(docId)} />
                         </div>
                         
@@ -329,6 +468,26 @@ export default function DocumentViewerPage() {
           </Panel>
         </Group>
       </div>
+
+      {/* Share Modal */}
+      {isShareModalOpen && (
+        <ShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          resourceId={Number(docId)}
+          resourceType="document"
+          triggerMessage={(msg, type) => {
+            if (type === 'error') toast.error(msg);
+            else toast.success(msg);
+          }}
+          onShareUpdated={() => {
+            // Re-fetch document info
+            getDocumentById(docId).then(data => {
+              if (!data.error) setDocument(data);
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

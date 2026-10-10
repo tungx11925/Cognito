@@ -153,6 +153,63 @@ export class FocusService {
   }
 
   /**
+   * Ghi nhận danh sách sự kiện mất tập trung theo lô (Batch Processing)
+   */
+  async recordDistractionBatch(userId: number, sessionId: number, events: RecordDistractionParams[]) {
+    if (!events || events.length === 0) {
+      return { sessionId, addedCount: 0, distractionCount: 0 };
+    }
+
+    const sessionCheck = await db.query(
+      'SELECT id, user_id, status, distraction_count FROM study_sessions WHERE id = $1',
+      [sessionId]
+    );
+
+    if (sessionCheck.rows.length === 0) {
+      throw new AppError('Phiên tập trung không tồn tại', 404);
+    }
+
+    const session = sessionCheck.rows[0];
+    if (session.user_id !== userId) {
+      throw new AppError('Bạn không có quyền thao tác trên phiên tập trung này', 403);
+    }
+
+    if (session.status !== 'IN_PROGRESS') {
+      throw new AppError('Phiên tập trung đã kết thúc, không thể ghi nhận thêm sự kiện', 400);
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      for (const ev of events) {
+        await client.query(
+          `INSERT INTO focus_distraction_events (session_id, event_type, duration_seconds, details)
+           VALUES ($1, $2, $3, $4)`,
+          [sessionId, ev.eventType, ev.durationSeconds || 0, JSON.stringify(ev.details || {})]
+        );
+      }
+      const updateRes = await client.query(
+        `UPDATE study_sessions
+         SET distraction_count = distraction_count + $2
+         WHERE id = $1
+         RETURNING distraction_count`,
+        [sessionId, events.length]
+      );
+      await client.query('COMMIT');
+      return {
+        sessionId,
+        addedCount: events.length,
+        distractionCount: updateRes.rows[0].distraction_count,
+      };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Ping tích lũy thời gian học tập trong phiên
    */
   async pingActive(userId: number, sessionId: number, seconds: number) {

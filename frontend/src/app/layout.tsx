@@ -1,7 +1,10 @@
 import './globals.css';
 import { StudyContextProvider } from '../context/StudyContext';
+import { ThemeProvider } from '@/components/ThemeProvider';
 import { TaskNotifications } from '@/components/TaskNotifications';
 import GlobalModals from '@/components/layout/GlobalModals';
+import RouteGuard from '@/components/auth/RouteGuard';
+import AppLayoutWrapper from '@/components/layout/AppLayoutWrapper';
 import Script from 'next/script';
 import { Toaster } from 'react-hot-toast';
 import type { Metadata } from 'next';
@@ -28,25 +31,46 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="shortcut icon" href="/favicon.ico" />
-        <Script src="https://accounts.google.com/gsi/client" strategy="beforeInteractive" />
+        <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var savedTheme = localStorage.getItem('app-theme') || 'light';
+                var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (savedTheme === 'dark' || (savedTheme === 'system' && systemDark)) {
+                  document.documentElement.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
       </head>
       <body className={cn(inter.variable, outfit.variable, "min-h-screen font-sans antialiased bg-background text-foreground")} suppressHydrationWarning>
-        <StudyContextProvider>
-          <Toaster position="top-center" reverseOrder={false} 
-            toastOptions={{
-              className: 'font-sans',
-              style: {
-                borderRadius: '12px',
-                background: '#fff',
-                color: '#333',
-                boxShadow: '0 10px 40px -10px rgba(0,0,0,0.1)',
-              },
-            }}
-          />
-          <TaskNotifications />
-          <GlobalModals />
-          {children}
-        </StudyContextProvider>
+        <ThemeProvider>
+          <StudyContextProvider>
+            <Toaster position="top-center" reverseOrder={false} 
+              toastOptions={{
+                className: 'font-sans',
+                style: {
+                  borderRadius: '12px',
+                  background: '#fff',
+                  color: '#333',
+                  boxShadow: '0 10px 40px -10px rgba(0,0,0,0.1)',
+                },
+              }}
+            />
+            <TaskNotifications />
+            <GlobalModals />
+            <RouteGuard>
+              <AppLayoutWrapper>
+                {children}
+              </AppLayoutWrapper>
+            </RouteGuard>
+          </StudyContextProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

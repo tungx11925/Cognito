@@ -25,6 +25,7 @@ import { useStudy } from "@/context/StudyContext";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/landing/Navbar";
 import RegisterModal from "@/components/auth/RegisterModal";
+import { useTheme } from "@/components/ThemeProvider";
 
 /* ── UI Components matching profile design ───────────────────────────────────────── */
 const Card = ({ children, className = "", isDark = false }: any) => {
@@ -101,8 +102,8 @@ export default function SettingsPage() {
   const [algorithmAdaptive, setAlgorithmAdaptive] = useState(true);
   const [twoFA, setTwoFA] = useState(false);
 
-  // Theme & Language settings (Persistent locally)
-  const [theme, setTheme] = useState("light"); // light, dark, system
+  // Theme & Language settings (Connected to global ThemeProvider)
+  const { theme, setTheme, isDark: isDarkActive } = useTheme();
   const [language, setLanguage] = useState("vi"); // vi, en
 
   // Different Account fields from Profile page
@@ -121,9 +122,7 @@ export default function SettingsPage() {
 
   // Load preferences from localStorage on mount
   useEffect(() => {
-    const savedTheme = localStorage.getItem("app-theme") || "light";
     const savedLang = localStorage.getItem("app-lang") || "vi";
-    setTheme(savedTheme);
     setLanguage(savedLang);
 
     const savedWebsite = localStorage.getItem("pref-website") || "";
@@ -144,17 +143,6 @@ export default function SettingsPage() {
     }
   }, [activeUser]);
 
-  // Synchronize theme state to Document Class List for real-time dark/light display!
-  const [isSystemDark, setIsSystemDark] = useState(false);
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    setIsSystemDark(mediaQuery.matches);
-    const handler = (e: MediaQueryListEvent) => setIsSystemDark(e.matches);
-    mediaQuery.addEventListener("change", handler);
-    return () => mediaQuery.removeEventListener("change", handler);
-  }, []);
-
-  const isDarkActive = theme === "dark" || (theme === "system" && isSystemDark);
 
   const handleSaveAccountSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,8 +230,7 @@ export default function SettingsPage() {
   };
 
   const handleThemeChange = (newTheme: string) => {
-    setTheme(newTheme);
-    localStorage.setItem("app-theme", newTheme);
+    setTheme(newTheme as any);
     const msgMap: Record<string, string> = {
       light: language === "vi" ? "Đã chuyển sang giao diện Sáng" : "Switched to Light Theme",
       dark: language === "vi" ? "Đã chuyển sang giao diện Tối" : "Switched to Dark Theme",

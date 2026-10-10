@@ -6,15 +6,38 @@ import Link from "next/link";
 import { Sparkles, Loader2, Plus, Trash2, Edit3, ToggleLeft, ToggleRight, FileText, BookOpen, Upload, ChevronDown, Settings2, Save, X, Cpu, Target, GraduationCap, Play } from "lucide-react";
 import toast from "react-hot-toast";
 import { MainLayout } from "@/components/layout/MainLayout";
-import TestSetWorkspace from "@/components/ai-test/TestSetWorkspace";
-import ExamImportModal from "@/components/ai-test/ExamImportModal";
+import { useStudy } from "@/context/StudyContext";
+import dynamic from "next/dynamic";
 import {
   getAIConfig, updateAIConfig,
   getMyDocuments, getMyDecks, getDeckContent, getDocumentContent,
-  getTestSets, generateTestSet, toggleTestSetStatus, deleteTestSet,
+  getTestSets, toggleTestSetStatus, deleteTestSet,
   getAIModels, getAITemplates, getDocumentKeywords, generateQuestions,
 } from "@/services/ai-test.service";
-import mammoth from "mammoth";
+
+const TestSetWorkspace = dynamic(
+  () => import("@/components/ai-test/TestSetWorkspace"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
+
+const ExamImportModal = dynamic(
+  () => import("@/components/ai-test/ExamImportModal"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
 
 const CONFIG_KEY = "default";
 
@@ -39,6 +62,8 @@ interface AIModelOption {
   display_name: string;
   provider: string;
   tier?: "fast" | "balanced" | "advanced";
+  is_available?: boolean;
+  isAvailable?: boolean;
 }
 interface AITemplateOption { id: string; name: string; description: string; }
 
@@ -51,6 +76,7 @@ const SCORE_ROWS = [
 ];
 
 export default function AITestPage() {
+  const { isAuthenticated, setShowLoginModal } = useStudy();
   const [config, setConfig]       = useState<AIConfig | null>(null);
   const [testSets, setTestSets]   = useState<TestSet[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -100,6 +126,13 @@ export default function AITestPage() {
     (Number(w.true_false_count)||0)*(Number(w.true_false_score)||0);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      setTestSets([]);
+      setMyDocs([]);
+      setMyDecks([]);
+      return;
+    }
     setLoading(true);
     Promise.all([getAIConfig(CONFIG_KEY), getTestSets(), getMyDocuments(), getMyDecks()])
       .then(([cfg, sets, docs, decks]) => {
@@ -109,7 +142,7 @@ export default function AITestPage() {
         setMyDecks(Array.isArray(decks) ? decks : []);
       })
       .finally(() => setLoading(false));
-  }, [reset]);
+  }, [isAuthenticated, reset]);
 
   // Nạp danh sách AI model (dropdown) + prompt template cho Question Generator
   useEffect(() => {
@@ -161,6 +194,7 @@ export default function AITestPage() {
         setUploadedText(await file.text());
       } else if (ext === 'docx') {
         const buf = await file.arrayBuffer();
+        const mammoth = (await import('mammoth')).default;
         const { value } = await mammoth.extractRawText({ arrayBuffer: buf });
         setUploadedText(value);
       } else if (ext === 'pptx' || ext === 'ppsx') {
@@ -314,20 +348,6 @@ export default function AITestPage() {
       }
 
       if (r?.error) {
-        // Fallback luồng generate cũ nếu có lỗi cấu hình
-        if (typeof r.error === "string" && (r.error.includes("teacher") || r.error.includes("forbidden") || r.error.includes("quyền"))) {
-          toast.dismiss(tid);
-          toast("Đang chuyển sang luồng tạo đề dự phòng.", { icon: "ℹ️", duration: 5000 });
-          const content = sourceType === "document"
-            ? await resolveContent(selectedDocs[0])
-            : legacyContent;
-          const lr = await generateTestSet({ configKey: CONFIG_KEY, documentContent: content, name: testName || undefined });
-          if (lr?.error) { toast.error(lr.error); return; }
-          toast.success(lr.message || "Tạo thành công!");
-          setTestSets(prev => [lr.testSet, ...prev]);
-          setShowGenPanel(false); setPasteText(""); setUploadedText(""); setTestName("");
-          return;
-        }
         toast.dismiss(tid);
         toast.error(r.error);
         return;
@@ -372,8 +392,8 @@ export default function AITestPage() {
     <MainLayout>
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-[#1a3a2a]/20 border-t-[#1a3a2a] rounded-full animate-spin" />
-          <p className="text-sm text-gray-500">Đang tải...</p>
+          <div className="w-10 h-10 border-4 border-[#1a3a2a]/20 border-t-[#1a3a2a] dark:border-emerald-500/20 dark:border-t-emerald-400 rounded-full animate-spin" />
+          <p className="text-sm text-gray-500 dark:text-zinc-400">Đang tải...</p>
         </div>
       </div>
     </MainLayout>
@@ -381,35 +401,34 @@ export default function AITestPage() {
 
   return (
     <MainLayout>
-      <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <div className="max-w-6xl mx-auto p-6 space-y-6 text-gray-900 dark:text-zinc-100 transition-colors duration-200">
         {/* HEADER */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-              <div className="w-9 h-9 bg-[#1a3a2a] rounded-xl flex items-center justify-center">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100 flex items-center gap-3">
+              <div className="w-9 h-9 bg-[#1a3a2a] dark:bg-emerald-800 rounded-xl flex items-center justify-center">
                 <Sparkles size={18} className="text-white" />
               </div>
               Bài tập AI
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Tự động tạo bộ đề từ tài liệu, flashcard hoặc nội dung bất kỳ.</p>
+            <p className="text-sm text-gray-500 dark:text-zinc-400 mt-1">Tự động tạo bộ đề từ tài liệu, flashcard hoặc nội dung bất kỳ.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => setShowConfig(p => !p)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-gray-600 border border-gray-200 bg-white rounded-xl hover:bg-gray-50 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-gray-600 dark:text-zinc-300 border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors">
               <Settings2 size={14} /> Cấu hình
             </button>
             <button onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm">
+              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors shadow-sm">
               <Upload size={14} /> Nhập đề có sẵn (Word/PDF/Excel)
             </button>
             <button onClick={() => setShowGenPanel(p => !p)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#1a3a2a] text-white text-sm font-bold rounded-xl hover:bg-[#234b37] transition-colors shadow-lg shadow-[#1a3a2a]/20">
+              className="flex items-center gap-2 px-4 py-2 bg-[#1a3a2a] dark:bg-emerald-700 text-white text-sm font-bold rounded-xl hover:bg-[#234b37] dark:hover:bg-emerald-600 transition-colors shadow-lg shadow-[#1a3a2a]/20">
               <Plus size={15} /> Tạo đề mới
             </button>
           </div>
         </div>
 
-        {/* CONFIG PANEL */}
         {/* CONFIG MODAL */}
         <AnimatePresence>
           {showConfig && (
@@ -418,23 +437,23 @@ export default function AITestPage() {
                 initial={{ opacity: 0, scale: 0.95 }} 
                 animate={{ opacity: 1, scale: 1 }} 
                 exit={{ opacity: 0, scale: 0.95 }} 
-                className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col"
+                className="bg-white dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col text-gray-900 dark:text-zinc-100"
               >
                 {/* Modal Header */}
-                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                  <h2 className="text-lg font-bold text-gray-900">Chỉnh sửa trợ giảng - Bài tập AI</h2>
-                  <button onClick={() => setShowConfig(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-                    <X size={18} className="text-gray-500" />
+                <div className="px-6 py-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-gray-50/50 dark:bg-zinc-850">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-zinc-100">Chỉnh sửa trợ giảng - Bài tập AI</h2>
+                  <button onClick={() => setShowConfig(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors">
+                    <X size={18} className="text-gray-500 dark:text-zinc-400" />
                   </button>
                 </div>
                 
                 {/* Mock Tabs */}
-                <div className="px-6 border-b border-gray-100 flex gap-6 overflow-x-auto text-sm font-semibold text-gray-400">
-                  <div className="py-3 cursor-pointer hover:text-gray-600 border-b-2 border-transparent">Cơ bản</div>
-                  <div className="py-3 cursor-pointer hover:text-gray-600 border-b-2 border-transparent">Bài đọc thêm</div>
-                  <div className="py-3 border-b-2 border-[#1a3a2a] text-[#1a3a2a]">Bài tập AI</div>
-                  <div className="py-3 cursor-pointer hover:text-gray-600 border-b-2 border-transparent">Bài tập</div>
-                  <div className="py-3 cursor-pointer hover:text-gray-600 border-b-2 border-transparent">Bài giảng AI</div>
+                <div className="px-6 border-b border-gray-100 dark:border-zinc-800 flex gap-6 overflow-x-auto text-sm font-semibold text-gray-400 dark:text-zinc-500">
+                  <div className="py-3 cursor-pointer hover:text-gray-600 dark:hover:text-zinc-300 border-b-2 border-transparent">Cơ bản</div>
+                  <div className="py-3 cursor-pointer hover:text-gray-600 dark:hover:text-zinc-300 border-b-2 border-transparent">Bài đọc thêm</div>
+                  <div className="py-3 border-b-2 border-[#1a3a2a] dark:border-emerald-400 text-[#1a3a2a] dark:text-emerald-400">Bài tập AI</div>
+                  <div className="py-3 cursor-pointer hover:text-gray-600 dark:hover:text-zinc-300 border-b-2 border-transparent">Bài tập</div>
+                  <div className="py-3 cursor-pointer hover:text-gray-600 dark:hover:text-zinc-300 border-b-2 border-transparent">Bài giảng AI</div>
                 </div>
 
                 {/* Modal Body */}
@@ -442,19 +461,19 @@ export default function AITestPage() {
                   {/* Language & Toggle */}
                   <div className="space-y-4">
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-sm font-semibold text-gray-700">Ngôn ngữ tạo đề</label>
-                      <select className="w-full sm:w-1/3 border border-gray-200 rounded-xl p-2.5 text-sm focus:outline-none focus:border-[#1a3a2a] bg-white">
+                      <label className="text-sm font-semibold text-gray-700 dark:text-zinc-300">Ngôn ngữ tạo đề</label>
+                      <select className="w-full sm:w-1/3 border border-gray-200 dark:border-zinc-700 rounded-xl p-2.5 text-sm focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-500 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100">
                         <option>Tiếng Việt</option>
                         <option>Tiếng Anh</option>
                       </select>
                     </div>
 
-                    <label className="flex items-center gap-3 cursor-pointer group pt-2 border-t border-gray-100">
+                    <label className="flex items-center gap-3 cursor-pointer group pt-2 border-t border-gray-100 dark:border-zinc-800">
                       <div className="relative flex items-center">
                         <input type="checkbox" {...register("use_custom_prompt")} className="sr-only peer" />
-                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1a3a2a]"></div>
+                        <div className="w-10 h-5 bg-gray-200 dark:bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1a3a2a] dark:peer-checked:bg-emerald-600"></div>
                       </div>
-                      <span className="text-sm font-semibold text-gray-700 group-hover:text-gray-900 transition-colors">
+                      <span className="text-sm font-semibold text-gray-700 dark:text-zinc-300 group-hover:text-gray-900 dark:group-hover:text-zinc-100 transition-colors">
                         Nâng cao: Sử dụng prompt tùy chỉnh để cá nhân hoá cách AI tạo câu hỏi
                       </span>
                     </label>
@@ -519,23 +538,23 @@ export default function AITestPage() {
         <AnimatePresence>
           {showGenPanel && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-              <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-5 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-gray-900">✨ Tạo bộ đề mới</h3>
-                  <button onClick={() => setShowGenPanel(false)}><X size={16} className="text-gray-400" /></button>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-zinc-100">✨ Tạo bộ đề mới</h3>
+                  <button onClick={() => setShowGenPanel(false)}><X size={16} className="text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300" /></button>
                 </div>
 
                 {/* Test name */}
                 <div>
-                  <label className="text-xs font-semibold text-gray-600 mb-1 block">Tên bộ đề (tuỳ chọn)</label>
+                  <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Tên bộ đề (tuỳ chọn)</label>
                   <input value={testName} onChange={e => setTestName(e.target.value)}
                     placeholder="Để trống sẽ tự tạo tên theo ngày..."
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a2a]" />
+                    className="w-full border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 placeholder:text-gray-400 dark:placeholder:text-zinc-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600" />
                 </div>
 
                 {/* Source type tabs */}
                 <div>
-                  <label className="text-xs font-semibold text-gray-600 mb-2 block">Nguồn nội dung</label>
+                  <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-2 block">Nguồn nội dung</label>
                   <div className="flex gap-2 flex-wrap">
                     {[
                       { key: "paste",    icon: <FileText size={13} />,  label: "Dán văn bản" },
@@ -544,7 +563,7 @@ export default function AITestPage() {
                       { key: "upload",   icon: <Upload size={13} />,    label: "Upload slide" },
                     ].map(s => (
                       <button key={s.key} onClick={() => setSourceType(s.key as SourceType)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-colors ${sourceType === s.key ? "bg-[#1a3a2a] text-white border-[#1a3a2a]" : "bg-white text-gray-600 border-gray-200 hover:border-[#1a3a2a]"}`}>
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-colors ${sourceType === s.key ? "bg-[#1a3a2a] text-white border-[#1a3a2a] dark:bg-emerald-700 dark:border-emerald-700" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-[#1a3a2a] dark:hover:border-emerald-600"}`}>
                         {s.icon} {s.label}
                       </button>
                     ))}
@@ -555,13 +574,13 @@ export default function AITestPage() {
                 {sourceType === "paste" && (
                   <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={7}
                     placeholder="Dán nội dung bài giảng, ghi chú, hoặc bất kỳ văn bản nào vào đây..."
-                    className="w-full border border-gray-200 rounded-xl p-3 text-sm text-gray-700 resize-none focus:outline-none focus:border-[#1a3a2a]" />
+                    className="w-full border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl p-3 text-sm text-gray-700 dark:text-zinc-200 placeholder:text-gray-400 dark:placeholder:text-zinc-500 resize-none focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600" />
                 )}
 
                 {sourceType === "document" && (
                   <div className="space-y-2 max-h-56 overflow-y-auto">
                     {myDocs.length === 0
-                      ? <p className="text-sm text-gray-400 text-center py-4">Chưa có tài liệu nào trong thư viện</p>
+                      ? <p className="text-sm text-gray-400 dark:text-zinc-500 text-center py-4">Chưa có tài liệu nào trong thư viện</p>
                       : myDocs.map(d => {
                         const effectiveStatus = d.processing_status || d.status || "PENDING";
                         const isReady = effectiveStatus === "READY";
@@ -573,10 +592,10 @@ export default function AITestPage() {
                             key={d.id}
                             className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
                               !isReady
-                                ? "border-gray-200 bg-gray-50/70 opacity-60 cursor-not-allowed"
+                                ? "border-gray-200 dark:border-zinc-800 bg-gray-50/70 dark:bg-zinc-800/50 opacity-60 cursor-not-allowed"
                                 : isSelected
-                                ? "border-[#1a3a2a] bg-[#f0fdf4] cursor-pointer"
-                                : "border-gray-200 hover:bg-gray-50 cursor-pointer"
+                                ? "border-[#1a3a2a] dark:border-emerald-500 bg-[#f0fdf4] dark:bg-emerald-950/30 cursor-pointer"
+                                : "border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/60 cursor-pointer"
                             }`}
                           >
                             <input
@@ -588,23 +607,23 @@ export default function AITestPage() {
                             />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-semibold text-gray-800 truncate">{d.title}</p>
+                                <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200 truncate">{d.title}</p>
                                 {d.page_count ? (
-                                  <span className="text-[10px] text-gray-400">({d.page_count} trang)</span>
+                                  <span className="text-[10px] text-gray-400 dark:text-zinc-500">({d.page_count} trang)</span>
                                 ) : null}
                               </div>
-                              <p className="text-xs text-gray-400">{d.category || 'Chung'} · {d.file_type}</p>
+                              <p className="text-xs text-gray-400 dark:text-zinc-500">{d.category || 'Chung'} · {d.file_type}</p>
                             </div>
                             {isReady ? (
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-md">
                                 ✓ Sẵn sàng
                               </span>
                             ) : isFailed ? (
-                              <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md">
+                              <span className="text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-2 py-0.5 rounded-md">
                                 ⚠️ Lỗi xử lý
                               </span>
                             ) : (
-                              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-md flex items-center gap-1">
                                 <Loader2 size={10} className="animate-spin" /> {effectiveStatus}
                               </span>
                             )}
@@ -613,7 +632,7 @@ export default function AITestPage() {
                       })
                     }
                     {selectedDocs.length > 0 && (
-                      <p className="text-[11px] text-gray-400 px-1">Đã chọn {selectedDocs.length} tài liệu — chọn nhiều tài liệu để ghép nội dung sinh đề.</p>
+                      <p className="text-[11px] text-gray-400 dark:text-zinc-500 px-1">Đã chọn {selectedDocs.length} tài liệu — chọn nhiều tài liệu để ghép nội dung sinh đề.</p>
                     )}
                   </div>
                 )}
@@ -621,13 +640,13 @@ export default function AITestPage() {
                 {sourceType === "deck" && (
                   <div className="space-y-2 max-h-56 overflow-y-auto">
                     {myDecks.length === 0
-                      ? <p className="text-sm text-gray-400 text-center py-4">Chưa có bộ thẻ nào</p>
+                      ? <p className="text-sm text-gray-400 dark:text-zinc-500 text-center py-4">Chưa có bộ thẻ nào</p>
                       : myDecks.map(d => (
-                        <label key={d.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selectedDeck === d.id ? "border-[#1a3a2a] bg-[#f0fdf4]" : "border-gray-200 hover:bg-gray-50"}`}>
+                        <label key={d.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selectedDeck === d.id ? "border-[#1a3a2a] dark:border-emerald-500 bg-[#f0fdf4] dark:bg-emerald-950/30" : "border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/60"}`}>
                           <input type="radio" name="deck" checked={selectedDeck === d.id} onChange={() => setSelectedDeck(d.id)} className="accent-[#1a3a2a]" />
                           <div>
-                            <p className="text-sm font-semibold text-gray-800">{d.name}</p>
-                            <p className="text-xs text-gray-400">{d.card_count} thẻ</p>
+                            <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">{d.name}</p>
+                            <p className="text-xs text-gray-400 dark:text-zinc-500">{d.card_count} thẻ</p>
                           </div>
                         </label>
                       ))
@@ -638,27 +657,27 @@ export default function AITestPage() {
                 {sourceType === "upload" && (
                   <div className="space-y-4">
                     <div onClick={() => fileRef.current?.click()}
-                      className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover:border-[#1a3a2a] hover:bg-[#f0fdf4] transition-colors">
-                      <Upload size={24} className="text-gray-400" />
-                      <p className="text-sm font-semibold text-gray-600">Tải lên tài liệu / slide</p>
-                      <p className="text-xs text-gray-400 text-center">Hỗ trợ TXT, DOCX, PPTX, PPSX, ODP, PDF, PPT, KEY<br/>Nhấp để tải lên để xem trước trên web</p>
-                      {uploadedText && <p className="text-xs text-green-600 font-bold mt-1">✓ Đã đọc {uploadedText.length} ký tự từ {fileName}</p>}
+                      className="border-2 border-dashed border-gray-200 dark:border-zinc-700 rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover:border-[#1a3a2a] dark:hover:border-emerald-600 hover:bg-[#f0fdf4] dark:hover:bg-emerald-950/20 transition-colors">
+                      <Upload size={24} className="text-gray-400 dark:text-zinc-500" />
+                      <p className="text-sm font-semibold text-gray-600 dark:text-zinc-300">Tải lên tài liệu / slide</p>
+                      <p className="text-xs text-gray-400 dark:text-zinc-500 text-center">Hỗ trợ TXT, DOCX, PPTX, PPSX, ODP, PDF, PPT, KEY<br/>Nhấp để tải lên để xem trước trên web</p>
+                      {uploadedText && <p className="text-xs text-green-600 dark:text-emerald-400 font-bold mt-1">✓ Đã đọc {uploadedText.length} ký tự từ {fileName}</p>}
                     </div>
                     <input ref={fileRef} type="file" accept=".txt,.docx,.pptx,.ppsx,.odp,.pdf,.ppt,.key" className="hidden" onChange={handleFileUpload} />
                     
                     {/* File Preview directly on web */}
                     {uploadedText && (
-                      <div className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50 flex flex-col">
-                        <div className="px-3 py-2 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
-                          <p className="text-xs font-bold text-gray-600">Xem trước Slide / Tài liệu</p>
-                          <span className="text-[10px] bg-white px-2 py-0.5 rounded border text-gray-500">{fileName}</span>
+                      <div className="border border-gray-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-gray-50 dark:bg-zinc-900 flex flex-col">
+                        <div className="px-3 py-2 bg-gray-100 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700 flex items-center justify-between">
+                          <p className="text-xs font-bold text-gray-600 dark:text-zinc-300">Xem trước Slide / Tài liệu</p>
+                          <span className="text-[10px] bg-white dark:bg-zinc-700 px-2 py-0.5 rounded border border-gray-200 dark:border-zinc-600 text-gray-500 dark:text-zinc-300">{fileName}</span>
                         </div>
                         {fileUrl && fileName.endsWith('.pdf') ? (
                           <object data={fileUrl} type="application/pdf" className="w-full h-[400px]" />
                         ) : (
                           <div className="p-4 max-h-[400px] overflow-y-auto">
-                            <p className="text-xs text-gray-400 mb-2 italic">Không thể hiển thị định dạng này trực tiếp. Đây là văn bản được trích xuất:</p>
-                            <div className="text-sm text-gray-700 whitespace-pre-wrap font-mono bg-white p-3 border rounded shadow-inner leading-relaxed">
+                            <p className="text-xs text-gray-400 dark:text-zinc-500 mb-2 italic">Không thể hiển thị định dạng này trực tiếp. Đây là văn bản được trích xuất:</p>
+                            <div className="text-sm text-gray-700 dark:text-zinc-200 whitespace-pre-wrap font-mono bg-white dark:bg-zinc-800 p-3 border dark:border-zinc-700 rounded shadow-inner leading-relaxed">
                               {uploadedText}
                             </div>
                           </div>
@@ -672,8 +691,8 @@ export default function AITestPage() {
                 {sourceType === "document" && selectedDocs.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-                        <Target size={13} className="text-[#1a3a2a]" /> Trọng tâm từ khoá (Focus Keywords)
+                      <label className="text-xs font-semibold text-gray-700 dark:text-zinc-300 flex items-center gap-1.5">
+                        <Target size={13} className="text-[#1a3a2a] dark:text-emerald-400" /> Trọng tâm từ khoá (Focus Keywords)
                         {loadingKeywords && <Loader2 size={12} className="animate-spin text-gray-400" />}
                       </label>
                       {focusKeywords.length > 0 && (
@@ -687,7 +706,7 @@ export default function AITestPage() {
                       )}
                     </div>
                     {allKeywordChips.length === 0 && !loadingKeywords ? (
-                      <p className="text-[11px] text-gray-400 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                      <p className="text-[11px] text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-700">
                         Chưa phát hiện từ khoá riêng biệt trong tài liệu — AI sẽ dùng toàn bộ nội dung đã xử lý.
                       </p>
                     ) : (
@@ -701,8 +720,8 @@ export default function AITestPage() {
                               onClick={() => setFocusKeywords(prev => active ? prev.filter(k => k !== kw) : [...prev, kw])}
                               className={`px-2.5 py-1 text-[11px] font-semibold rounded-full border transition-all ${
                                 active
-                                  ? "bg-[#1a3a2a] text-white border-[#1a3a2a] shadow-sm ring-1 ring-[#1a3a2a]/30"
-                                  : "bg-white text-gray-600 border-gray-200 hover:border-[#1a3a2a] hover:bg-gray-50"
+                                  ? "bg-[#1a3a2a] text-white border-[#1a3a2a] dark:bg-emerald-700 dark:border-emerald-700 shadow-sm ring-1 ring-[#1a3a2a]/30"
+                                  : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-[#1a3a2a] dark:hover:border-emerald-600 hover:bg-gray-50 dark:hover:bg-zinc-700"
                               }`}
                             >
                               {active ? `✓ ${kw}` : kw}
@@ -711,41 +730,49 @@ export default function AITestPage() {
                         })}
                       </div>
                     )}
-                    <p className="text-[10px] text-gray-400">
+                    <p className="text-[10px] text-gray-400 dark:text-zinc-500">
                       💡 Chọn các từ khoá để AI chỉ lấy nội dung liên quan trực tiếp. Để trống để bao quát toàn bộ tài liệu.
                     </p>
                   </div>
                 )}
                 {/* ── Cấu hình Question Generator (model AI, đối tượng, loại câu hỏi) ── */}
-                <div className="bg-[#f8faf9] border border-gray-100 rounded-xl p-4 space-y-4">
-                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
-                    <Cpu size={14} className="text-[#1a3a2a]" /> Cấu hình AI
+                <div className="bg-[#f8faf9] dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-800 rounded-xl p-4 space-y-4">
+                  <h4 className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                    <Cpu size={14} className="text-[#1a3a2a] dark:text-emerald-400" /> Cấu hình AI
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Model AI</label>
+                      <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Model AI</label>
                       <select value={modelId ?? ""} onChange={e => setModelId(e.target.value ? Number(e.target.value) : null)}
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]">
-                        <option value="">⚡ Tự động (Ưu tiên Fast Groq → Balanced Gemini)</option>
+                        className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600">
+                        <option value="">⚡ Tự động (Ưu tiên Fast Groq → Balanced Gemini, hoặc Gemini khi tài liệu &gt; 8.000 ký tự)</option>
                         {aiModels.map(m => {
+                          const isAvail = m.is_available ?? m.isAvailable ?? true;
                           const tierBadge = m.tier === 'fast' ? '⚡ [FAST] ' : m.tier === 'balanced' ? '⚖️ [BALANCED] ' : m.tier === 'advanced' ? '🧠 [ADVANCED] ' : '';
                           return (
-                            <option key={m.id} value={m.id}>{tierBadge}{m.display_name} ({m.provider})</option>
+                            <option
+                              key={m.id}
+                              value={m.id}
+                              disabled={!isAvail}
+                              className={!isAvail ? "text-gray-400 bg-gray-100 dark:bg-zinc-800 italic" : ""}
+                            >
+                              {tierBadge}{m.display_name} ({m.provider}){!isAvail ? " — [Chưa khả dụng / Thiếu API Key]" : ""}
+                            </option>
                           );
                         })}
                       </select>
-                      <p className="text-[10px] text-gray-400 mt-1">
+                      <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1">
                         Fast: Xử lý nhanh · Balanced: Đề thi chuẩn · Advanced: Tự luận chuyên sâu
                       </p>
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Kiểu prompt</label>
+                      <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Kiểu prompt</label>
                       <select value={templateId} onChange={e => {
                         const id = e.target.value;
                         setTemplateId(id);
                         if (id === "beginner_explanation") setAudienceLevel("weak");
-                      }} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]">
+                      }} className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600">
                         {aiTemplates.length === 0 && <option value="basic_quiz">Basic Quiz</option>}
                         {aiTemplates.map(t => (
                           <option key={t.id} value={t.id}>{t.name} — {t.description}</option>
@@ -755,8 +782,8 @@ export default function AITestPage() {
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1.5">
-                      <GraduationCap size={13} className="text-[#1a3a2a]" /> Trình độ người học
+                    <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                      <GraduationCap size={13} className="text-[#1a3a2a] dark:text-emerald-400" /> Trình độ người học
                     </label>
                     <div className="flex gap-2 flex-wrap">
                       {([
@@ -765,7 +792,7 @@ export default function AITestPage() {
                         { key: "advanced", label: "Khá giỏi" },
                       ] as const).map(a => (
                         <button key={a.key} onClick={() => setAudienceLevel(a.key)}
-                          className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${audienceLevel === a.key ? "bg-[#1a3a2a] text-white border-[#1a3a2a]" : "bg-white text-gray-600 border-gray-200 hover:border-[#1a3a2a]"}`}>
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${audienceLevel === a.key ? "bg-[#1a3a2a] text-white border-[#1a3a2a] dark:bg-emerald-700 dark:border-emerald-700" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-[#1a3a2a] dark:hover:border-emerald-600"}`}>
                           {a.label}
                         </button>
                       ))}
@@ -774,9 +801,9 @@ export default function AITestPage() {
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
-                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Loại câu hỏi</label>
+                      <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Loại câu hỏi</label>
                       <select value={questionType} onChange={e => setQuestionType(e.target.value as any)}
-                        className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]">
+                        className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600">
                         <option value="mixed">Theo cấu hình</option>
                         <option value="MULTIPLE_CHOICE">Trắc nghiệm</option>
                         <option value="FILL_BLANK">Điền từ</option>
@@ -785,46 +812,46 @@ export default function AITestPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Độ khó</label>
+                      <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Độ khó</label>
                       <select value={difficulty} onChange={e => setDifficulty(e.target.value as any)}
-                        className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]">
+                        className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600">
                         <option value="easy">Dễ</option>
                         <option value="medium">Trung bình</option>
                         <option value="hard">Khó</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Số câu</label>
+                      <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Số câu</label>
                       <input type="number" min={1} max={50} value={quantity} onChange={e => setQuantity(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-                        className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]" />
+                        className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600" />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Chế độ</label>
+                      <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Chế độ</label>
                       <select value={mode} onChange={e => setMode(e.target.value as any)}
-                        className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:border-[#1a3a2a]">
+                        className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600">
                         <option value="practice">Luyện tập</option>
                         <option value="exam">Kiểm tra / Thi</option>
                       </select>
                     </div>
                   </div>
                   {questionType !== "mixed" && (
-                    <p className="text-[11px] text-gray-500">Sẽ tạo <b>{quantity}</b> câu hỏi loại đã chọn. Chọn "Theo cấu hình" để dùng số lượng/điểm từng loại đã lưu trong Cấu hình.</p>
+                    <p className="text-[11px] text-gray-500 dark:text-zinc-400">Sẽ tạo <b>{quantity}</b> câu hỏi loại đã chọn. Chọn "Theo cấu hình" để dùng số lượng/điểm từng loại đã lưu trong Cấu hình.</p>
                   )}
 
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 mb-1 block">Hướng dẫn thêm (tùy chọn, ≤ 500 ký tự)</label>
+                    <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Hướng dẫn thêm (tùy chọn, ≤ 500 ký tự)</label>
                     <textarea value={customInstruction} onChange={e => setCustomInstruction(e.target.value)} rows={2} maxLength={500}
                       placeholder="VD: Tập trung vào chương 2, tránh câu hỏi định nghĩa, thêm tình huống thực tế..."
-                      className="w-full border border-gray-200 rounded-xl p-3 text-sm text-gray-700 resize-none focus:outline-none focus:border-[#1a3a2a]" />
+                      className="w-full border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl p-3 text-sm text-gray-700 dark:text-zinc-200 placeholder:text-gray-400 dark:placeholder:text-zinc-500 resize-none focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600" />
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                  <p className="text-xs text-gray-400">
+                <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-zinc-800">
+                  <p className="text-xs text-gray-400 dark:text-zinc-500">
                     Bộ đề sẽ ở trạng thái NHÁP — xem lại, sửa rồi bấm "Duyệt &amp; Lưu".
                   </p>
                   <button onClick={handleGenerate} disabled={generating}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#1a3a2a] text-white text-sm font-bold rounded-xl hover:bg-[#234b37] disabled:opacity-50 transition-colors shadow-md shadow-[#1a3a2a]/20">
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#1a3a2a] dark:bg-emerald-700 hover:bg-[#234b37] dark:hover:bg-emerald-600 text-white text-sm font-bold rounded-xl disabled:opacity-50 transition-colors shadow-md shadow-[#1a3a2a]/20">
                     {generating ? <><Loader2 size={14} className="animate-spin" /> Đang tạo...</> : <><Sparkles size={14} /> Tạo bộ đề</>}
                   </button>
                 </div>
@@ -836,9 +863,9 @@ export default function AITestPage() {
 
         {/* TEST SETS GRID */}
         <div>
-          <h2 className="text-sm font-bold text-gray-600 mb-3">Bộ đề của tôi ({testSets.length})</h2>
+          <h2 className="text-sm font-bold text-gray-600 dark:text-zinc-400 mb-3">Bộ đề của tôi ({testSets.length})</h2>
           {testSets.length === 0 ? (
-            <div className="flex flex-col items-center justify-center bg-white rounded-2xl border border-dashed border-gray-200 py-20 text-gray-400">
+            <div className="flex flex-col items-center justify-center bg-white dark:bg-zinc-900 rounded-2xl border border-dashed border-gray-200 dark:border-zinc-800 py-20 text-gray-400 dark:text-zinc-500">
               <Sparkles size={32} className="mb-3 opacity-40" />
               <p className="text-sm font-medium">Chưa có bộ đề nào</p>
               <p className="text-xs mt-1">Nhấn "+ Tạo đề mới" và chọn nguồn nội dung</p>
@@ -847,54 +874,54 @@ export default function AITestPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {testSets.map(ts => (
                 <motion.div key={ts.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                  className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+                  className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 shadow-sm p-4 hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1 min-w-0 pr-2">
-                      <h3 className="text-sm font-bold text-gray-900 line-clamp-2">{ts.name}</h3>
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-zinc-100 line-clamp-2">{ts.name}</h3>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-xs text-gray-400">{new Date(ts.created_at).toLocaleDateString("vi-VN")}</p>
+                        <p className="text-xs text-gray-400 dark:text-zinc-500">{new Date(ts.created_at).toLocaleDateString("vi-VN")}</p>
                         {ts.status === "DRAFT" && (
-                          <span className="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">NHÁP</span>
+                          <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded-md">NHÁP</span>
                         )}
                         {ts.status === "APPROVED" && (
-                          <span className="text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-md">ĐÃ DUYỆT</span>
+                          <span className="text-[9px] font-bold text-green-700 dark:text-emerald-400 bg-green-50 dark:bg-emerald-950/40 border border-green-200 dark:border-emerald-800 px-1.5 py-0.5 rounded-md">ĐÃ DUYỆT</span>
                         )}
                       </div>
                     </div>
-                    <button onClick={() => handleToggle(ts)} className={`flex-shrink-0 transition-colors ${ts.is_active ? "text-[#1a3a2a]" : "text-gray-300"}`} title={ts.is_active ? "Bật" : "Tắt"}>
+                    <button onClick={() => handleToggle(ts)} className={`flex-shrink-0 transition-colors ${ts.is_active ? "text-[#1a3a2a] dark:text-emerald-400" : "text-gray-300 dark:text-zinc-600"}`} title={ts.is_active ? "Bật" : "Tắt"}>
                       {ts.is_active ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-2 mb-3">
-                    <div className="bg-gray-50 rounded-xl p-2 text-center">
-                      <p className="text-[10px] text-gray-400">Số câu</p>
-                      <p className="text-base font-bold text-gray-900">{ts.total_questions}</p>
+                    <div className="bg-gray-50 dark:bg-zinc-800/70 rounded-xl p-2 text-center">
+                      <p className="text-[10px] text-gray-400 dark:text-zinc-400">Số câu</p>
+                      <p className="text-base font-bold text-gray-900 dark:text-zinc-100">{ts.total_questions}</p>
                     </div>
-                    <div className="bg-green-50 rounded-xl p-2 text-center">
-                      <p className="text-[10px] text-green-600">Tổng điểm</p>
-                      <p className="text-base font-bold text-[#1a3a2a]">{Number(ts.total_score).toFixed(1)}</p>
+                    <div className="bg-green-50 dark:bg-emerald-950/40 rounded-xl p-2 text-center">
+                      <p className="text-[10px] text-green-600 dark:text-emerald-400">Tổng điểm</p>
+                      <p className="text-base font-bold text-[#1a3a2a] dark:text-emerald-300">{Number(ts.total_score).toFixed(1)}</p>
                     </div>
                   </div>
                   {ts.generation_config && ts.generation_config.duplicateRemoved > 0 && (
-                    <div className="mb-3 px-2 py-1 bg-amber-50 rounded text-[10px] text-amber-700 font-medium">
+                    <div className="mb-3 px-2 py-1 bg-amber-50 dark:bg-amber-950/40 rounded text-[10px] text-amber-700 dark:text-amber-400 font-medium">
                       Đã loại bỏ {ts.generation_config.duplicateRemoved} câu trùng lặp
                     </div>
                   )}
                   <div className="flex gap-2">
                     <Link
                       href={`/quiz/${ts.id}`}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-white bg-[#1a3a2a] rounded-xl hover:bg-[#25523b] transition-colors shadow-sm"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-white bg-[#1a3a2a] dark:bg-emerald-700 rounded-xl hover:bg-[#25523b] dark:hover:bg-emerald-600 transition-colors shadow-sm"
                     >
                       <Play size={12} fill="white" /> Làm bài
                     </Link>
                     <button onClick={() => setEditTarget(ts)}
-                      className="px-3 py-2 flex items-center justify-center gap-1.5 text-xs font-bold text-[#1a3a2a] bg-[#f0fdf4] border border-[#d1fae5] rounded-xl hover:bg-[#dcfce7] transition-colors"
+                      className="px-3 py-2 flex items-center justify-center gap-1.5 text-xs font-bold text-[#1a3a2a] dark:text-emerald-300 bg-[#f0fdf4] dark:bg-emerald-950/40 border border-[#d1fae5] dark:border-emerald-800/50 rounded-xl hover:bg-[#dcfce7] dark:hover:bg-emerald-900/40 transition-colors"
                       title="Xem và chỉnh sửa câu hỏi"
                     >
                       <Edit3 size={12} /> Sửa
                     </button>
                     <button onClick={() => handleDelete(ts)}
-                      className="px-3 py-2 text-xs font-bold text-red-500 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 transition-colors"
+                      className="px-3 py-2 text-xs font-bold text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                       title="Xóa bộ đề"
                     >
                       <Trash2 size={12} />

@@ -3,6 +3,9 @@ import { OAuth2Client } from 'google-auth-library';
 import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
 import { authService } from '../services/auth.service';
+import { tokenBlacklistService } from '../services/token-blacklist.service';
+import jwt from 'jsonwebtoken';
+import { validateFileContent } from '../utils/file-security';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -15,6 +18,11 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phoneRegex = /^(03|05|07|08|09)\d{8}$/;
+
+const isAuthDebug = process.env.AUTH_DEBUG === '1' || process.env.AUTH_DEBUG === 'true';
+const authLog = (msg: string) => {
+  if (isAuthDebug) console.log(`[AUTH_BE_DEBUG] ${msg}`);
+};
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -46,6 +54,7 @@ export const register = async (req: Request, res: Response) => {
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000
     });
 
@@ -80,6 +89,7 @@ export const login = async (req: Request, res: Response) => {
     res.cookie('token', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000
     });
     
@@ -109,6 +119,7 @@ export const verify2FA = async (req: Request, res: Response) => {
     res.cookie('token', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000
     });
 
@@ -168,6 +179,7 @@ export const googleLogin = async (req: Request, res: Response) => {
     res.cookie('token', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000
     });
 
@@ -185,6 +197,7 @@ export const googleLogin = async (req: Request, res: Response) => {
 export const getMe = async (req: any, res: Response) => {
   try {
     const userId = req.user.id;
+    authLog(`[ME] user=${userId}`);
     const user = await authService.getMe(userId);
     
     res.status(200).json({ user });
@@ -199,6 +212,25 @@ export const getMe = async (req: any, res: Response) => {
 
 export const logout = async (req: Request, res: Response) => {
   try {
+    let token = req.cookies?.token;
+    let source = token ? 'cookie' : 'none';
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+        source = 'header';
+      }
+    }
+    authLog(`[LOGOUT] called via ${source}`);
+    if (token) {
+      try {
+        const decoded = jwt.decode(token) as { exp?: number } | null;
+        const expiryMs = decoded?.exp ? decoded.exp * 1000 : undefined;
+        tokenBlacklistService.add(token, expiryMs);
+      } catch {
+        tokenBlacklistService.add(token);
+      }
+    }
     res.clearCookie('token');
     res.status(200).json({ message: 'Đăng xuất thành công' });
   } catch (error: any) {
@@ -210,12 +242,15 @@ export const logout = async (req: Request, res: Response) => {
 export const refresh = async (req: Request, res: Response) => {
   try {
     let token = req.cookies?.token;
+    let source = token ? 'cookie' : 'none';
     if (!token) {
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
         token = authHeader.split(' ')[1];
+        source = 'header';
       }
     }
+    console.log(`[AUTH_BE_DEBUG] [REFRESH] called via ${source}`);
 
     if (!token) {
       return res.status(401).json({ error: 'Vui lòng đăng nhập để tiếp tục' });
@@ -226,6 +261,7 @@ export const refresh = async (req: Request, res: Response) => {
     res.cookie('token', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000
     });
 
@@ -276,6 +312,10 @@ export const updateAvatar = async (req: any, res: Response) => {
     }
 
     const filePath = req.file.path;
+    // Security Hardening: Validate image magic bytes (JPEG/PNG/WEBP/GIF) & reject fake files/executables
+    const fileBuffer = await fs.promises.readFile(filePath);
+    validateFileContent(fileBuffer, req.file.originalname, req.file.mimetype);
+
     console.log('Uploading file to Cloudinary:', filePath);
     
     const result = await cloudinary.uploader.upload(filePath, {

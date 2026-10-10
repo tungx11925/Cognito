@@ -46,16 +46,24 @@ const getDocType = (doc: any): "pdf" | "docx" | "txt" | "pptx" => {
   return "pdf";
 };
 
-// Helper for deterministic size
+// Helper for formatting real document file size
 const getDocSize = (doc: any): string => {
-  const sizes = ["2.3 MB", "1.1 MB", "856 KB", "3.2 MB", "1.8 MB", "124 KB", "4.7 MB", "512 KB"];
-  return sizes[(doc.id - 1) % sizes.length] || "1.2 MB";
+  if (doc?.file_size && typeof doc.file_size === 'number' && doc.file_size > 0) {
+    if (doc.file_size >= 1048576) {
+      return `${(doc.file_size / 1048576).toFixed(1)} MB`;
+    }
+    return `${Math.max(1, Math.round(doc.file_size / 1024))} KB`;
+  }
+  const type = getDocType(doc);
+  return type ? type.toUpperCase() : 'Tài liệu';
 };
 
-// Helper for deterministic page count
+// Helper for real document page count
 const getDocPages = (doc: any): number | undefined => {
-  const pages = [42, 28, 19, 64, 33, undefined, 38, 12];
-  return pages[(doc.id - 1) % pages.length];
+  if (doc?.page_count && typeof doc.page_count === 'number' && doc.page_count > 0) {
+    return doc.page_count;
+  }
+  return undefined;
 };
 
 // Helper for formatted date
@@ -695,6 +703,13 @@ export default function LibraryPage() {
     const savedTheme = localStorage.getItem("app-theme") || "light";
     setDark(savedTheme === "dark");
 
+    const onThemeChange = (e: any) => {
+      if (e.detail?.theme) {
+        setDark(e.detail.theme === "dark");
+      }
+    };
+    window.addEventListener("cognito:theme_change", onThemeChange);
+
     const savedBg = (localStorage.getItem("library-bg") as BackgroundStyle) || "default";
     setBgStyle(savedBg);
 
@@ -719,12 +734,17 @@ export default function LibraryPage() {
         console.error(e);
       }
     }
+
+    return () => {
+      window.removeEventListener("cognito:theme_change", onThemeChange);
+    };
   }, [isAuthenticated, activeUser]);
 
   const handleToggleDark = () => {
     const nextDark = !dark;
     setDark(nextDark);
     localStorage.setItem("app-theme", nextDark ? "dark" : "light");
+    window.dispatchEvent(new CustomEvent("cognito:theme_change", { detail: { theme: nextDark ? "dark" : "light" } }));
     if (typeof window !== "undefined") {
       if (nextDark) {
         document.documentElement.classList.add("dark");
@@ -915,7 +935,7 @@ export default function LibraryPage() {
                     Quản lý và ôn tập các tài liệu cá nhân của bạn
                   </p>
                 </div>
-                {isAuthenticated && (
+                {isAuthenticated ? (
                   <button
                     onClick={() => setIsUploadOpen(true)}
                     style={{
@@ -928,6 +948,20 @@ export default function LibraryPage() {
                   >
                     <Plus size={15} />
                     Tải tài liệu lên
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowLoginModal(true)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6, padding: "8px 16px",
+                      borderRadius: 12, border: "none",
+                      background: primaryColor, color: "#fff", fontWeight: 700, fontSize: 13,
+                      cursor: "pointer", fontFamily: "'Outfit', sans-serif",
+                      boxShadow: dark ? "3px 3px 0 rgba(255,255,255,0.03)" : "3px 3px 0 rgba(26,46,28,0.12)",
+                    }}
+                  >
+                    <Plus size={15} />
+                    Đăng nhập để tải tài liệu
                   </button>
                 )}
               </div>

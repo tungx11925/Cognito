@@ -1,0 +1,14 @@
+{
+  "watch": [
+    "src"
+  ],
+  "ext": "ts",
+  "ignore": [
+    "uploads/**",
+    "backups/**",
+    "logs/**",
+    "scratch/**",
+    "*.log"
+  ],
+  "exec": "ts-node --transpile-only src/server.ts"
+}

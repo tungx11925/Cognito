@@ -1,13 +1,53 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
   Layers, FileText, Network, BookOpen, 
   HelpCircle, ArrowRight, Sparkles, CheckCircle2, TrendingUp, Zap
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { Navbar } from '@/components/landing/Navbar';
+import { useStudy } from '@/context/StudyContext';
+import { AnimatePresence } from 'framer-motion';
+
+const RegisterModal = dynamic(
+  () => import('@/components/auth/RegisterModal'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
+
+const PremiumModal = dynamic(
+  () => import('@/components/layout/PremiumModal'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
 
 export default function StudySessionsPage() {
+  const router = useRouter();
+  const {
+    isAuthenticated,
+    showLoginModal,
+    setShowLoginModal,
+    showPremiumModal,
+    setShowPremiumModal,
+    activeUser,
+    triggerMessage,
+  } = useStudy();
+
   const studyTools = [
     {
       title: 'Chế độ tập trung (Focus Mode)',
@@ -75,18 +115,25 @@ export default function StudySessionsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#FDFCFB] dark:bg-[#0B0F17] text-gray-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
+      <Navbar
+        isLoggedIn={isAuthenticated}
+        onSignInClick={() => setShowLoginModal(true)}
+        onDashboardClick={() => router.push('/library')}
+        activeUser={activeUser}
+      />
+
       {/* Hero Header */}
-      <div className="bg-white border-b border-gray-200/80 px-4 sm:px-8 py-10">
+      <div className="bg-white dark:bg-zinc-900 border-b border-gray-200/80 dark:border-zinc-800 px-4 sm:px-8 pt-24 pb-10 transition-colors">
         <div className="max-w-5xl mx-auto">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-full mb-3 border border-emerald-200/60">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-400 text-xs font-bold rounded-full mb-3 border border-emerald-200/60 dark:border-emerald-800">
             <Sparkles size={13} />
             <span>Không gian tự học cá nhân hóa</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-zinc-100 tracking-tight">
             Không gian học tập & Ghi nhớ (Study System)
           </h1>
-          <p className="text-sm text-gray-600 mt-2 max-w-2xl leading-relaxed">
+          <p className="text-sm text-gray-600 dark:text-zinc-400 mt-2 max-w-2xl leading-relaxed">
             Hệ sinh thái công cụ hỗ trợ người học tổng hợp kiến thức, rèn luyện trí nhớ qua thuật toán lặp lại ngắt quãng, phác thảo sơ đồ tư duy và ghi chú bài học có hệ thống.
           </p>
         </div>
@@ -100,29 +147,29 @@ export default function StudySessionsPage() {
             return (
               <div
                 key={tool.title}
-                className="bg-white rounded-2xl border border-gray-200/80 p-6 flex flex-col justify-between hover:shadow-md hover:border-gray-300 transition-all group"
+                className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 p-6 flex flex-col justify-between hover:shadow-md hover:border-gray-300 dark:hover:border-zinc-700 transition-all group"
               >
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center border ${tool.color}`}>
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center border ${tool.color} dark:bg-opacity-20`}>
                       <Icon size={22} />
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300">
                       {tool.badge}
                     </span>
                   </div>
 
-                  <h2 className="text-base font-bold text-gray-900 mb-2 group-hover:text-[#0D2B24] transition-colors">
+                  <h2 className="text-base font-bold text-gray-900 dark:text-zinc-100 mb-2 group-hover:text-[#0D2B24] dark:group-hover:text-emerald-400 transition-colors">
                     {tool.title}
                   </h2>
-                  <p className="text-xs text-gray-500 leading-relaxed mb-6">
+                  <p className="text-xs text-gray-500 dark:text-zinc-400 leading-relaxed mb-6">
                     {tool.description}
                   </p>
                 </div>
 
                 <Link
                   href={tool.href}
-                  className="flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-[#0D2B24] text-gray-700 hover:text-white rounded-xl text-xs font-semibold transition-all group-hover:border-[#0D2B24]"
+                  className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-zinc-800/80 hover:bg-[#0D2B24] dark:hover:bg-emerald-700 text-gray-700 dark:text-zinc-200 hover:text-white rounded-xl text-xs font-semibold transition-all group-hover:border-[#0D2B24]"
                 >
                   <span>{tool.actionText}</span>
                   <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
@@ -133,7 +180,7 @@ export default function StudySessionsPage() {
         </div>
 
         {/* Learning Methodology Feature Callout */}
-        <div className="mt-10 bg-gradient-to-r from-[#0D2B24] to-[#16483C] text-white rounded-2xl p-6 sm:p-8 shadow-sm">
+        <div className="mt-10 bg-gradient-to-r from-[#0D2B24] to-[#16483C] dark:from-zinc-900 dark:to-zinc-800 border border-transparent dark:border-zinc-800 text-white rounded-2xl p-6 sm:p-8 shadow-sm">
           <div className="max-w-3xl">
             <h3 className="text-base font-bold text-emerald-200 mb-2">
               Nguyên lý học tập ngắt quãng (Spaced Repetition & Retrieval Practice)
@@ -158,6 +205,22 @@ export default function StudySessionsPage() {
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showLoginModal && (
+          <RegisterModal 
+            isOpen={showLoginModal} 
+            onClose={() => setShowLoginModal(false)} 
+            triggerMessage={triggerMessage} 
+          />
+        )}
+        {showPremiumModal && (
+          <PremiumModal 
+            isOpen={showPremiumModal} 
+            onClose={() => setShowPremiumModal(false)} 
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

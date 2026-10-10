@@ -19,7 +19,7 @@ import toast from "react-hot-toast";
 /* ── UI Components ───────────────────────────────────────── */
 const Card = ({ children, className = "" }: any) => {
   return (
-    <div className={`bg-white rounded-2xl border-2 border-[#1a2e1c]/45 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.16)] overflow-hidden transition-all duration-300 hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.24)] hover:border-[#1a2e1c]/65 ${className}`}>
+    <div className={`bg-white dark:bg-zinc-900 rounded-2xl border-2 border-[#1a2e1c]/45 dark:border-zinc-800 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.16)] dark:shadow-none overflow-hidden transition-all duration-300 hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.24)] hover:border-[#1a2e1c]/65 dark:hover:border-zinc-700 ${className}`}>
       {children}
     </div>
   );
@@ -28,11 +28,11 @@ const Card = ({ children, className = "" }: any) => {
 const Badge = ({ children, className = "", variant = "default" }: any) => {
   const base = "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold";
   const variants: any = { 
-    default: "bg-gray-100 text-gray-800", 
-    outline: "border border-gray-200 text-gray-800",
-    pro: "bg-[#1a2e1c] text-white",
-    green: "bg-emerald-50 text-emerald-700 border border-emerald-200",
-    amber: "bg-amber-50 text-amber-700 border border-amber-200"
+    default: "bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-zinc-200", 
+    outline: "border border-gray-200 dark:border-zinc-700 text-gray-800 dark:text-zinc-200",
+    pro: "bg-[#1a2e1c] dark:bg-emerald-700 text-white",
+    green: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
+    amber: "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
   };
   return <span className={`${base} ${variants[variant] || ""} ${className}`}>{children}</span>;
 };
@@ -41,10 +41,10 @@ const Button = ({ children, className = "", size = "default", variant = "default
   const base = "inline-flex items-center justify-center rounded-xl font-bold transition-all duration-200 focus:outline-none disabled:opacity-50";
   const sizes: any = { default: "h-10 px-4 py-2 text-sm", sm: "h-8 px-3 text-xs" };
   const variants: any = { 
-    default: "bg-[#1a2e1c] text-white hover:bg-[#2d5a3d] shadow-sm", 
-    outline: "border-2 border-[#1a2e1c]/25 bg-white hover:bg-gray-50 text-gray-800",
-    danger: "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200",
-    ghost: "bg-transparent hover:bg-gray-100 text-gray-600"
+    default: "bg-[#1a2e1c] hover:bg-[#2d5a3d] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white shadow-sm", 
+    outline: "border-2 border-[#1a2e1c]/25 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200",
+    danger: "bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800",
+    ghost: "bg-transparent hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-300"
   };
   return <button className={`${base} ${sizes[size] || sizes.default} ${variants[variant] || variants.default} ${className}`} {...props}>{children}</button>;
 };
@@ -201,10 +201,10 @@ export default function TargetUserProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#ebe8e0] flex items-center justify-center">
+      <div className="min-h-screen bg-[#ebe8e0] dark:bg-[#0B0F17] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-[#1a2e1c] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-gray-500 font-semibold">Đang tải hồ sơ học viên...</p>
+          <div className="w-10 h-10 border-4 border-[#1a2e1c] dark:border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-500 dark:text-zinc-400 font-semibold">Đang tải hồ sơ học viên...</p>
         </div>
       </div>
     );
@@ -212,13 +212,13 @@ export default function TargetUserProfilePage() {
 
   if (error || !profile) {
     return (
-      <div className="min-h-screen bg-[#ebe8e0] flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen bg-[#ebe8e0] dark:bg-[#0B0F17] flex flex-col items-center justify-center p-6">
         <Card className="max-w-md w-full p-8 text-center space-y-5">
-          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto border border-red-200">
+          <div className="w-16 h-16 bg-red-50 dark:bg-red-950/40 text-red-500 dark:text-red-400 rounded-full flex items-center justify-center mx-auto border border-red-200 dark:border-red-900">
             <Lock className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900">Không thể truy cập hồ sơ</h2>
-          <p className="text-sm text-gray-500 leading-relaxed">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-zinc-100">Không thể truy cập hồ sơ</h2>
+          <p className="text-sm text-gray-500 dark:text-zinc-400 leading-relaxed">
             {error || "Tài khoản này có thể không tồn tại hoặc đã bị khóa do quan hệ chặn."}
           </p>
           <Button onClick={() => router.back()} className="w-full font-bold">
@@ -233,7 +233,7 @@ export default function TargetUserProfilePage() {
   if (profile.isRestricted) {
     const isPrivate = profile.privacy === "private";
     return (
-      <div className="min-h-screen bg-[#ebe8e0] flex flex-col items-center justify-center p-6" style={{ fontFamily: "'Outfit', sans-serif" }}>
+      <div className="min-h-screen bg-[#ebe8e0] dark:bg-[#0B0F17] flex flex-col items-center justify-center p-6" style={{ fontFamily: "'Outfit', sans-serif" }}>
         <Navbar
           isLoggedIn={isAuthenticated}
           onSignInClick={() => setShowLoginModal(true)}
@@ -241,27 +241,27 @@ export default function TargetUserProfilePage() {
           activeUser={activeUser!}
         />
         <Card className="max-w-md w-full p-8 text-center space-y-6 mt-16">
-          <div className="w-20 h-20 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto border-2 border-amber-200/50 shadow-md">
+          <div className="w-20 h-20 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center mx-auto border-2 border-amber-200/50 dark:border-amber-800/50 shadow-md">
             <Lock className="w-10 h-10 animate-pulse" />
           </div>
 
           <div className="space-y-2">
             {profile.user.avatar_url ? (
-              <img src={profile.user.avatar_url} alt={profile.user.name} className="w-16 h-16 rounded-full mx-auto object-cover border-2 border-[#1a2e1c]" />
+              <img src={profile.user.avatar_url} alt={profile.user.name} className="w-16 h-16 rounded-full mx-auto object-cover border-2 border-[#1a2e1c] dark:border-emerald-600" />
             ) : (
-              <div className="w-16 h-16 bg-[#2d5a3d]/20 text-[#2d5a3d] text-lg font-bold rounded-full flex items-center justify-center mx-auto border-2 border-[#2d5a3d]/30">
+              <div className="w-16 h-16 bg-[#2d5a3d]/20 text-[#2d5a3d] dark:text-emerald-400 text-lg font-bold rounded-full flex items-center justify-center mx-auto border-2 border-[#2d5a3d]/30 dark:border-emerald-800">
                 {profile.user.name.slice(0, 2).toUpperCase()}
               </div>
             )}
-            <h2 className="text-xl font-bold text-gray-800">{profile.user.name}</h2>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-zinc-100">{profile.user.name}</h2>
             {profile.user.headline && (
-              <p className="text-xs text-gray-500 font-medium">{profile.user.headline}</p>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">{profile.user.headline}</p>
             )}
           </div>
 
-          <div className="p-4 bg-amber-50/50 border border-amber-200/60 rounded-xl space-y-1.5">
-            <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Hồ sơ riêng tư</h3>
-            <p className="text-xs text-amber-700 leading-relaxed">
+          <div className="p-4 bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40 rounded-xl space-y-1.5">
+            <h3 className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">Hồ sơ riêng tư</h3>
+            <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
               Học viên này đã cài đặt hồ sơ ở chế độ Riêng tư. Các tài nguyên chia sẻ và thống kê học tập công khai đã được ẩn.
             </p>
           </div>
@@ -284,7 +284,7 @@ export default function TargetUserProfilePage() {
     : "Gần đây";
 
   return (
-    <div className="min-h-screen bg-[#ebe8e0] pb-16 transition-colors duration-300" style={{ fontFamily: "'Outfit', sans-serif" }}>
+    <div className="min-h-screen bg-[#ebe8e0] dark:bg-[#0B0F17] pb-16 transition-colors duration-300" style={{ fontFamily: "'Outfit', sans-serif" }}>
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
@@ -311,7 +311,7 @@ export default function TargetUserProfilePage() {
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
               <div className="flex flex-col sm:flex-row sm:items-end gap-4">
                 <div className="relative shrink-0 -mt-14 z-10">
-                  <div className="w-28 h-28 bg-[#2d5a3d] border-4 border-white shadow-xl rounded-2xl flex items-center justify-center overflow-hidden">
+                  <div className="w-28 h-28 bg-[#2d5a3d] border-4 border-white dark:border-zinc-900 shadow-xl rounded-2xl flex items-center justify-center overflow-hidden">
                     {user.avatar_url ? (
                       <img 
                         src={user.avatar_url} 
@@ -325,7 +325,7 @@ export default function TargetUserProfilePage() {
                 </div>
                 <div className="pb-1 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-gray-900 text-2xl font-bold">{user.name}</h2>
+                    <h2 className="text-gray-900 dark:text-zinc-100 text-2xl font-bold">{user.name}</h2>
                     {profile.isSelf && (
                       <Badge variant="pro" className="text-xs px-2.5 py-0.5">
                         Hồ sơ của bạn
@@ -333,9 +333,9 @@ export default function TargetUserProfilePage() {
                     )}
                   </div>
                   {user.headline && (
-                    <p className="text-sm font-medium text-emerald-800 mt-0.5">{user.headline}</p>
+                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-400 mt-0.5">{user.headline}</p>
                   )}
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1">
                     Thành viên từ tháng {joinDate} · @{user.name.toLowerCase().replace(/\s+/g, '')}
                   </p>
                 </div>
@@ -372,7 +372,7 @@ export default function TargetUserProfilePage() {
                 <Button 
                   variant="ghost"
                   onClick={handleOpenReport}
-                  className="text-gray-500 hover:text-amber-700 hover:bg-amber-50"
+                  className="text-gray-500 hover:text-amber-700 hover:bg-amber-50 dark:text-zinc-400 dark:hover:text-amber-400 dark:hover:bg-amber-950/40"
                   title="Báo cáo người dùng"
                 >
                   <ShieldAlert className="w-4 h-4" />
@@ -380,7 +380,7 @@ export default function TargetUserProfilePage() {
                 <Button 
                   variant="ghost"
                   onClick={handleOpenBlock}
-                  className="text-gray-500 hover:text-red-700 hover:bg-red-50"
+                  className="text-gray-500 hover:text-red-700 hover:bg-red-50 dark:text-zinc-400 dark:hover:text-red-400 dark:hover:bg-red-950/40"
                   title="Chặn người dùng"
                 >
                   <UserX className="w-4 h-4" />
@@ -390,9 +390,9 @@ export default function TargetUserProfilePage() {
 
             {/* Bio and Website Section */}
             {(user.bio || user.website) && (
-              <div className="mt-5 pt-4 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="mt-5 pt-4 border-t border-gray-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 {user.bio ? (
-                  <p className="text-xs text-gray-600 font-medium leading-relaxed max-w-2xl">
+                  <p className="text-xs text-gray-600 dark:text-zinc-300 font-medium leading-relaxed max-w-2xl">
                     {user.bio}
                   </p>
                 ) : <div />}
@@ -402,7 +402,7 @@ export default function TargetUserProfilePage() {
                     href={user.website.startsWith('http') ? user.website : `https://${user.website}`}
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs text-[#2d5a3d] font-bold hover:underline shrink-0"
+                    className="inline-flex items-center gap-1.5 text-xs text-[#2d5a3d] dark:text-emerald-400 font-bold hover:underline shrink-0"
                   >
                     <Globe className="w-3.5 h-3.5" />
                     <span>{user.website.replace(/^https?:\/\//, '')}</span>
@@ -417,33 +417,33 @@ export default function TargetUserProfilePage() {
         {/* Basic Public Statistics Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           {[
-            { label: "Tài nguyên", value: public_stats.total_published_resources || 0, icon: FileText, color: "text-blue-600", bg: "bg-blue-50" },
-            { label: "Trắc nghiệm", value: public_stats.total_public_quizzes || 0, icon: Target, color: "text-purple-600", bg: "bg-purple-50" },
-            { label: "Bộ Flashcard", value: public_stats.total_public_decks || 0, icon: Layers, color: "text-emerald-600", bg: "bg-emerald-50" },
-            { label: "Lượt thích", value: public_stats.total_likes_received || 0, icon: Heart, color: "text-red-600", bg: "bg-red-50" },
-            { label: "Lượt lưu", value: public_stats.total_saves_received || 0, icon: Bookmark, color: "text-amber-600", bg: "bg-amber-50" },
-            { label: "Chuỗi Streak", value: `${public_stats.streak || user.streak || 0} ngày`, icon: Flame, color: "text-orange-600", bg: "bg-orange-50" },
+            { label: "Tài nguyên", value: public_stats.total_published_resources || 0, icon: FileText, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-950/40" },
+            { label: "Trắc nghiệm", value: public_stats.total_public_quizzes || 0, icon: Target, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-950/40" },
+            { label: "Bộ Flashcard", value: public_stats.total_public_decks || 0, icon: Layers, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/40" },
+            { label: "Lượt thích", value: public_stats.total_likes_received || 0, icon: Heart, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/40" },
+            { label: "Lượt lưu", value: public_stats.total_saves_received || 0, icon: Bookmark, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/40" },
+            { label: "Chuỗi Streak", value: `${public_stats.streak || user.streak || 0} ngày`, icon: Flame, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/40" },
           ].map((item, idx) => {
             const Icon = item.icon;
             return (
               <div 
                 key={idx} 
-                className="bg-white rounded-xl border-2 border-[#1a2e1c]/25 p-3 flex flex-col justify-between shadow-[2px_2px_0px_0px_rgba(26,46,28,0.1)] transition-transform hover:-translate-y-0.5"
+                className="bg-white dark:bg-zinc-900 rounded-xl border-2 border-[#1a2e1c]/25 dark:border-zinc-800 p-3 flex flex-col justify-between shadow-[2px_2px_0px_0px_rgba(26,46,28,0.1)] dark:shadow-none transition-transform hover:-translate-y-0.5"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-gray-500">{item.label}</span>
+                  <span className="text-[11px] font-bold text-gray-500 dark:text-zinc-400">{item.label}</span>
                   <div className={`w-6 h-6 rounded-lg ${item.bg} ${item.color} flex items-center justify-center`}>
                     <Icon className="w-3.5 h-3.5" />
                   </div>
                 </div>
-                <p className="text-xl font-bold text-gray-900 mt-2">{item.value}</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-zinc-100 mt-2">{item.value}</p>
               </div>
             );
           })}
         </div>
 
         {/* Content Tabs Navigation */}
-        <div className="flex items-center gap-2 p-1.5 bg-[#1a2e1c]/5 rounded-xl border border-[#1a2e1c]/15 max-w-md">
+        <div className="flex items-center gap-2 p-1.5 bg-[#1a2e1c]/5 dark:bg-zinc-900/80 rounded-xl border border-[#1a2e1c]/15 dark:border-zinc-800 max-w-md">
           {[
             { id: "resources", label: "Tài nguyên học tập", count: public_resources.length, icon: FileText },
             { id: "quizzes", label: "Bài trắc nghiệm", count: public_quizzes.length, icon: Target },
@@ -457,14 +457,14 @@ export default function TargetUserProfilePage() {
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                   isActive
-                    ? "bg-[#1a2e1c] text-white shadow-sm"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
+                    ? "bg-[#1a2e1c] dark:bg-emerald-700 text-white shadow-sm"
+                    : "text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200 hover:bg-white/60 dark:hover:bg-zinc-800"
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{tab.label}</span>
                 <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                  isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
+                  isActive ? "bg-white/20 text-white" : "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-zinc-300"
                 }`}>
                   {tab.count}
                 </span>
@@ -491,24 +491,24 @@ export default function TargetUserProfilePage() {
                       <Card key={res.id} className="p-5 flex flex-col justify-between h-full">
                         <div>
                           <div className="flex items-start justify-between gap-2 mb-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                               {res.subject || res.resource_type || "Tài nguyên"}
                             </span>
                             {res.grade_level && (
-                              <span className="text-[10px] font-semibold text-gray-400">
+                              <span className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500">
                                 {res.grade_level}
                               </span>
                             )}
                           </div>
-                          <h3 className="text-base font-bold text-gray-900 line-clamp-1 hover:text-[#2d5a3d] transition-colors">
+                          <h3 className="text-base font-bold text-gray-900 dark:text-zinc-100 line-clamp-1 hover:text-[#2d5a3d] dark:hover:text-emerald-400 transition-colors">
                             {res.title}
                           </h3>
-                          <p className="text-xs text-gray-600 font-medium line-clamp-2 mt-1 leading-relaxed">
+                          <p className="text-xs text-gray-600 dark:text-zinc-400 font-medium line-clamp-2 mt-1 leading-relaxed">
                             {res.description || "Không có mô tả chi tiết."}
                           </p>
                         </div>
 
-                        <div className="pt-4 mt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500 font-medium">
+                        <div className="pt-4 mt-3 border-t border-gray-100 dark:border-zinc-800 flex items-center justify-between text-xs text-gray-500 dark:text-zinc-400 font-medium">
                           <div className="flex items-center gap-3">
                             <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {res.view_count || 0}</span>
                             <span className="flex items-center gap-1"><Heart className="w-3.5 h-3.5 text-red-500" /> {res.like_count || 0}</span>
@@ -516,7 +516,7 @@ export default function TargetUserProfilePage() {
                           </div>
                           <button
                             onClick={() => router.push(`/community`)}
-                            className="text-xs font-bold text-[#2d5a3d] hover:underline flex items-center gap-1"
+                            className="text-xs font-bold text-[#2d5a3d] dark:text-emerald-400 hover:underline flex items-center gap-1"
                           >
                             Xem trong cộng đồng <ArrowLeft className="w-3 h-3 rotate-180" />
                           </button>
@@ -525,10 +525,10 @@ export default function TargetUserProfilePage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center space-y-3">
-                    <FileText className="w-12 h-12 text-gray-400 mx-auto" />
-                    <h3 className="text-base font-bold text-gray-800">Chưa có tài nguyên công khai</h3>
-                    <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                  <div className="bg-white dark:bg-zinc-900 rounded-2xl border-2 border-dashed border-gray-300 dark:border-zinc-800 p-12 text-center space-y-3">
+                    <FileText className="w-12 h-12 text-gray-400 dark:text-zinc-600 mx-auto" />
+                    <h3 className="text-base font-bold text-gray-800 dark:text-zinc-200">Chưa có tài nguyên công khai</h3>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400 max-w-sm mx-auto">
                       Học viên này chưa chia sẻ tài liệu học tập nào vào thư viện cộng đồng.
                     </p>
                   </div>
@@ -548,37 +548,37 @@ export default function TargetUserProfilePage() {
                             <Badge variant="green" className="text-[10px]">
                               Bài kiểm tra
                             </Badge>
-                            <span className="text-[10px] text-gray-400 font-semibold">
+                            <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-semibold">
                               {quiz.question_count || 0} câu hỏi
                             </span>
                           </div>
-                          <h3 className="text-base font-bold text-gray-900 line-clamp-1">
+                          <h3 className="text-base font-bold text-gray-900 dark:text-zinc-100 line-clamp-1">
                             {quiz.title}
                           </h3>
-                          <p className="text-xs text-gray-600 font-medium line-clamp-2 mt-1 leading-relaxed">
+                          <p className="text-xs text-gray-600 dark:text-zinc-400 font-medium line-clamp-2 mt-1 leading-relaxed">
                             {quiz.description || "Bộ đề trắc nghiệm chuẩn kiến thức."}
                           </p>
 
-                          <div className="grid grid-cols-2 gap-2 mt-3 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
-                            <div className="flex items-center gap-1.5 text-gray-600">
+                          <div className="grid grid-cols-2 gap-2 mt-3 p-2.5 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-700/60 text-xs">
+                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-zinc-300">
                               <Clock className="w-3.5 h-3.5 text-blue-500" />
                               <span>Thời gian: <b>{quiz.time_limit_minutes || 15}p</b></span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-gray-600">
+                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-zinc-300">
                               <Target className="w-3.5 h-3.5 text-emerald-500" />
                               <span>Điểm đạt: <b>{quiz.passing_score || 80}%</b></span>
                             </div>
                           </div>
                         </div>
 
-                        <div className="pt-4 mt-3 border-t border-gray-100 flex items-center justify-between">
-                          <div className="flex items-center gap-3 text-xs text-gray-500">
+                        <div className="pt-4 mt-3 border-t border-gray-100 dark:border-zinc-800 flex items-center justify-between">
+                          <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-zinc-400">
                             <span className="flex items-center gap-1"><Heart className="w-3.5 h-3.5 text-red-500" /> {quiz.like_count || 0}</span>
                             <span className="flex items-center gap-1"><Bookmark className="w-3.5 h-3.5 text-amber-500" /> {quiz.save_count || 0}</span>
                           </div>
                           <Button 
                             size="sm"
-                            onClick={() => router.push(`/quizzes/${quiz.quiz_id}`)}
+                            onClick={() => router.push(`/quiz/${quiz.quiz_id}`)}
                             className="gap-1.5"
                           >
                             Luyện tập ngay
@@ -588,10 +588,10 @@ export default function TargetUserProfilePage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center space-y-3">
-                    <Target className="w-12 h-12 text-gray-400 mx-auto" />
-                    <h3 className="text-base font-bold text-gray-800">Chưa có bài trắc nghiệm</h3>
-                    <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                  <div className="bg-white dark:bg-zinc-900 rounded-2xl border-2 border-dashed border-gray-300 dark:border-zinc-800 p-12 text-center space-y-3">
+                    <Target className="w-12 h-12 text-gray-400 dark:text-zinc-600 mx-auto" />
+                    <h3 className="text-base font-bold text-gray-800 dark:text-zinc-200">Chưa có bài trắc nghiệm</h3>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400 max-w-sm mx-auto">
                       Học viên này chưa xuất bản bộ câu hỏi trắc nghiệm nào ra cộng đồng.
                     </p>
                   </div>
@@ -612,22 +612,22 @@ export default function TargetUserProfilePage() {
                               {deck.card_count || 0} thẻ ghi nhớ
                             </Badge>
                           </div>
-                          <h3 className="text-base font-bold text-gray-900 line-clamp-1">
+                          <h3 className="text-base font-bold text-gray-900 dark:text-zinc-100 line-clamp-1">
                             {deck.title}
                           </h3>
-                          <p className="text-xs text-gray-600 font-medium line-clamp-2 mt-1 leading-relaxed">
+                          <p className="text-xs text-gray-600 dark:text-zinc-400 font-medium line-clamp-2 mt-1 leading-relaxed">
                             {deck.description || "Bộ flashcards học tập và ôn tập nhanh."}
                           </p>
                         </div>
 
-                        <div className="pt-4 mt-3 border-t border-gray-100 flex items-center justify-end">
+                        <div className="pt-4 mt-3 border-t border-gray-100 dark:border-zinc-800 flex items-center justify-end">
                           <Button 
                             size="sm" 
                             variant="outline"
                             onClick={() => handleFork(deck.id)}
                             className="gap-1.5"
                           >
-                            <Bookmark className="w-3.5 h-3.5 text-amber-600" />
+                            <Bookmark className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                             Lưu vào thư viện
                           </Button>
                         </div>
@@ -635,10 +635,10 @@ export default function TargetUserProfilePage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center space-y-3">
-                    <Layers className="w-12 h-12 text-gray-400 mx-auto" />
-                    <h3 className="text-base font-bold text-gray-800">Chưa có bộ Flashcards</h3>
-                    <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                  <div className="bg-white dark:bg-zinc-900 rounded-2xl border-2 border-dashed border-gray-300 dark:border-zinc-800 p-12 text-center space-y-3">
+                    <Layers className="w-12 h-12 text-gray-400 dark:text-zinc-600 mx-auto" />
+                    <h3 className="text-base font-bold text-gray-800 dark:text-zinc-200">Chưa có bộ Flashcards</h3>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400 max-w-sm mx-auto">
                       Học viên chưa chia sẻ bộ thẻ ghi nhớ công khai nào.
                     </p>
                   </div>
@@ -653,24 +653,24 @@ export default function TargetUserProfilePage() {
       {/* Report Modal */}
       {reportModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border-2 border-[#1a2e1c]/30 space-y-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border-2 border-[#1a2e1c]/30 dark:border-zinc-700 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-200 dark:border-amber-800">
                 <ShieldAlert className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-gray-900">Báo cáo người dùng</h3>
-                <p className="text-xs text-gray-500">Báo cáo tài khoản: {user.name}</p>
+                <h3 className="text-base font-bold text-gray-900 dark:text-zinc-100">Báo cáo người dùng</h3>
+                <p className="text-xs text-gray-500 dark:text-zinc-400">Báo cáo tài khoản: {user.name}</p>
               </div>
             </div>
 
             <form onSubmit={handleSubmitReport} className="space-y-4 pt-2">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">Lý do báo cáo</label>
+                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1.5">Lý do báo cáo</label>
                 <select 
                   value={reportReason} 
                   onChange={(e) => setReportReason(e.target.value as ReportReason)}
-                  className="w-full text-xs rounded-xl border border-gray-300 p-2.5 bg-gray-50 font-medium focus:outline-none focus:border-[#1a2e1c]"
+                  className="w-full text-xs rounded-xl border border-gray-300 dark:border-zinc-700 p-2.5 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 font-medium focus:outline-none focus:border-[#1a2e1c] dark:focus:border-emerald-500"
                 >
                   <option value="INAPPROPRIATE">Nội dung phản cảm, không phù hợp</option>
                   <option value="SPAM">Spam, quảng cáo rác</option>
@@ -682,7 +682,7 @@ export default function TargetUserProfilePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1.5">
                   Chi tiết vi phạm {reportReason === 'OTHER' && <span className="text-red-500">*</span>}
                 </label>
                 <textarea 
@@ -690,7 +690,7 @@ export default function TargetUserProfilePage() {
                   value={reportDetails}
                   onChange={(e) => setReportDetails(e.target.value)}
                   placeholder="Mô tả cụ thể hành vi vi phạm để đội ngũ quản trị xử lý..."
-                  className="w-full text-xs rounded-xl border border-gray-300 p-2.5 bg-gray-50 font-medium focus:outline-none focus:border-[#1a2e1c]"
+                  className="w-full text-xs rounded-xl border border-gray-300 dark:border-zinc-700 p-2.5 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 font-medium focus:outline-none focus:border-[#1a2e1c] dark:focus:border-emerald-500"
                 />
               </div>
 
@@ -719,29 +719,29 @@ export default function TargetUserProfilePage() {
       {/* Block Confirmation Modal */}
       {blockModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border-2 border-red-200 space-y-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border-2 border-red-200 dark:border-red-900 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center border border-red-200">
+              <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center border border-red-200 dark:border-red-900">
                 <UserX className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-gray-900">Chặn người dùng này?</h3>
-                <p className="text-xs text-gray-500">Người dùng: {user.name}</p>
+                <h3 className="text-base font-bold text-gray-900 dark:text-zinc-100">Chặn người dùng này?</h3>
+                <p className="text-xs text-gray-500 dark:text-zinc-400">Người dùng: {user.name}</p>
               </div>
             </div>
 
-            <p className="text-xs text-gray-600 leading-relaxed">
+            <p className="text-xs text-gray-600 dark:text-zinc-300 leading-relaxed">
               Khi chặn, hai bên sẽ không thể xem hồ sơ của nhau, không thể tìm thấy tài nguyên của nhau trên bảng tin cộng đồng và không thể nhắn tin trực tiếp.
             </p>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">Lý do chặn (tùy chọn)</label>
+              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1.5">Lý do chặn (tùy chọn)</label>
               <input 
                 type="text"
                 value={blockReason}
                 onChange={(e) => setBlockReason(e.target.value)}
                 placeholder="Ví dụ: Không muốn tương tác..."
-                className="w-full text-xs rounded-xl border border-gray-300 p-2.5 bg-gray-50 font-medium focus:outline-none focus:border-[#1a2e1c]"
+                className="w-full text-xs rounded-xl border border-gray-300 dark:border-zinc-700 p-2.5 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 font-medium focus:outline-none focus:border-[#1a2e1c] dark:focus:border-emerald-500"
               />
             </div>
 

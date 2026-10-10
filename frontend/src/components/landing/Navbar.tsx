@@ -2,59 +2,76 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu, X, ChevronDown, ChevronUp, User, Settings, LogOut, Layout, Trophy, Sparkles, Shield, FileQuestion, Crown, CheckCheck, MessageSquare, Presentation, TrendingUp, Target, Zap } from "lucide-react";
+import {
+  Search,
+  Bell,
+  Menu,
+  X,
+  ChevronDown,
+  ChevronUp,
+  User,
+  Settings,
+  LogOut,
+  Layout,
+  Trophy,
+  Sparkles,
+  Shield,
+  FileQuestion,
+  Crown,
+  CheckCheck,
+  MessageSquare,
+  TrendingUp,
+  Target,
+  Zap,
+  Heart,
+  AlertTriangle,
+  ShieldAlert,
+  BookOpen,
+  FileText,
+  Network,
+  Layers,
+  Clock,
+  Home,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useStudy } from "@/context/StudyContext";
 import { getUnreadCount } from "@/services/message.service";
+import { NotificationItem } from "@/services/notification.service";
+import { getValidToken } from "@/services/api";
+import { siteConfig } from "@/config/site.config";
 
-export interface NotificationItem {
-  id: string;
-  title: string;
-  message: string;
-  time: string;
-  type: 'system' | 'task' | 'ai' | 'community';
-  read: boolean;
-  link?: string;
+function formatRelativeTime(dateStr: string) {
+  try {
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return "Vừa xong";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} phút trước`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour} giờ trước`;
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 7) return `${diffDay} ngày trước`;
+    return new Date(dateStr).toLocaleDateString("vi-VN");
+  } catch {
+    return "Gần đây";
+  }
 }
 
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: '1',
-    title: 'Nhiệm vụ Pomodoro',
-    message: 'Bạn vừa hoàn thành phiên học tập 25 phút. Thống kê tích lũy đã được cập nhật!',
-    time: 'Vừa xong',
-    type: 'task',
-    read: false,
-    link: '/profile'
-  },
-  {
-    id: '2',
-    title: 'Trợ lý AI sẵn sàng',
-    message: 'Đã sẵn sàng tạo Flashcards & Mindmap tự động từ tài liệu học tập mới.',
-    time: '15 phút trước',
-    type: 'ai',
-    read: false,
-    link: '/flashcards'
-  },
-  {
-    id: '3',
-    title: 'Hệ thống EduShare AI',
-    message: 'Chào mừng bạn đến với EduShare AI! Hãy trải nghiệm kho tài liệu học tập phong phú.',
-    time: '1 giờ trước',
-    type: 'system',
-    read: false,
-  },
-  {
-    id: '4',
-    title: 'Cộng đồng học tập',
-    message: 'Đã có 50+ tài liệu chất lượng cao được chia sẻ mới trên hệ thống.',
-    time: 'Hôm qua',
-    type: 'community',
-    read: true,
-    link: '/community'
-  }
-];
+const getNavItemClass = (isActive: boolean) =>
+  `group transition-all duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap px-2.5 xl:px-3 py-1.5 rounded-xl ${
+    isActive
+      ? "font-bold text-[#1a3d28] dark:text-emerald-300 bg-[#1a3d28]/10 dark:bg-emerald-950/50 border border-[#1a3d28]/15 dark:border-emerald-700/30 shadow-xs"
+      : "text-stone-600 dark:text-zinc-400 hover:text-[#1a3d28] dark:hover:text-emerald-300 hover:bg-[#1a3d28]/6 dark:hover:bg-emerald-950/30 border border-transparent"
+  }`;
+
+const getNavIconClass = (isActive: boolean) =>
+  `shrink-0 transition-colors duration-150 ${
+    isActive
+      ? "text-[#1a3d28] dark:text-emerald-300"
+      : "text-stone-400 dark:text-zinc-500 group-hover:text-[#1a3d28] dark:group-hover:text-emerald-300"
+  }`;
 
 interface NavbarProps {
   isLoggedIn: boolean;
@@ -64,54 +81,113 @@ interface NavbarProps {
 }
 
 export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser }: NavbarProps) {
+  const [isMounted, setIsMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [learningDropdownOpen, setLearningDropdownOpen] = useState(false);
+  const [mobileLearningOpen, setMobileLearningOpen] = useState(true);
   
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
   const [notifTab, setNotifTab] = useState<'all' | 'unread'>('all');
 
-  // Load notifications from localStorage on client side mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('edushare_notifications');
-      if (saved) {
-        try {
-          setNotifications(JSON.parse(saved));
-        } catch (e) {
-          console.error("Failed to parse saved notifications", e);
-        }
-      }
-    }
+    setIsMounted(true);
   }, []);
-
-  // Persist notifications whenever they update
-  const updateNotifications = (newNotifs: NotificationItem[] | ((prev: NotificationItem[]) => NotificationItem[])) => {
-    setNotifications(prev => {
-      const updated = typeof newNotifs === 'function' ? newNotifs(prev) : newNotifs;
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('edushare_notifications', JSON.stringify(updated));
-      }
-      return updated;
-    });
-  };
 
   const router = useRouter();
   const pathname = usePathname();
-  const { logout, taskCompletionToast, setTaskCompletionToast, setShowPremiumModal } = useStudy();
+  const {
+    logout,
+    taskCompletionToast,
+    setTaskCompletionToast,
+    setShowPremiumModal,
+    notifications,
+    unreadNotificationCount,
+    markNotificationRead,
+    markAllNotificationsRead,
+  } = useStudy();
   const [toastProgress, setToastProgress] = useState(60);
   const [showToast, setShowToast] = useState(false);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = unreadNotificationCount;
   const [messageUnreadCount, setMessageUnreadCount] = useState<number>(0);
 
+  const isMyLearningActive = 
+    pathname === '/library' ||
+    pathname?.startsWith('/quiz') ||
+    pathname === '/ai-test' ||
+    pathname === '/notes' ||
+    pathname === '/mindmap' ||
+    pathname?.startsWith('/flashcards') ||
+    pathname === '/study-sessions';
+
+  const myLearningItems = [
+    {
+      title: "Tài liệu",
+      enTitle: "Documents",
+      desc: "Kho tài liệu, sách giáo trình & tài liệu tải lên",
+      href: "/library",
+      icon: BookOpen,
+      iconColor: "text-emerald-700 bg-emerald-50 border-emerald-200/60",
+    },
+    {
+      title: "Đề thi & Trắc nghiệm",
+      enTitle: "Quizzes",
+      desc: "Luyện đề trắc nghiệm, bài tập tự động chấm điểm",
+      href: "/ai-test",
+      icon: FileQuestion,
+      iconColor: "text-purple-700 bg-purple-50 border-purple-200/60",
+    },
+    {
+      title: "Ghi chú",
+      enTitle: "Notes",
+      desc: "Sổ tay ghi chú kiến thức và tra cứu bài học",
+      href: "/notes",
+      icon: FileText,
+      iconColor: "text-blue-700 bg-blue-50 border-blue-200/60",
+    },
+    {
+      title: "Sơ đồ tư duy",
+      enTitle: "Mindmaps",
+      desc: "Phác thảo và trực quan hóa kiến thức tư duy",
+      href: "/mindmap",
+      icon: Network,
+      iconColor: "text-indigo-700 bg-indigo-50 border-indigo-200/60",
+    },
+    {
+      title: "Flashcards",
+      enTitle: "Flashcards",
+      desc: "Học ghi nhớ ngắt quãng theo thuật toán SM-2",
+      href: "/flashcards",
+      icon: Layers,
+      iconColor: "text-amber-700 bg-amber-50 border-amber-200/60",
+    },
+    {
+      title: "Lịch sử học",
+      enTitle: "History",
+      desc: "Tổng hợp không gian học và phiên học tập",
+      href: "/study-sessions",
+      icon: Clock,
+      iconColor: "text-teal-700 bg-teal-50 border-teal-200/60",
+    },
+  ];
+
+  // Poll & listen to real-time events for unread messages (multiplexed from SSE)
   useEffect(() => {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn || !activeUser) {
+      setMessageUnreadCount(0);
+      return;
+    }
     const fetchUnread = () => {
+      const token = getValidToken();
+      if (!token) {
+        setMessageUnreadCount(0);
+        return;
+      }
       getUnreadCount()
         .then((res) => {
-          if (typeof res.total_unread === 'number') {
+          if (typeof res?.total_unread === 'number') {
             setMessageUnreadCount(res.total_unread);
           }
         })
@@ -119,41 +195,43 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
     };
 
     fetchUnread();
-    const interval = setInterval(fetchUnread, 15000);
-    return () => clearInterval(interval);
-  }, [isLoggedIn]);
+    const interval = setInterval(fetchUnread, 30000);
 
-  const markAllAsRead = () => {
-    updateNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    const onMessageEvent = () => fetchUnread();
+    window.addEventListener('cognito:new_message', onMessageEvent);
+    window.addEventListener('cognito:messages_read', onMessageEvent);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('cognito:new_message', onMessageEvent);
+      window.removeEventListener('cognito:messages_read', onMessageEvent);
+    };
+  }, [isLoggedIn, activeUser]);
+
+  const markAllAsRead = async () => {
+    await markAllNotificationsRead();
   };
 
-  const handleNotificationClick = (item: NotificationItem) => {
-    updateNotifications(prev => prev.map(n => n.id === item.id ? { ...n, read: true } : n));
+  const handleNotificationClick = async (item: NotificationItem) => {
+    if (!item.is_read) {
+      await markNotificationRead(item.id);
+    }
     if (item.link) {
       setNotificationsOpen(false);
       router.push(item.link);
     }
   };
 
+  const filteredNotifications = notifications.filter(n => {
+    if (notifTab === 'unread') return !n.is_read;
+    return true;
+  });
+
   useEffect(() => {
     if (taskCompletionToast) {
       setToastProgress(50);
       setShowToast(true);
 
-      // Dynamically add a task notification when a task completes
-      updateNotifications(prev => [
-        {
-          id: Date.now().toString(),
-          title: 'Nhiệm vụ hoàn thành! 🎉',
-          message: taskCompletionToast.title,
-          time: 'Vừa xong',
-          type: 'task',
-          read: false,
-          link: '/profile'
-        },
-        ...prev
-      ]);
-      
       const timer1 = setTimeout(() => {
         setToastProgress(100);
       }, 400);
@@ -187,18 +265,18 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
       if (notificationsOpen && !target.closest(".notifications-dropdown-container")) {
         setNotificationsOpen(false);
       }
+      if (learningDropdownOpen && !target.closest(".learning-dropdown-container")) {
+        setLearningDropdownOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [dropdownOpen, notificationsOpen]);
-
-  const filteredNotifications = notifTab === 'unread'
-    ? notifications.filter(n => !n.read)
-    : notifications;
+  }, [dropdownOpen, notificationsOpen, learningDropdownOpen]);
 
   return (
     <header
       className="fixed top-0 left-0 right-0 z-[100] transition-all duration-200"
+      suppressHydrationWarning
       style={{
         background: scrolled ? "rgba(245,243,238,0.97)" : "rgba(245,243,238,0.85)",
         backdropFilter: "blur(16px)",
@@ -209,148 +287,179 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
-          <div className="flex items-center gap-2 cursor-pointer shrink-0" onClick={isLoggedIn ? onDashboardClick : undefined}>
-            <div
-              className="w-7 h-7 rounded-md flex items-center justify-center"
-              style={{ background: "#1a3d28" }}
-            >
-              <span style={{ color: "#f5f3ee", fontWeight: 800, fontSize: "0.8rem" }}>E</span>
-            </div>
-            <span style={{ color: "#0d1a14", fontWeight: 700, fontSize: "0.95rem" }}>
-              EduShare AI
+          <Link href="/" className="flex items-center gap-2.5 cursor-pointer shrink-0 group">
+            <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1a3d28] to-[#2d5a3d] flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-4.5 h-4.5 text-[#f5f3ee]"
+              >
+                <path d="M12 2a10 10 0 1 0 10 10" />
+                <path d="M12 12 19 5" />
+                <circle cx="12" cy="12" r="3" fill="currentColor" />
+              </svg>
             </span>
-          </div>
+            <span className="text-[#0d1a14] dark:text-zinc-100 font-bold text-base tracking-tight group-hover:text-[#1a3d28] transition-colors">
+              {siteConfig.name}
+            </span>
+          </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden lg:flex flex-1 items-center justify-center gap-2 xl:gap-5 min-w-0 px-2">
-            {isLoggedIn ? (
-                <>
-                  <Link
-                    href="/library"
-                    prefetch={true}
-                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center shrink-0 whitespace-nowrap pb-1 border-b-2 ${
-                      pathname === '/library'
-                        ? 'font-bold text-[#1a3d28] border-[#1a3d28]'
-                        : 'text-gray-600 hover:text-[#1a3d28] border-transparent'
-                    }`}
-                  >
-                    Thư viện của tôi
-                  </Link>
-                  <Link
-                    href="/flashcards"
-                    prefetch={true}
-                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center shrink-0 whitespace-nowrap pb-1 border-b-2 ${
-                      pathname?.startsWith('/flashcards')
-                        ? 'font-bold text-[#1a3d28] border-[#1a3d28]'
-                        : 'text-gray-600 hover:text-[#1a3d28] border-transparent'
-                    }`}
-                  >
-                    Flashcards
-                  </Link>
-                  <Link
-                    href="/ai-test"
-                    prefetch={true}
-                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg ${
-                      pathname === '/ai-test'
-                        ? 'bg-[#1a3d28] text-white shadow-sm'
-                        : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
-                    }`}
-                  >
-                    <FileQuestion size={13} />
-                    Bài tập AI
-                  </Link>
-                  
-                  <Link
-                    href="/teacher/studio"
-                    prefetch={true}
-                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg ${
-                      pathname?.startsWith('/teacher')
-                        ? 'bg-[#1a3d28] text-white shadow-sm font-bold'
-                        : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
-                    }`}
-                  >
-                    <Presentation size={14} />
-                    Giảng dạy & Slide
-                  </Link>
+          <nav className="hidden lg:flex flex-1 items-center justify-center gap-1 xl:gap-2 min-w-0 px-2">
+            {/* Home */}
+            <Link
+              href="/"
+              prefetch={true}
+              className={getNavItemClass(pathname === '/' || pathname === '/home')}
+            >
+              <Home size={14} className={getNavIconClass(pathname === '/' || pathname === '/home')} />
+              <span>Trang chủ</span>
+            </Link>
 
-                  <Link
-                    href="/progress"
-                    prefetch={true}
-                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg ${
-                      pathname === '/progress'
-                        ? 'bg-[#1a3d28] text-white shadow-sm font-bold'
-                        : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
-                    }`}
-                  >
-                    <TrendingUp size={13} />
-                    Tiến độ & Mục tiêu
-                  </Link>
+            {/* My Learning Hub Dropdown */}
+            <div className="relative learning-dropdown-container">
+              <button
+                onClick={() => {
+                  setLearningDropdownOpen(!learningDropdownOpen);
+                  if (dropdownOpen) setDropdownOpen(false);
+                  if (notificationsOpen) setNotificationsOpen(false);
+                }}
+                className={`${getNavItemClass(isMyLearningActive || learningDropdownOpen)} cursor-pointer`}
+              >
+                <BookOpen size={14} className={getNavIconClass(isMyLearningActive || learningDropdownOpen)} />
+                <span>Góc học tập</span>
+                <ChevronDown
+                  size={12}
+                  className={`transition-transform duration-200 ${
+                    learningDropdownOpen ? 'rotate-180' : ''
+                  } ${
+                    isMyLearningActive || learningDropdownOpen
+                      ? 'text-[#1a3d28] dark:text-emerald-300'
+                      : 'text-stone-400 dark:text-zinc-500 group-hover:text-[#1a3d28]'
+                  }`}
+                />
+              </button>
 
-                  <Link
-                    href="/focus"
-                    prefetch={true}
-                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg ${
-                      pathname === '/focus'
-                        ? 'bg-[#1a3d28] text-white shadow-sm font-bold'
-                        : 'text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white'
-                    }`}
+              <AnimatePresence>
+                {learningDropdownOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute left-1/2 -translate-x-1/2 mt-2 w-96 rounded-2xl bg-white border border-gray-200/80 shadow-2xl z-[115] text-gray-800 p-2 overflow-hidden"
+                    style={{ boxShadow: "0 14px 35px -5px rgba(26,61,40,0.18)" }}
                   >
-                    <Zap size={13} />
-                    Tập trung
-                  </Link>
+                    <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-gray-400">
+                        Không gian học tập (My Learning)
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800">
+                        6 công cụ
+                      </span>
+                    </div>
 
-                  <Link
-                    href="/community"
-                    prefetch={true}
-                    className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap pb-1 border-b-2 ${
-                      pathname === '/community'
-                        ? 'text-emerald-800 font-bold border-emerald-700'
-                        : 'text-emerald-600 hover:text-emerald-800 border-transparent'
-                    }`}
-                  >
-                    Cộng đồng
-                  </Link>
-                  <Link
-                    href="/leaderboard"
-                    className={`transition-colors duration-200 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg ${
-                      pathname === '/leaderboard'
-                        ? 'bg-amber-500 text-white font-bold'
-                        : 'text-amber-700 hover:text-amber-900 font-bold'
-                    }`}
-                  >
-                    <Trophy size={14} className={pathname === '/leaderboard' ? 'text-white fill-white' : 'text-amber-500 fill-amber-500/20'} />
-                    Bảng xếp hạng
-                  </Link>
+                    <div className="grid grid-cols-1 gap-1 py-1.5">
+                      {myLearningItems.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = pathname === item.href || (item.href === '/ai-test' && pathname?.startsWith('/quiz'));
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            prefetch={true}
+                            onClick={() => setLearningDropdownOpen(false)}
+                            className={`flex items-start gap-3 p-2.5 rounded-xl transition-all ${
+                              isActive
+                                ? 'bg-emerald-50/70 border border-emerald-200/70'
+                                : 'hover:bg-gray-50 border border-transparent'
+                            }`}
+                          >
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 mt-0.5 ${item.iconColor}`}>
+                              <Icon size={16} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className={`text-xs font-bold ${isActive ? 'text-[#1a3d28]' : 'text-gray-800'}`}>
+                                  {item.title}
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-medium">
+                                  {item.enTitle}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-gray-500 line-clamp-1 mt-0.5">
+                                {item.desc}
+                              </p>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
-                  {activeUser?.role === 'admin' && (
-                    <Link
-                      href="/admin"
-                      prefetch={true}
-                      className={`transition-colors duration-150 text-xs xl:text-sm font-semibold flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 shrink-0 whitespace-nowrap rounded-lg text-[#1a3d28] border border-[#1a3d28]/30 hover:bg-[#1a3d28] hover:text-white`}
-                    >
-                      <Shield size={14} />
-                      Bảng điều khiển Admin
-                    </Link>
-                  )}
-                </>
-            ) : (
-              <>
-                <Link href="#features" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
-                  Tính năng
-                </Link>
-                <Link href="#flashcards" className="transition-colors duration-200 text-sm font-semibold text-gray-600 hover:text-[#1a3d28]">
-                  Flashcards
-                </Link>
-                <Link href="/community" className="transition-colors duration-200 text-sm font-semibold text-emerald-600 hover:text-emerald-800">
-                  Cộng đồng
-                </Link>
-              </>
+            {/* Community */}
+            <Link
+              href="/community"
+              prefetch={true}
+              className={getNavItemClass(Boolean(pathname?.startsWith('/community')))}
+            >
+              <Users size={14} className={getNavIconClass(Boolean(pathname?.startsWith('/community')))} />
+              <span>Cộng đồng</span>
+            </Link>
+
+            {/* Focus */}
+            <Link
+              href="/focus"
+              prefetch={true}
+              className={getNavItemClass(pathname === '/focus')}
+            >
+              <Zap size={14} className={getNavIconClass(pathname === '/focus')} />
+              <span>Tập trung</span>
+            </Link>
+
+            {/* Progress */}
+            <Link
+              href="/progress"
+              prefetch={true}
+              className={getNavItemClass(pathname === '/progress')}
+            >
+              <TrendingUp size={14} className={getNavIconClass(pathname === '/progress')} />
+              <span>Tiến độ</span>
+            </Link>
+
+            {/* Search */}
+            <Link
+              href="/search"
+              prefetch={true}
+              className={getNavItemClass(pathname === '/search')}
+            >
+              <Search size={14} className={getNavIconClass(pathname === '/search')} />
+              <span>Tìm kiếm</span>
+            </Link>
+
+            {/* Admin (Only if role === 'admin') */}
+            {isMounted && activeUser?.role === 'admin' && (
+              <Link
+                href="/admin"
+                prefetch={true}
+                className={getNavItemClass(Boolean(pathname?.startsWith('/admin')))}
+              >
+                <Shield size={14} className={getNavIconClass(Boolean(pathname?.startsWith('/admin')))} />
+                <span>Admin</span>
+              </Link>
             )}
           </nav>
 
           {/* Actions */}
           <div className="hidden md:flex items-center gap-3 shrink-0">
-            {isLoggedIn ? (
+            {isMounted && isLoggedIn ? (
               <>
                 {activeUser?.role === 'premium' || activeUser?.role === 'admin' ? (
                   <button
@@ -397,6 +506,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                     onClick={() => {
                       setNotificationsOpen(!notificationsOpen);
                       if (dropdownOpen) setDropdownOpen(false);
+                      if (learningDropdownOpen) setLearningDropdownOpen(false);
                     }}
                     className="relative p-2 rounded-xl text-gray-700 hover:bg-[#1a3d28]/10 transition-colors flex items-center justify-center cursor-pointer"
                     title="Thông báo"
@@ -483,27 +593,49 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                             filteredNotifications.map((n) => {
                               const renderIcon = () => {
                                 switch (n.type) {
+                                  case 'like':
+                                    return <Heart size={14} className="text-rose-500 fill-rose-500/20" />;
+                                  case 'comment':
+                                  case 'comment_reply':
+                                    return <MessageSquare size={14} className="text-emerald-500" />;
+                                  case 'reshare':
+                                    return <Zap size={14} className="text-amber-500" />;
+                                  case 'message':
+                                    return <MessageSquare size={14} className="text-blue-500" />;
+                                  case 'account_warned':
+                                  case 'account_suspended':
+                                  case 'resource_removed':
+                                    return <AlertTriangle size={14} className="text-red-500" />;
+                                  case 'report_resolved':
+                                    return <Shield size={14} className="text-indigo-500" />;
                                   case 'task':
                                     return <Trophy size={14} className="text-amber-500" />;
-                                  case 'ai':
-                                    return <Sparkles size={14} className="text-purple-500" />;
-                                  case 'community':
-                                    return <MessageSquare size={14} className="text-emerald-500" />;
                                   default:
-                                    return <Shield size={14} className="text-blue-500" />;
+                                    return <Bell size={14} className="text-emerald-600" />;
                                 }
                               };
 
                               const renderBg = () => {
                                 switch (n.type) {
+                                  case 'like':
+                                    return 'bg-rose-50 border-rose-200';
+                                  case 'comment':
+                                  case 'comment_reply':
+                                    return 'bg-emerald-50 border-emerald-200';
+                                  case 'reshare':
+                                    return 'bg-amber-50 border-amber-200';
+                                  case 'message':
+                                    return 'bg-blue-50 border-blue-200';
+                                  case 'account_warned':
+                                  case 'account_suspended':
+                                  case 'resource_removed':
+                                    return 'bg-red-50 border-red-200';
+                                  case 'report_resolved':
+                                    return 'bg-indigo-50 border-indigo-200';
                                   case 'task':
                                     return 'bg-amber-50 border-amber-200';
-                                  case 'ai':
-                                    return 'bg-purple-50 border-purple-200';
-                                  case 'community':
-                                    return 'bg-emerald-50 border-emerald-200';
                                   default:
-                                    return 'bg-blue-50 border-blue-200';
+                                    return 'bg-emerald-50 border-emerald-200';
                                 }
                               };
 
@@ -512,7 +644,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                                   key={n.id}
                                   onClick={() => handleNotificationClick(n)}
                                   className={`p-3.5 transition-all flex items-start gap-3 cursor-pointer ${
-                                    !n.read ? 'bg-emerald-50/40 hover:bg-emerald-50/70' : 'hover:bg-gray-50'
+                                    !n.is_read ? 'bg-emerald-50/40 hover:bg-emerald-50/70' : 'hover:bg-gray-50'
                                   }`}
                                 >
                                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 mt-0.5 ${renderBg()}`}>
@@ -521,17 +653,17 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
 
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between gap-1">
-                                      <h4 className={`text-xs font-bold truncate ${!n.read ? 'text-gray-900 font-extrabold' : 'text-gray-700'}`}>
+                                      <h4 className={`text-xs font-bold truncate ${!n.is_read ? 'text-gray-900 font-extrabold' : 'text-gray-700'}`}>
                                         {n.title}
                                       </h4>
-                                      <span className="text-[10px] text-gray-400 shrink-0 font-medium">{n.time}</span>
+                                      <span className="text-[10px] text-gray-400 shrink-0 font-medium">{formatRelativeTime(n.created_at)}</span>
                                     </div>
                                     <p className="text-[11px] text-gray-600 line-clamp-2 mt-0.5 leading-relaxed">
-                                      {n.message}
+                                      {n.content}
                                     </p>
                                   </div>
 
-                                  {!n.read && (
+                                  {!n.is_read && (
                                     <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-1.5" />
                                   )}
                                 </div>
@@ -565,6 +697,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                     onClick={() => {
                       setDropdownOpen(!dropdownOpen);
                       if (notificationsOpen) setNotificationsOpen(false);
+                      if (learningDropdownOpen) setLearningDropdownOpen(false);
                     }}
                   >
                     {activeUser?.avatar_url ? (
@@ -622,7 +755,18 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                             className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-left"
                           >
                             <Layout size={14} className="text-gray-400" />
-                            Thư viện của tôi
+                            Góc học tập (My Learning)
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setDropdownOpen(false);
+                              router.push('/study-sessions');
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                          >
+                            <Clock size={14} className="text-gray-400" />
+                            Lịch sử học tập
                           </button>
 
                           <button
@@ -693,7 +837,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
 
                   {/* Task completed toast bubble underneath avatar */}
                   <AnimatePresence>
-                    {showToast && taskCompletionToast && (
+                    {isMounted && showToast && taskCompletionToast && (
                       <motion.div
                         initial={{ opacity: 0, scale: 0.9, y: -10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -772,50 +916,133 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             exit={{ opacity: 0, height: 0 }}
             style={{ background: "#f5f3ee", borderTop: "1px solid rgba(26,61,40,0.1)" }}
           >
-            <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-4">
-              {isLoggedIn ? (
-                <>
-                  <Link href="/library" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base">Thư viện của tôi</Link>
-                  <Link href="/flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
-                  <Link href="/ai-test" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
-                    <FileQuestion size={16} /> Bài tập AI
-                  </Link>
-                  <Link href="/teacher/studio" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2">
-                    <Presentation size={16} /> Giảng dạy & Slide
-                  </Link>
-                  <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
-                  <Link href="/messages" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <MessageSquare size={16} /> Tin nhắn trực tiếp
+            <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-2.5">
+              <Link
+                href="/"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-base font-semibold transition-colors ${
+                  pathname === '/' || pathname === '/home'
+                    ? 'bg-[#1a3d28]/10 text-[#1a3d28] font-bold'
+                    : 'text-stone-700 hover:text-[#1a3d28] hover:bg-[#1a3d28]/5'
+                }`}
+              >
+                <Home size={18} className={pathname === '/' || pathname === '/home' ? 'text-[#1a3d28]' : 'text-stone-500'} />
+                <span>Trang chủ</span>
+              </Link>
+
+              {/* My Learning Group */}
+              <div className="bg-white/70 rounded-xl p-3 border border-emerald-900/10">
+                <div 
+                  onClick={() => setMobileLearningOpen(!mobileLearningOpen)} 
+                  className="flex items-center justify-between text-[#1a3d28] font-bold text-base cursor-pointer"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <BookOpen size={18} className="text-[#1a3d28]" />
+                    <span>Góc học tập (My Learning)</span>
+                  </span>
+                  <ChevronDown size={16} className={`transition-transform duration-200 ${mobileLearningOpen ? 'rotate-180' : ''}`} />
+                </div>
+
+                {mobileLearningOpen && (
+                  <div className="flex flex-col gap-2 pl-3 pt-2 mt-2 border-l-2 border-emerald-800/20">
+                    {myLearningItems.map((item) => {
+                      const Icon = item.icon;
+                      const isItemActive = pathname === item.href || (item.href === '/ai-test' && pathname?.startsWith('/quiz'));
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setMobileOpen(false)}
+                          className={`text-sm font-semibold flex items-center justify-between py-1.5 px-2 rounded-lg transition-colors ${
+                            isItemActive
+                              ? 'text-[#1a3d28] font-bold bg-emerald-50'
+                              : 'text-gray-700 hover:text-[#1a3d28]'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <Icon size={14} className={isItemActive ? 'text-[#1a3d28]' : 'text-gray-500'} />
+                            {item.title}
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-medium">{item.enTitle}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <Link
+                href="/community"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-base font-semibold transition-colors ${
+                  pathname?.startsWith('/community')
+                    ? 'bg-[#1a3d28]/10 text-[#1a3d28] font-bold'
+                    : 'text-stone-700 hover:text-[#1a3d28] hover:bg-[#1a3d28]/5'
+                }`}
+              >
+                <Users size={18} className={pathname?.startsWith('/community') ? 'text-[#1a3d28]' : 'text-stone-500'} />
+                <span>Cộng đồng</span>
+              </Link>
+
+              <Link
+                href="/focus"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-base font-semibold transition-colors ${
+                  pathname === '/focus'
+                    ? 'bg-[#1a3d28]/10 text-[#1a3d28] font-bold'
+                    : 'text-stone-700 hover:text-[#1a3d28] hover:bg-[#1a3d28]/5'
+                }`}
+              >
+                <Zap size={18} className={pathname === '/focus' ? 'text-[#1a3d28]' : 'text-stone-500'} />
+                <span>Chế độ tập trung (Focus)</span>
+              </Link>
+
+              <Link
+                href="/progress"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-base font-semibold transition-colors ${
+                  pathname === '/progress'
+                    ? 'bg-[#1a3d28]/10 text-[#1a3d28] font-bold'
+                    : 'text-stone-700 hover:text-[#1a3d28] hover:bg-[#1a3d28]/5'
+                }`}
+              >
+                <TrendingUp size={18} className={pathname === '/progress' ? 'text-[#1a3d28]' : 'text-stone-500'} />
+                <span>Tiến độ & Mục tiêu</span>
+              </Link>
+
+              <Link
+                href="/search"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-base font-semibold transition-colors ${
+                  pathname === '/search'
+                    ? 'bg-[#1a3d28]/10 text-[#1a3d28] font-bold'
+                    : 'text-stone-700 hover:text-[#1a3d28] hover:bg-[#1a3d28]/5'
+                }`}
+              >
+                <Search size={18} className={pathname === '/search' ? 'text-[#1a3d28]' : 'text-stone-500'} />
+                <span>Tìm kiếm</span>
+              </Link>
+
+              {isMounted && isLoggedIn && (
+                <Link href="/messages" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <MessageSquare size={16} /> Tin nhắn trực tiếp
+                  </span>
+                  {messageUnreadCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-xs font-black">
+                      {messageUnreadCount}
                     </span>
-                    {messageUnreadCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-xs font-black">
-                        {messageUnreadCount}
-                      </span>
-                    )}
-                  </Link>
-                  <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">
-                    <Trophy size={16} className="text-amber-500 fill-amber-500/20" /> Bảng xếp hạng
-                  </Link>
-                  
-                  {activeUser?.role === 'admin' && (
-                    <Link href="/admin" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
-                      <Shield size={16} /> Bảng điều khiển Admin
-                    </Link>
                   )}
-                </>
-              ) : (
-                <>
-                  <Link href="#features" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Tính năng</Link>
-                  <Link href="#flashcards" onClick={() => setMobileOpen(false)} className="text-gray-600 font-semibold text-base">Flashcards</Link>
-                  <Link href="/community" onClick={() => setMobileOpen(false)} className="text-emerald-600 font-bold text-base">Cộng đồng</Link>
-                  <Link href="/leaderboard" onClick={() => setMobileOpen(false)} className="text-amber-700 font-black text-base flex items-center gap-2">
-                    <Trophy size={16} className="text-amber-500 fill-amber-500/20" /> Bảng xếp hạng
-                  </Link>
-                </>
+                </Link>
+              )}
+              
+              {isMounted && isLoggedIn && activeUser?.role === 'admin' && (
+                <Link href="/admin" onClick={() => setMobileOpen(false)} className="text-[#1a3d28] font-bold text-base flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+                  <Shield size={16} /> Bảng điều khiển Admin
+                </Link>
               )}
 
-              {isLoggedIn ? (
+              {isMounted && isLoggedIn ? (
                 activeUser?.role === 'premium' || activeUser?.role === 'admin' ? (
                   <button 
                     onClick={() => { setMobileOpen(false); router.push('/premium'); }}

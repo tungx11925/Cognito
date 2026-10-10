@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { 
   Network, Search, Plus, Trash2, Edit3, Save, 
@@ -9,20 +10,48 @@ import {
   ExternalLink, Sparkles, RefreshCw, X, Clock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Navbar } from '@/components/landing/Navbar';
+import { useStudy } from '@/context/StudyContext';
 import { 
   getMindmaps, createMindmap, updateMindmap, deleteMindmap, MindmapItem 
 } from '@/services/mindmap.service';
 import { getDocuments } from '@/services/document.service';
 
-const MermaidViewer = dynamic(() => import('@/components/documents/MermaidViewer'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full py-16 flex flex-col items-center justify-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-      <Loader2 size={24} className="animate-spin text-[#0D2B24] mb-2" />
-      <span className="text-xs text-gray-500 font-medium">Đang khởi tạo trình hiển thị sơ đồ...</span>
-    </div>
-  ),
-});
+const MermaidViewer = dynamic(
+  () => import('@/components/documents/MermaidViewer'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
+
+const RegisterModal = dynamic(
+  () => import('@/components/auth/RegisterModal'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
+
+const PremiumModal = dynamic(
+  () => import('@/components/layout/PremiumModal'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    ),
+  }
+);
 
 const DEFAULT_TEMPLATES = [
   {
@@ -56,6 +85,17 @@ const DEFAULT_TEMPLATES = [
 ];
 
 export default function MindmapPage() {
+  const router = useRouter();
+  const {
+    isAuthenticated,
+    showLoginModal,
+    setShowLoginModal,
+    showPremiumModal,
+    setShowPremiumModal,
+    activeUser,
+    triggerMessage,
+  } = useStudy();
+
   const [mindmaps, setMindmaps] = useState<MindmapItem[]>([]);
   const [documents, setDocuments] = useState<Array<{ id: number; title: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +113,11 @@ export default function MindmapPage() {
   const [formDocId, setFormDocId] = useState<number | null>(null);
 
   const fetchMindmapsList = useCallback(async () => {
+    if (!isAuthenticated) {
+      setMindmaps([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const params: { q?: string; document_id?: number } = {};
@@ -95,13 +140,17 @@ export default function MindmapPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, selectedDocId]);
+  }, [isAuthenticated, searchQuery, selectedDocId]);
 
   useEffect(() => {
     fetchMindmapsList();
   }, [fetchMindmapsList]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setDocuments([]);
+      return;
+    }
     const fetchDocs = async () => {
       try {
         const res = await getDocuments();
@@ -115,7 +164,7 @@ export default function MindmapPage() {
       }
     };
     fetchDocs();
-  }, []);
+  }, [isAuthenticated]);
 
   const handleStartCreate = () => {
     setIsCreating(true);
@@ -136,6 +185,11 @@ export default function MindmapPage() {
   };
 
   const handleSave = async () => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      triggerMessage('Vui lòng đăng nhập để lưu sơ đồ tư duy', 'error');
+      return;
+    }
     if (!formMermaidCode.trim()) {
       toast.error('Vui lòng nhập mã Mermaid cho sơ đồ tư duy');
       return;
@@ -198,32 +252,40 @@ export default function MindmapPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] flex flex-col font-sans">
-      {/* Top Header */}
-      <header className="bg-white border-b border-gray-200/80 sticky top-0 z-30 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/study-sessions"
-            className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
-            title="Quay lại Hub học tập"
-          >
-            <ArrowLeft size={18} />
-          </Link>
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold">
-              <Network size={20} />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-gray-900 leading-tight">Sơ đồ tư duy (Mindmap)</h1>
-              <p className="text-xs text-gray-500">Trực quan hóa cấu trúc kiến thức và mối quan hệ khái niệm</p>
+    <div className="min-h-screen bg-[#FDFCFB] dark:bg-[#0B0F17] text-gray-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
+      <Navbar
+        isLoggedIn={isAuthenticated}
+        onSignInClick={() => setShowLoginModal(true)}
+        onDashboardClick={() => router.push('/library')}
+        activeUser={activeUser}
+      />
+
+      <div className="pt-20 flex-1 flex flex-col">
+        {/* Top Header */}
+        <header className="bg-white dark:bg-zinc-900 border-b border-gray-200/80 dark:border-zinc-800 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs shrink-0 transition-colors">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/library"
+              className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 rounded-xl transition-colors"
+              title="Quay lại Thư viện"
+            >
+              <ArrowLeft size={18} />
+            </Link>
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-400 flex items-center justify-center font-bold">
+                <Network size={20} />
+              </div>
+              <div>
+                <h1 className="text-base font-bold text-gray-900 dark:text-zinc-100 leading-tight">Sơ đồ tư duy (Mindmap)</h1>
+                <p className="text-xs text-gray-500 dark:text-zinc-400">Trực quan hóa cấu trúc kiến thức và mối quan hệ khái niệm</p>
+              </div>
             </div>
           </div>
-        </div>
 
         <div className="flex items-center gap-2.5">
           <button
             onClick={handleStartCreate}
-            className="flex items-center gap-2 px-3.5 py-2 bg-[#0D2B24] hover:bg-[#16483C] text-white text-xs font-semibold rounded-xl shadow-xs transition-all active:scale-95"
+            className="flex items-center gap-2 px-3.5 py-2 bg-[#0D2B24] hover:bg-[#16483C] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white text-xs font-semibold rounded-xl shadow-xs transition-all active:scale-95"
           >
             <Plus size={16} />
             <span>Tạo sơ đồ mới</span>
@@ -234,21 +296,21 @@ export default function MindmapPage() {
       {/* Main Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-80 sm:w-96 border-r border-gray-200/80 bg-white flex flex-col flex-shrink-0">
-          <div className="p-4 border-b border-gray-100 space-y-3">
+        <aside className="w-80 sm:w-96 border-r border-gray-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col flex-shrink-0 transition-colors">
+          <div className="p-4 border-b border-gray-100 dark:border-zinc-800/80 space-y-3">
             <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-zinc-500" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Tìm sơ đồ theo tiêu đề..."
-                className="w-full pl-9 pr-3 py-2 text-xs bg-gray-50 hover:bg-gray-100/70 focus:bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#0D2B24]/10 transition-colors"
+                className="w-full pl-9 pr-3 py-2 text-xs bg-gray-50 hover:bg-gray-100/70 focus:bg-white dark:bg-zinc-800/70 dark:hover:bg-zinc-800 dark:focus:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-[#0D2B24]/10 dark:focus:ring-emerald-500/20 transition-colors"
               />
               {searchQuery && (
                 <button 
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300"
                 >
                   <X size={14} />
                 </button>
@@ -258,7 +320,7 @@ export default function MindmapPage() {
             <select
               value={selectedDocId}
               onChange={(e) => setSelectedDocId(e.target.value)}
-              className="w-full py-1.5 px-2.5 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-[#0D2B24]/10"
+              className="w-full py-1.5 px-2.5 text-xs bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-700 dark:text-zinc-300 focus:outline-hidden focus:ring-2 focus:ring-[#0D2B24]/10 dark:focus:ring-emerald-500/20"
             >
               <option value="ALL">Tất cả sơ đồ ({mindmaps.length})</option>
               <option value="STANDALONE">Sơ đồ độc lập</option>
@@ -270,17 +332,17 @@ export default function MindmapPage() {
             </select>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+          <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-zinc-800/80">
             {loading ? (
-              <div className="p-8 flex flex-col items-center justify-center text-gray-400">
-                <Loader2 size={24} className="animate-spin text-[#0D2B24] mb-2" />
+              <div className="p-8 flex flex-col items-center justify-center text-gray-400 dark:text-zinc-500">
+                <Loader2 size={24} className="animate-spin text-[#0D2B24] dark:text-emerald-400 mb-2" />
                 <span className="text-xs">Đang tải sơ đồ...</span>
               </div>
             ) : mindmaps.length === 0 ? (
               <div className="p-8 text-center">
-                <Network size={32} className="mx-auto text-gray-300 mb-2" />
-                <p className="text-xs font-semibold text-gray-600">Chưa có sơ đồ tư duy nào</p>
-                <p className="text-[11px] text-gray-400 mt-1">Bấm nút Tạo sơ đồ mới để bắt đầu phác thảo kiến thức.</p>
+                <Network size={32} className="mx-auto text-gray-300 dark:text-zinc-600 mb-2" />
+                <p className="text-xs font-semibold text-gray-600 dark:text-zinc-300">Chưa có sơ đồ tư duy nào</p>
+                <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1">Bấm nút Tạo sơ đồ mới để bắt đầu phác thảo kiến thức.</p>
               </div>
             ) : (
               mindmaps.map((m) => {
@@ -295,27 +357,27 @@ export default function MindmapPage() {
                     }}
                     className={`p-4 cursor-pointer transition-colors text-left ${
                       isSelected
-                        ? 'bg-emerald-50/70 border-l-4 border-[#0D2B24]'
-                        : 'hover:bg-gray-50'
+                        ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-l-4 border-[#0D2B24] dark:border-emerald-400'
+                        : 'hover:bg-gray-50 dark:hover:bg-zinc-800/50'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2 mb-1">
-                      <h3 className="text-xs font-bold text-gray-900 line-clamp-1">
+                      <h3 className="text-xs font-bold text-gray-900 dark:text-zinc-100 line-clamp-1">
                         {m.title || 'Sơ đồ không tiêu đề'}
                       </h3>
-                      <span className="text-[10px] text-gray-400 flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] text-gray-400 dark:text-zinc-500 flex items-center gap-1 shrink-0">
                         <Clock size={11} />
                         {new Date(m.updated_at || m.created_at).toLocaleDateString('vi-VN')}
                       </span>
                     </div>
 
                     {m.document_title ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-medium rounded-md truncate max-w-full">
-                        <BookOpen size={10} className="shrink-0 text-emerald-700" />
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 text-[10px] font-medium rounded-md truncate max-w-full">
+                        <BookOpen size={10} className="shrink-0 text-emerald-700 dark:text-emerald-400" />
                         <span className="truncate">{m.document_title}</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-50 text-gray-400 text-[10px] font-medium rounded-md">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-50 dark:bg-zinc-800/60 text-gray-400 dark:text-zinc-500 text-[10px] font-medium rounded-md">
                         Độc lập
                       </span>
                     )}
@@ -327,16 +389,16 @@ export default function MindmapPage() {
         </aside>
 
         {/* Content Pane */}
-        <main className="flex-1 bg-white flex flex-col overflow-y-auto">
+        <main className="flex-1 bg-white dark:bg-[#0B0F17] flex flex-col overflow-y-auto transition-colors">
           {isCreating || isEditing ? (
             /* Mindmap Editor */
             <div className="p-6 sm:p-8 max-w-4xl w-full mx-auto flex flex-col flex-1">
-              <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100 dark:border-zinc-800">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-400 flex items-center justify-center font-bold">
                     <Edit3 size={16} />
                   </div>
-                  <h2 className="text-sm font-bold text-gray-900">
+                  <h2 className="text-sm font-bold text-gray-900 dark:text-zinc-100">
                     {isCreating ? 'Thiết kế sơ đồ tư duy mới' : 'Chỉnh sửa sơ đồ tư duy'}
                   </h2>
                 </div>
@@ -347,14 +409,14 @@ export default function MindmapPage() {
                       setIsCreating(false);
                       setIsEditing(false);
                     }}
-                    className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="px-3 py-1.5 text-xs text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
                   >
                     Hủy
                   </button>
                   <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex items-center gap-1.5 px-4 py-1.5 bg-[#0D2B24] hover:bg-[#16483C] text-white text-xs font-bold rounded-lg shadow-xs transition-all disabled:opacity-60"
+                    className="flex items-center gap-1.5 px-4 py-1.5 bg-[#0D2B24] hover:bg-[#16483C] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow-xs transition-all disabled:opacity-60"
                   >
                     {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                     <span>Lưu sơ đồ</span>
@@ -365,7 +427,7 @@ export default function MindmapPage() {
               {/* Form Inputs */}
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-zinc-300 mb-1">
                     Tiêu đề sơ đồ
                   </label>
                   <input
@@ -373,18 +435,18 @@ export default function MindmapPage() {
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
                     placeholder="Nhập tên sơ đồ tư duy..."
-                    className="w-full px-3.5 py-2.5 text-sm font-semibold border border-gray-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#0D2B24]/10 transition-colors"
+                    className="w-full px-3.5 py-2.5 text-sm font-semibold border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#0D2B24]/10 dark:focus:ring-emerald-500/20 transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-zinc-300 mb-1">
                     Gắn với tài liệu học tập (Tùy chọn)
                   </label>
                   <select
                     value={formDocId === null ? '' : formDocId.toString()}
                     onChange={(e) => setFormDocId(e.target.value ? parseInt(e.target.value, 10) : null)}
-                    className="w-full px-3.5 py-2 text-xs border border-gray-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#0D2B24]/10 bg-white"
+                    className="w-full px-3.5 py-2 text-xs border border-gray-200 dark:border-zinc-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#0D2B24]/10 dark:focus:ring-emerald-500/20 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100"
                   >
                     <option value="">-- Không gắn (Sơ đồ độc lập) --</option>
                     {documents.map((doc) => (
@@ -398,7 +460,7 @@ export default function MindmapPage() {
                 {/* Templates Selector */}
                 {isCreating && (
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-zinc-300 mb-1.5">
                       Mẫu sơ đồ nhanh:
                     </label>
                     <div className="flex gap-2">
@@ -407,7 +469,7 @@ export default function MindmapPage() {
                           key={idx}
                           type="button"
                           onClick={() => setFormMermaidCode(tmpl.code)}
-                          className="px-3 py-1 bg-gray-100 hover:bg-emerald-50 hover:text-emerald-800 text-[11px] font-medium text-gray-700 rounded-lg transition-colors border border-gray-200"
+                          className="px-3 py-1 bg-gray-100 dark:bg-zinc-800 hover:bg-emerald-50 dark:hover:bg-zinc-700 hover:text-emerald-800 dark:hover:text-emerald-400 text-[11px] font-medium text-gray-700 dark:text-zinc-300 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700"
                         >
                           {tmpl.name}
                         </button>
@@ -419,27 +481,27 @@ export default function MindmapPage() {
                 {/* Mermaid Code Editor */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-gray-700">
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-zinc-300">
                       Mã Mermaid
                     </label>
-                    <span className="text-[11px] text-gray-400">Hỗ trợ cú pháp Mermaid mindmap</span>
+                    <span className="text-[11px] text-gray-400 dark:text-zinc-500">Hỗ trợ cú pháp Mermaid mindmap</span>
                   </div>
                   <textarea
                     value={formMermaidCode}
                     onChange={(e) => setFormMermaidCode(e.target.value)}
                     rows={8}
-                    className="w-full p-3 font-mono text-xs border border-gray-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#0D2B24]/10 bg-gray-50"
+                    className="w-full p-3 font-mono text-xs border border-gray-200 dark:border-zinc-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#0D2B24]/10 dark:focus:ring-emerald-500/20 bg-gray-50 dark:bg-zinc-900 text-gray-900 dark:text-zinc-100"
                   />
                 </div>
               </div>
 
               {/* Live Preview Section */}
-              <div className="pt-4 border-t border-gray-100">
-                <h4 className="text-xs font-bold text-gray-700 mb-3 flex items-center gap-1.5">
-                  <Sparkles size={14} className="text-emerald-600" />
+              <div className="pt-4 border-t border-gray-100 dark:border-zinc-800">
+                <h4 className="text-xs font-bold text-gray-700 dark:text-zinc-300 mb-3 flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-emerald-600 dark:text-emerald-400" />
                   Xem trước trực quan
                 </h4>
-                <div className="border border-gray-200 rounded-2xl p-4 bg-gray-50/50 min-h-[300px]">
+                <div className="border border-gray-200 dark:border-zinc-800 rounded-2xl p-4 bg-gray-50/50 dark:bg-zinc-900/60 min-h-[300px]">
                   <MermaidViewer chartCode={formMermaidCode} />
                 </div>
               </div>
@@ -447,18 +509,18 @@ export default function MindmapPage() {
           ) : activeMindmap ? (
             /* Mindmap Viewer */
             <div className="p-6 sm:p-8 max-w-5xl w-full mx-auto flex flex-col flex-1">
-              <div className="flex items-start justify-between gap-4 mb-6 pb-4 border-b border-gray-100">
+              <div className="flex items-start justify-between gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-zinc-800">
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900 leading-snug">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-zinc-100 leading-snug">
                     {activeMindmap.title || 'Sơ đồ tư duy'}
                   </h2>
-                  <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
+                  <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400 dark:text-zinc-500">
                     <span className="flex items-center gap-1">
                       <Clock size={12} />
                       Cập nhật: {new Date(activeMindmap.updated_at || activeMindmap.created_at).toLocaleString('vi-VN')}
                     </span>
                     {activeMindmap.document_title && (
-                      <span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-medium">
+                      <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md font-medium">
                         <Paperclip size={11} />
                         {activeMindmap.document_title}
                       </span>
@@ -469,21 +531,21 @@ export default function MindmapPage() {
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={() => handleCopyCode(activeMindmap.mermaid_code)}
-                    className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors"
                     title="Sao chép mã Mermaid"
                   >
                     <Copy size={16} />
                   </button>
                   <button
                     onClick={() => handleStartEdit(activeMindmap)}
-                    className="p-2 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg transition-colors"
+                    className="p-2 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:text-emerald-300 dark:hover:bg-zinc-800 rounded-lg transition-colors"
                     title="Chỉnh sửa sơ đồ"
                   >
                     <Edit3 size={16} />
                   </button>
                   <button
                     onClick={() => handleDelete(activeMindmap.id)}
-                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-zinc-800 rounded-lg transition-colors"
                     title="Xóa sơ đồ"
                   >
                     <Trash2 size={16} />
@@ -492,23 +554,23 @@ export default function MindmapPage() {
               </div>
 
               {/* Visual Interactive Diagram */}
-              <div className="flex-1 bg-white border border-gray-100 rounded-2xl p-4 shadow-xs overflow-auto flex items-center justify-center min-h-[450px]">
+              <div className="flex-1 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4 shadow-xs overflow-auto flex items-center justify-center min-h-[450px]">
                 <MermaidViewer chartCode={activeMindmap.mermaid_code} />
               </div>
 
               {/* Attached Document Quick Link */}
               {activeMindmap.document_id && (
-                <div className="mt-6 p-4 bg-emerald-50/50 border border-emerald-100 rounded-xl flex items-center justify-between gap-3">
+                <div className="mt-6 p-4 bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 rounded-xl flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <BookOpen size={18} className="text-emerald-700 shrink-0" />
+                    <BookOpen size={18} className="text-emerald-700 dark:text-emerald-400 shrink-0" />
                     <div className="truncate">
-                      <p className="text-[11px] font-semibold text-emerald-900">Sơ đồ gắn liền với tài liệu:</p>
-                      <p className="text-xs text-emerald-800 font-medium truncate">{activeMindmap.document_title}</p>
+                      <p className="text-[11px] font-semibold text-emerald-900 dark:text-emerald-300">Sơ đồ gắn liền với tài liệu:</p>
+                      <p className="text-xs text-emerald-800 dark:text-emerald-400 font-medium truncate">{activeMindmap.document_title}</p>
                     </div>
                   </div>
                   <Link
-                    href={`/viewer?id=${activeMindmap.document_id}`}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-white text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-lg hover:bg-emerald-50 shrink-0 transition-colors"
+                    href={`/viewer/${activeMindmap.document_id}`}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-zinc-800 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold rounded-lg hover:bg-emerald-50 dark:hover:bg-zinc-700 shrink-0 transition-colors"
                   >
                     <span>Mở tài liệu</span>
                     <ExternalLink size={12} />
@@ -517,15 +579,15 @@ export default function MindmapPage() {
               )}
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-400">
-              <Network size={48} className="text-gray-200 mb-3" />
-              <h3 className="text-sm font-bold text-gray-700 mb-1">Chọn hoặc tạo sơ đồ tư duy</h3>
-              <p className="text-xs text-gray-400 max-w-sm">
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-400 dark:text-zinc-500">
+              <Network size={48} className="text-gray-200 dark:text-zinc-700 mb-3" />
+              <h3 className="text-sm font-bold text-gray-700 dark:text-zinc-300 mb-1">Chọn hoặc tạo sơ đồ tư duy</h3>
+              <p className="text-xs text-gray-400 dark:text-zinc-500 max-w-sm">
                 Sơ đồ tư duy giúp liên kết các ý niệm bài học thành bức tranh tổng thể rõ ràng, trực quan.
               </p>
               <button
                 onClick={handleStartCreate}
-                className="mt-4 px-4 py-2 bg-[#0D2B24] hover:bg-[#16483C] text-white text-xs font-bold rounded-xl transition-all shadow-xs"
+                className="mt-4 px-4 py-2 bg-[#0D2B24] hover:bg-[#16483C] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-all shadow-xs"
               >
                 + Bắt đầu tạo sơ đồ mới
               </button>
@@ -533,6 +595,17 @@ export default function MindmapPage() {
           )}
         </main>
       </div>
+      </div>
+
+      <RegisterModal 
+        isOpen={showLoginModal} 
+        onClose={() => setShowLoginModal(false)} 
+        triggerMessage={triggerMessage} 
+      />
+      <PremiumModal 
+        isOpen={showPremiumModal} 
+        onClose={() => setShowPremiumModal(false)} 
+      />
     </div>
   );
 }
