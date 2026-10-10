@@ -122,10 +122,12 @@ exports.up = async (pgm) => {
 
   // Insert users
   pgm.sql(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'student';
     INSERT INTO users (email, password, name, role) VALUES
     ('admin', '${adminPasswordHash}', 'Admin Edushare', 'admin'),
     ('giaovien', '${teacherPasswordHash}', 'Giáo Viên Demo', 'teacher'),
-    ('hocvien@edushare.com', '${userPasswordHash}', 'Nguyễn Văn Học', 'student');
+    ('hocvien@edushare.com', '${userPasswordHash}', 'Nguyễn Văn Học', 'student')
+    ON CONFLICT (email) DO NOTHING;
   `);
 
   // Insert documents

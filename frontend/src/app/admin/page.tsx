@@ -9,7 +9,8 @@ import {
   Layers, Clock, RefreshCw, ChevronRight, CheckCircle,
   AlertTriangle, UserPlus, Edit, X, Mail, Lock, Phone, Eye,
   Flag, UserX, UserCheck, CreditCard, HardDrive, Sparkles, Check,
-  Calendar, Zap, Shield, AlertCircle, Unlock
+  Calendar, Zap, Shield, AlertCircle, Unlock,
+  MessageSquareHeart, Star, ThumbsUp, Filter, Lightbulb, CheckCircle2, MessageSquare, LogOut, Plus
 } from "lucide-react";
 import { useStudy } from "@/context/StudyContext";
 import { 
@@ -36,8 +37,14 @@ import {
   ModerationHistoryItem,
   ModerationAction,
 } from "@/services/safety.service";
+import {
+  getAdminFeedbacks,
+  deleteAdminFeedback,
+  FeedbackItem,
+  FeedbackStats
+} from "@/services/feedback.service";
 
-type ActiveTab = "dashboard" | "users" | "subscriptions" | "documents" | "moderation";
+type ActiveTab = "dashboard" | "users" | "subscriptions" | "documents" | "moderation" | "feedbacks";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -60,6 +67,11 @@ export default function AdminPage() {
   const [stats, setStats] = useState<any>(null);
   const [charts, setCharts] = useState<any>(null);
   const [isSyncingCron, setIsSyncingCron] = useState(false);
+  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
+  const [feedbackStats, setFeedbackStats] = useState<FeedbackStats | null>(null);
+  const [feedbackFilterRating, setFeedbackFilterRating] = useState<number | "all">("all");
+  const [feedbackFilterCategory, setFeedbackFilterCategory] = useState<string | "all">("all");
+  const [feedbackSearch, setFeedbackSearch] = useState("");
 
   // Users Tab states
   const [users, setUsers] = useState<any[]>([]);
@@ -103,7 +115,7 @@ export default function AdminPage() {
 
   // Modals / Actions
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [deleteType, setDeleteType] = useState<"user" | "document" | null>(null);
+  const [deleteType, setDeleteType] = useState<"user" | "document" | "feedback" | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // User CRUD states
@@ -273,6 +285,13 @@ export default function AdminPage() {
       }
       setStats(statsRes.stats || {});
       setCharts(statsRes.charts || { monthlyRevenue: [], subscriptionsByPlan: [], recentOrders: [] });
+
+      // Silent load feedback stats for sidebar badge
+      getAdminFeedbacks().then((res) => {
+        if (res && res.success) {
+          setFeedbackStats(res.stats || null);
+        }
+      }).catch(() => {});
       setLoading(false);
     } catch (err: any) {
       console.error('Error loading dashboard stats:', err);
@@ -296,6 +315,18 @@ export default function AdminPage() {
       triggerNotification(err.message || "Lỗi đồng bộ gói cước", "error");
     } finally {
       setIsSyncingCron(false);
+    }
+  };
+
+  const loadFeedbacks = async () => {
+    try {
+      const res = await getAdminFeedbacks();
+      if (res && res.success) {
+        setFeedbacks(res.feedbacks || []);
+        setFeedbackStats(res.stats || null);
+      }
+    } catch (err: any) {
+      triggerNotification("Lỗi tải danh sách phản hồi & đánh giá", "error");
     }
   };
 
@@ -393,6 +424,8 @@ export default function AdminPage() {
         await loadDocuments("", 1);
       } else if (tab === "moderation") {
         await loadModerationData();
+      } else if (tab === "feedbacks") {
+        await loadFeedbacks();
       }
       setLoading(false);
     } catch (err) {
@@ -402,7 +435,7 @@ export default function AdminPage() {
   };
 
   // Delete handles
-  const confirmDelete = (id: number, type: "user" | "document") => {
+  const confirmDelete = (id: number, type: "user" | "document" | "feedback") => {
     setDeletingId(id);
     setDeleteType(type);
   };
@@ -414,19 +447,26 @@ export default function AdminPage() {
       let res;
       if (deleteType === "user") {
         res = await deleteAdminUser(deletingId);
-      } else {
+      } else if (deleteType === "document") {
         res = await deleteAdminDocument(deletingId);
+      } else if (deleteType === "feedback") {
+        res = await deleteAdminFeedback(deletingId);
       }
 
       if (res.error) throw new Error(res.error);
 
       triggerNotification(
-        deleteType === "user" ? "Đã xóa người dùng thành công" : "Đã xóa tài liệu thành công",
+        deleteType === "user" 
+          ? "Đã xóa người dùng thành công" 
+          : deleteType === "document" 
+          ? "Đã xóa tài liệu thành công" 
+          : "Đã xóa đánh giá thành công",
         "success"
       );
       
       if (deleteType === "user") await loadUsers();
-      else await loadDocuments();
+      else if (deleteType === "document") await loadDocuments();
+      else if (deleteType === "feedback") await loadFeedbacks();
 
       await loadDashboardData();
     } catch (err: any) {
@@ -756,6 +796,25 @@ export default function AdminPage() {
               </span>
             )}
           </button>
+
+          <button
+            onClick={() => handleTabChange("feedbacks")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
+              activeTab === "feedbacks"
+                ? "bg-emerald-500 text-white shadow-md"
+                : "text-gray-300 hover:bg-[#153e34] hover:text-white"
+            }`}
+          >
+            <MessageSquareHeart size={18} />
+            <div className="flex items-center justify-between flex-1">
+              <span>Đánh giá & Góp ý</span>
+              {feedbackStats && feedbackStats.totalFeedbacks > 0 && (
+                <span className="text-[10px] bg-emerald-700/80 text-emerald-200 px-2 py-0.5 rounded-full font-bold">
+                  {feedbackStats.totalFeedbacks}
+                </span>
+              )}
+            </div>
+          </button>
         </nav>
 
         {/* Footer Actions */}
@@ -787,6 +846,7 @@ export default function AdminPage() {
               {activeTab === "subscriptions" && "Quản Lý Gói Cước & Doanh Thu Hệ Thống"}
               {activeTab === "documents" && "Quản Lý Tài Liệu Học Tập & Dung Lượng"}
               {activeTab === "moderation" && "Kiểm Duyệt Nội Dung & An Toàn Cộng Đồng"}
+              {activeTab === "feedbacks" && "Ý Kiến Đóng Góp & Đánh Giá Trải Nghiệm"}
             </h1>
           </div>
 
@@ -1893,6 +1953,458 @@ export default function AdminPage() {
                 </div>
               )}
 
+              {/* SECTION 5: FEEDBACKS MANAGEMENT & ANALYTICS */}
+              {activeTab === "feedbacks" && (
+                <div className="space-y-8">
+                  {/* Top Analytics Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Card 1: Average Rating */}
+                    <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 border border-amber-100 shrink-0">
+                          <Star size={24} className="fill-amber-400" />
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                            Điểm đánh giá TB
+                          </span>
+                          <div className="flex items-baseline gap-2 mt-0.5">
+                            <span className="text-2xl font-extrabold text-gray-900">
+                              {feedbackStats ? feedbackStats.averageRating.toFixed(1) : '5.0'}
+                            </span>
+                            <span className="text-xs font-semibold text-gray-400">/ 5.0</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            size={14}
+                            className={`${
+                              star <= Math.round(feedbackStats?.averageRating || 5)
+                                ? 'text-amber-400 fill-amber-400'
+                                : 'text-gray-200'
+                            }`}
+                          />
+                        ))}
+                        <span className="text-[11px] text-gray-500 font-medium ml-1.5">
+                          {feedbackStats?.totalFeedbacks || 0} lượt đánh giá
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Card 2: Satisfaction Rate */}
+                    <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 border border-emerald-100 shrink-0">
+                          <ThumbsUp size={22} />
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                            Tỉ lệ hài lòng
+                          </span>
+                          <span className="text-2xl font-extrabold text-emerald-700 mt-0.5 block">
+                            {feedbackStats ? feedbackStats.satisfactionRate : 100}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                          <div
+                            className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                            style={{ width: `${feedbackStats ? feedbackStats.satisfactionRate : 100}%` }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-400 font-medium mt-1">Đánh giá 4 sao và 5 sao</p>
+                      </div>
+                    </div>
+
+                    {/* Card 3: Total Feedbacks */}
+                    <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100 shrink-0">
+                          <MessageSquareHeart size={22} />
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                            Tổng ý kiến gửi về
+                          </span>
+                          <span className="text-2xl font-extrabold text-gray-900 mt-0.5 block">
+                            {feedbackStats?.totalFeedbacks || 0}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-500 font-medium mt-3">
+                        Từ người dùng & khách trải nghiệm web
+                      </p>
+                    </div>
+
+                    {/* Card 4: Top Feedback Category / Feature Proposals */}
+                    <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 border border-purple-100 shrink-0">
+                          <Lightbulb size={22} />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                            Đề xuất tính năng mới
+                          </span>
+                          <span className="text-2xl font-extrabold text-purple-700 mt-0.5 block">
+                            {feedbackStats?.categoryCounts?.['Đề xuất tính năng mới'] || 0}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-500 font-medium mt-3 truncate">
+                        Gợi ý nâng cấp hệ thống thực tế
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Rating Breakdown & Category Stats Banner */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Star Rating Breakdown */}
+                    <div className="bg-white rounded-2xl border border-gray-200/80 p-6 shadow-sm">
+                      <h3 className="text-xs font-extrabold uppercase tracking-wider text-gray-600 mb-4 flex items-center justify-between">
+                        <span>Phân bổ số sao</span>
+                        <span className="text-[11px] text-emerald-600 font-semibold lowercase">
+                          (bấm sao để lọc nhanh)
+                        </span>
+                      </h3>
+                      <div className="space-y-2.5">
+                        {[5, 4, 3, 2, 1].map((s) => {
+                          const count = feedbackStats?.distribution?.[s] || 0;
+                          const total = feedbackStats?.totalFeedbacks || 1;
+                          const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                          const isSelected = feedbackFilterRating === s;
+                          return (
+                            <button
+                              key={s}
+                              onClick={() => setFeedbackFilterRating(isSelected ? 'all' : s)}
+                              className={`w-full flex items-center gap-3 text-xs p-1.5 rounded-xl transition-all ${
+                                isSelected ? 'bg-amber-50 ring-1 ring-amber-400' : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1 w-14 shrink-0 font-bold text-gray-700">
+                                <span>{s}</span>
+                                <Star size={12} className="text-amber-400 fill-amber-400" />
+                              </div>
+                              <div className="flex-1 bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    s >= 4 ? 'bg-emerald-500' : s === 3 ? 'bg-amber-400' : 'bg-rose-400'
+                                  }`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <div className="w-16 text-right font-mono text-[11px] text-gray-500 shrink-0">
+                                {count} <span className="text-gray-400">({pct}%)</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Category Distribution */}
+                    <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200/80 p-6 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-gray-600 mb-4 flex items-center justify-between">
+                          <span>Chủ đề người dùng phản hồi</span>
+                          <span className="text-[11px] text-gray-400 font-normal">
+                            Tổng cộng {feedbackStats?.totalFeedbacks || 0} đóng góp
+                          </span>
+                        </h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {[
+                            { id: 'Giao diện & Trải nghiệm', label: '🎨 Giao diện & Trải nghiệm', color: 'border-blue-200 bg-blue-50/50 text-blue-700' },
+                            { id: 'Tốc độ AI & Trợ lý', label: '⚡ Tốc độ AI & Trợ lý', color: 'border-amber-200 bg-amber-50/50 text-amber-700' },
+                            { id: 'Flashcards & Ôn tập', label: '🎴 Flashcards & Ôn tập', color: 'border-emerald-200 bg-emerald-50/50 text-emerald-700' },
+                            { id: 'Trắc nghiệm & Đề thi', label: '📝 Trắc nghiệm & Đề thi', color: 'border-cyan-200 bg-cyan-50/50 text-cyan-700' },
+                            { id: 'Đề xuất tính năng mới', label: '💡 Đề xuất tính năng mới', color: 'border-purple-200 bg-purple-50/50 text-purple-700' },
+                            { id: 'Báo lỗi (Bug)', label: '🐞 Báo lỗi hệ thống', color: 'border-rose-200 bg-rose-50/50 text-rose-700' },
+                          ].map((cat) => {
+                            const count = feedbackStats?.categoryCounts?.[cat.id] || 0;
+                            const isSelected = feedbackFilterCategory === cat.id;
+                            return (
+                              <button
+                                key={cat.id}
+                                onClick={() => setFeedbackFilterCategory(isSelected ? 'all' : cat.id)}
+                                className={`p-3 rounded-xl border text-left transition-all ${
+                                  isSelected
+                                    ? 'ring-2 ring-emerald-500 bg-emerald-50 font-bold border-emerald-400'
+                                    : `${cat.color} hover:shadow-sm`
+                                }`}
+                              >
+                                <span className="block text-[11px] font-bold truncate">{cat.label}</span>
+                                <span className="text-lg font-black mt-1 block">
+                                  {count} <span className="text-[10px] font-normal opacity-70">ý kiến</span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                        <span>💡 Dùng dữ liệu này để quyết định lộ trình phát triển (Roadmap) tiếp theo của Cognito.</span>
+                        {(feedbackFilterRating !== 'all' || feedbackFilterCategory !== 'all' || feedbackSearch) && (
+                          <button
+                            onClick={() => {
+                              setFeedbackFilterRating('all');
+                              setFeedbackFilterCategory('all');
+                              setFeedbackSearch('');
+                            }}
+                            className="text-xs font-bold text-emerald-600 hover:text-emerald-700 underline"
+                          >
+                            Xóa bộ lọc
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter & Search Bar */}
+                  <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="relative w-full md:w-96">
+                      <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={feedbackSearch}
+                        onChange={(e) => setFeedbackSearch(e.target.value)}
+                        placeholder="Tìm theo tên, email, nội dung góp ý..."
+                        className="w-full text-xs pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 font-medium"
+                      />
+                      {feedbackSearch && (
+                        <button
+                          onClick={() => setFeedbackSearch('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                      {/* Rating Filter Dropdown */}
+                      <div className="flex items-center gap-2">
+                        <Filter size={14} className="text-gray-400" />
+                        <span className="text-xs font-bold text-gray-500">Sao:</span>
+                        <select
+                          value={feedbackFilterRating}
+                          onChange={(e) =>
+                            setFeedbackFilterRating(e.target.value === 'all' ? 'all' : Number(e.target.value))
+                          }
+                          className="text-xs font-semibold px-3 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="all">Tất cả sao</option>
+                          <option value="5">⭐⭐⭐⭐⭐ (5 sao)</option>
+                          <option value="4">⭐⭐⭐⭐ (4 sao)</option>
+                          <option value="3">⭐⭐⭐ (3 sao)</option>
+                          <option value="2">⭐⭐ (2 sao)</option>
+                          <option value="1">⭐ (1 sao)</option>
+                        </select>
+                      </div>
+
+                      {/* Category Filter Dropdown */}
+                      <select
+                        value={feedbackFilterCategory}
+                        onChange={(e) => setFeedbackFilterCategory(e.target.value)}
+                        className="text-xs font-semibold px-3 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="all">Tất cả chủ đề</option>
+                        <option value="Giao diện & Trải nghiệm">🎨 Giao diện & Trải nghiệm</option>
+                        <option value="Tốc độ AI & Trợ lý">⚡ Tốc độ AI & Trợ lý</option>
+                        <option value="Flashcards & Ôn tập">🎴 Flashcards & Ôn tập</option>
+                        <option value="Trắc nghiệm & Đề thi">📝 Trắc nghiệm & Đề thi</option>
+                        <option value="Đề xuất tính năng mới">💡 Đề xuất tính năng mới</option>
+                        <option value="Báo lỗi (Bug)">🐞 Báo lỗi hệ thống</option>
+                      </select>
+
+                      <button
+                        onClick={loadFeedbacks}
+                        className="p-2 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl border border-gray-200 transition-colors"
+                        title="Làm mới danh sách đánh giá"
+                      >
+                        <RefreshCw size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Feedback List */}
+                  {(() => {
+                    const filtered = feedbacks.filter((fb) => {
+                      if (feedbackFilterRating !== 'all' && fb.rating !== feedbackFilterRating) return false;
+                      if (feedbackFilterCategory !== 'all' && fb.category !== feedbackFilterCategory) return false;
+                      if (feedbackSearch.trim()) {
+                        const q = feedbackSearch.toLowerCase();
+                        const matchName = fb.user_name?.toLowerCase().includes(q);
+                        const matchEmail = fb.user_email?.toLowerCase().includes(q);
+                        const matchComment = fb.comment?.toLowerCase().includes(q);
+                        const matchCat = fb.category?.toLowerCase().includes(q);
+                        if (!matchName && !matchEmail && !matchComment && !matchCat) return false;
+                      }
+                      return true;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="p-12 rounded-3xl border border-dashed border-gray-300 bg-white text-center">
+                          <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 mx-auto mb-4 border border-emerald-100">
+                            <MessageSquareHeart size={28} />
+                          </div>
+                          <h4 className="font-extrabold text-gray-800 text-sm">
+                            {feedbacks.length === 0
+                              ? 'Chưa có đánh giá nào từ người dùng'
+                              : 'Không tìm thấy đánh giá phù hợp bộ lọc'}
+                          </h4>
+                          <p className="text-gray-400 text-xs mt-1 max-w-sm mx-auto">
+                            {feedbacks.length === 0
+                              ? 'Nút đánh giá trải nghiệm đang hiển thị ở góc phải người dùng. Mọi ý kiến đóng góp sẽ được lưu tự động tại đây.'
+                              : 'Hãy thử thay đổi từ khóa tìm kiếm hoặc chọn danh mục khác.'}
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-xs font-bold text-gray-500">
+                            Hiển thị {filtered.length} / {feedbacks.length} đánh giá
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {filtered.map((item) => {
+                            const isFeatureProposal = item.category === 'Đề xuất tính năng mới';
+                            const isBug = item.category === 'Báo lỗi (Bug)';
+
+                            return (
+                              <motion.div
+                                key={item.id}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className={`bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative ${
+                                  isFeatureProposal
+                                    ? 'border-purple-200/80 bg-gradient-to-b from-purple-50/20 to-white'
+                                    : isBug
+                                    ? 'border-rose-200/80 bg-gradient-to-b from-rose-50/20 to-white'
+                                    : 'border-gray-200/80'
+                                }`}
+                              >
+                                <div>
+                                  {/* Card Header */}
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                      <div
+                                        className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${
+                                          item.user_id
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-gray-100 text-gray-600 border border-gray-200'
+                                        }`}
+                                      >
+                                        {(item.user_name || 'U').charAt(0).toUpperCase()}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <h4 className="font-extrabold text-sm text-gray-900 truncate">
+                                            {item.user_name || 'Khách truy cập'}
+                                          </h4>
+                                          {item.user_id ? (
+                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                                              Thành viên #{item.user_id}
+                                            </span>
+                                          ) : (
+                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-gray-100 text-gray-500 shrink-0">
+                                              Chưa đăng nhập
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                                          {item.user_email || 'Chưa cung cấp email'}
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    {/* Delete Button */}
+                                    <button
+                                      onClick={() => confirmDelete(item.id, 'feedback')}
+                                      className="p-1.5 text-gray-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
+                                      title="Xóa đánh giá này"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+
+                                  {/* Star Rating & Category Badges */}
+                                  <div className="flex flex-wrap items-center gap-2 mt-3.5">
+                                    <div className="flex items-center gap-1 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/70">
+                                      {[1, 2, 3, 4, 5].map((s) => (
+                                        <Star
+                                          key={s}
+                                          size={12}
+                                          className={`${
+                                            s <= item.rating
+                                              ? 'text-amber-400 fill-amber-400'
+                                              : 'text-gray-200'
+                                          }`}
+                                        />
+                                      ))}
+                                      <span className="text-[11px] font-extrabold text-amber-700 ml-1">
+                                        {item.rating}/5
+                                      </span>
+                                    </div>
+
+                                    <span
+                                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${
+                                        isFeatureProposal
+                                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                          : isBug
+                                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      }`}
+                                    >
+                                      {item.category}
+                                    </span>
+
+                                    {item.page_url && (
+                                      <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100 font-mono truncate max-w-[140px]" title={`Trang gửi: ${item.page_url}`}>
+                                        {item.page_url}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Comment Quote Content */}
+                                  <div className="mt-3.5 p-3.5 bg-gray-50/80 rounded-xl border border-gray-100 text-xs text-gray-800 leading-relaxed font-normal whitespace-pre-wrap">
+                                    "{item.comment}"
+                                  </div>
+                                </div>
+
+                                {/* Card Footer Timestamp */}
+                                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+                                  <span className="flex items-center gap-1.5">
+                                    <Clock size={12} />
+                                    {new Date(item.created_at).toLocaleString('vi-VN')}
+                                  </span>
+                                  {isFeatureProposal && (
+                                    <span className="text-[10px] font-bold text-purple-600 flex items-center gap-1">
+                                      <Lightbulb size={11} /> Đề xuất tính năng
+                                    </span>
+                                  )}
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </>
           )}
 

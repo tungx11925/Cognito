@@ -42,9 +42,7 @@
     "pg": "^8.11.3",
     "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5",
-    "zod": "^4.6.5"
-  },
-  "devDependencies": {
+    "zod": "^4.6.5",
     "@types/bcryptjs": "^2.4.2",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.13",
@@ -59,8 +57,10 @@
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.1",
     "node-pg-migrate": "^6.2.2",
-    "nodemon": "^3.1.14",
-    "ts-node": "^10.9.2",
     "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14",
+    "ts-node": "^10.9.2"
   }
 }

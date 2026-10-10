@@ -461,7 +461,16 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
           <div className="hidden md:flex items-center gap-3 shrink-0">
             {isMounted && isLoggedIn ? (
               <>
-                {activeUser?.role === 'premium' || activeUser?.role === 'admin' ? (
+                {activeUser?.role === 'admin' ? (
+                  <Link
+                    href="/admin"
+                    prefetch={true}
+                    className="px-3.5 py-1.5 rounded-xl text-xs xl:text-sm font-bold transition-all flex items-center gap-1.5 text-white bg-[#1a3d28] hover:bg-[#153422] shadow-sm hover:shadow active:scale-95"
+                  >
+                    <Shield size={14} className="text-emerald-300" />
+                    <span>Bảng điều khiển Admin</span>
+                  </Link>
+                ) : activeUser?.role === 'premium' ? (
                   <button
                     onClick={() => router.push('/premium')}
                     className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 border border-amber-500/30 animate-pulse"
@@ -1043,7 +1052,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
               )}
 
               {isMounted && isLoggedIn ? (
-                activeUser?.role === 'premium' || activeUser?.role === 'admin' ? (
+                activeUser?.role === 'admin' ? null : activeUser?.role === 'premium' ? (
                   <button 
                     onClick={() => { setMobileOpen(false); router.push('/premium'); }}
                     className="w-full py-2.5 rounded-lg mt-1 flex items-center justify-center gap-2 border border-amber-500/30 animate-pulse" 

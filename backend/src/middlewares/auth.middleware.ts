@@ -77,6 +77,9 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
 export const optionalAuthenticate = (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     let token = req.cookies?.token;
+    if (!token && typeof req.query?.token === 'string') {
+      token = req.query.token;
+    }
     if (!token) {
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {

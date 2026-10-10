@@ -73,6 +73,7 @@ const nextConfig = {
   },
 
   async rewrites() {
+    const backendUrl = (process.env.BACKEND_INTERNAL_URL || 'http://localhost:5000').replace(/\/+$/, '');
     return [
       // Instantly serve empty JSON for missing sourcemaps from external libs (framer-motion) to avoid 404 delays
       {
@@ -81,11 +82,11 @@ const nextConfig = {
       },
       {
         source: '/api/:path*',
-        destination: 'http://localhost:5000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
       {
         source: '/uploads/:path*',
-        destination: 'http://localhost:5000/uploads/:path*',
+        destination: `${backendUrl}/uploads/:path*`,
       }
     ]
   }

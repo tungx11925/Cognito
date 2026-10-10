@@ -26,6 +26,7 @@ import { userSafetyRouter, adminModerationRouter } from './routes/safety.routes'
 import messageRoutes from './routes/message.routes';
 import notificationRoutes from './routes/notification.routes';
 import searchRoutes from './routes/search.routes';
+import feedbackRoutes from './routes/feedback.routes';
 import { bootstrapAITestSchema } from './db/ai-test-schema';
 import { bootstrapLectureSchema } from './db/lecture-schema';
 import helmet from 'helmet';
@@ -81,16 +82,29 @@ app.use(helmet({
     },
   },
 }));
+
+const configuredOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map(url => url.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
+  ...configuredOrigins,
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-].filter(Boolean) as string[];
+];
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
+    }
+    try {
+      const hostname = new URL(origin).hostname;
+      if (hostname === 'localhost' || hostname.endsWith('.vercel.app')) {
+        return callback(null, true);
+      }
+    } catch {
+      // ignore invalid URL
     }
     return callback(new Error('Not allowed by CORS'));
   },
@@ -101,10 +115,11 @@ app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 app.get(['/health', '/api/health'], (req, res) => {
-  res.json({ status: 'OK' });
+  res.json({ status: 'OK', version: '2.1.0-feedback', timestamp: new Date().toISOString() });
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/feedback', feedbackRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/flashcards', flashcardRoutes);
 app.use('/api/shares', shareRoutes);

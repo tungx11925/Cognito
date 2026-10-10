@@ -358,11 +358,16 @@ class AIProviderService {
       return ['gemini', 'groq'];
     }
 
+    const groqAdapter = this.adapters['groq'];
+    // Ưu tiên Groq trước vì tốc độ chip LPU siêu nhanh (~800ms)
+    if (groqAdapter && groqAdapter.isAvailable()) {
+      return ['groq', 'gemini'];
+    }
     if (resolved) {
       const other: ProviderName = resolved.provider === 'groq' ? 'gemini' : 'groq';
-      return [resolved.provider, other]; // giữ hành vi fallback chéo như code cũ
+      return [resolved.provider, other];
     }
-    return ['groq', 'gemini']; // thứ tự mặc định cũ: Groq trước, Gemini sau
+    return ['groq', 'gemini'];
   }
 
   private async logRequest(params: {

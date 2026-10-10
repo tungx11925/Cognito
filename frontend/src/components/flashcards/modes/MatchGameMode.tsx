@@ -193,7 +193,7 @@ export default function MatchGameMode({
           </button>
         </motion.div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 w-full">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
           <AnimatePresence>
             {items.map((item) => {
               if (matchedIds.includes(item.id)) return null;
@@ -215,13 +215,13 @@ export default function MatchGameMode({
                   transition={{ duration: 0.2 }}
                   onClick={() => handleSelect(item.id)}
                   className={`
-                    p-6 min-h-[120px] rounded-2xl flex items-center justify-center text-center transition-colors cursor-pointer select-none
+                    p-5 min-h-[100px] rounded-2xl flex items-center justify-center text-center transition-colors cursor-pointer select-none
                     ${isWrong ? 'bg-red-50 border-2 border-red-500 text-red-600' : 
                       isSelected ? 'bg-green-50 border-2 border-[#10b981] text-[#10b981] shadow-inner' : 
                       'bg-white border-2 border-gray-100 text-gray-700 hover:border-[#10b981] hover:shadow-md'}
                   `}
                 >
-                  <span className="font-semibold text-lg line-clamp-4">{item.content}</span>
+                  <span className="font-semibold text-sm leading-snug break-words w-full">{item.content}</span>
                 </motion.button>
               );
             })}

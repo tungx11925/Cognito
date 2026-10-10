@@ -19,6 +19,7 @@ import {
   cancelAdminSubscription,
   getAICostStats
 } from '../controllers/admin.controller';
+import { getAdminFeedbacks, deleteAdminFeedback } from '../controllers/feedback.controller';
 
 const router = Router();
 
@@ -49,5 +50,7 @@ router.get('/orders', rateLimiter(60000, 120), getAdminOrders);
 // 4. Documents & Content Management (Zero Private Content Leakage)
 router.get('/documents', rateLimiter(60000, 120), getDocuments);
 router.delete('/documents/:id', rateLimiter(60000, 30), deleteDocument);
+router.get('/feedbacks', rateLimiter(60000, 120), getAdminFeedbacks);
+router.delete('/feedbacks/:id', rateLimiter(60000, 30), deleteAdminFeedback);
 
 export default router;

@@ -57,7 +57,7 @@ export interface FlashcardDeck {
 export interface FlashcardItem {
   id: number;
   deck_id: number;
-  document_id: number | null;
+  document_id?: number | null;
   front: string;
   back: string;
   ease_factor: number;
