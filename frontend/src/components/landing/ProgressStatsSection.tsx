@@ -7,14 +7,14 @@ import { useStudy } from "@/context/StudyContext";
 export function ProgressStatsSection() {
   const { isAuthenticated, activeUser, analyticsData } = useStudy();
 
-  // Determine study time to display (use DB if authenticated, fallback to mock if guest/unauthenticated)
-  const totalMinutes = isAuthenticated ? (analyticsData?.total_study_minutes || 0) : 185;
+  // Determine study time to display (real DB analytics if authenticated, 0 for new visitors)
+  const totalMinutes = isAuthenticated ? (analyticsData?.total_study_minutes || 0) : 0;
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
   const timeDisplay = `${hours}h ${mins}m`;
 
-  // Determine streak
-  const streak = isAuthenticated ? (analyticsData?.streak || activeUser?.streak || 0) : 12;
+  // Determine streak (real DB streak if authenticated, 0 for new visitors)
+  const streak = isAuthenticated ? (analyticsData?.streak || activeUser?.streak || 0) : 0;
 
   // Determine target percentage (weekly target = 15 hours = 900 minutes)
   const targetMinutes = 900;
@@ -23,12 +23,12 @@ export function ProgressStatsSection() {
   // Calculate SVG stroke offset based on percentage (circumference = 2 * PI * r = 251.2)
   const strokeDashoffset = 251.2 - (251.2 * percentOfTarget) / 100;
 
-  // Determine other counts
-  const totalCards = isAuthenticated ? (analyticsData?.total_flashcards || 0) : 124;
-  const totalDocuments = isAuthenticated ? (analyticsData?.total_documents || 0) : 3;
+  // Determine other counts (real DB analytics if authenticated, 0 for new visitors)
+  const totalCards = isAuthenticated ? (analyticsData?.total_flashcards || 0) : 0;
+  const totalDocuments = isAuthenticated ? (analyticsData?.total_documents || 0) : 0;
 
   return (
-    <section id="progress-stats" className="py-24 relative overflow-hidden" style={{ background: "linear-gradient(180deg, #f5f3ee 0%, #ebe7de 100%)" }}>
+    <section id="progress-stats" className="py-24 relative overflow-hidden" style={{ background: "linear-gradient(180deg, #f5f3ee 0%, #ebe7de 100%)" }} suppressHydrationWarning>
       {/* Background elegant dots pattern */}
       <div 
         className="absolute inset-0 opacity-20 pointer-events-none" 
@@ -48,7 +48,7 @@ export function ProgressStatsSection() {
           <h2 className="text-3xl md:text-4xl font-extrabold mb-4" style={{ color: "#0d1a14", fontFamily: "'Outfit', sans-serif" }}>
             Tiến trình học tập của bạn
           </h2>
-          <p style={{ color: "#4a5a52", fontFamily: "'Outfit', sans-serif" }}>
+          <p style={{ color: "#4a5a52", fontFamily: "'Outfit', sans-serif" }} suppressHydrationWarning>
             {isAuthenticated 
               ? `Xin chào ${activeUser?.name || 'bạn học'}, xem thống kê thời gian học và ôn tập thẻ ghi nhớ của riêng bạn bên dưới.`
               : "Xem tiến độ phân tích chi tiết được gói gọn trong thiết kế thẻ lưới tối giản và đẹp mắt."

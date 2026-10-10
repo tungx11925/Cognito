@@ -65,13 +65,30 @@ export const updateProfileSchema = z.object({
       .nullable().optional(),
     education: z.string().nullable().optional(),
     address: z.string().nullable().optional(),
-    privacy_setting: z.enum(['public', 'private', 'friends']).default('public').optional(),
+    privacy_setting: z.enum(['public', 'private']).default('public').optional(),
+    bio: z.string().max(500, 'Tiểu sử tối đa 500 ký tự').nullable().optional(),
+    headline: z.string().max(255, 'Tiêu đề tối đa 255 ký tự').nullable().optional(),
+    avatar_url: z.string().nullable().optional(),
+    website: z.string().max(255, 'Địa chỉ website tối đa 255 ký tự').nullable().optional(),
   }),
 });
 
 export const changePasswordSchema = z.object({
   body: z.object({
     currentPassword: z.string().min(1, 'Vui lòng nhập mật khẩu hiện tại'),
+    newPassword: passwordSchema,
+  }),
+});
+
+export const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().email('Email không hợp lệ').toLowerCase().trim(),
+  }),
+});
+
+export const resetPasswordSchema = z.object({
+  body: z.object({
+    token: z.string().min(1, 'Token đặt lại mật khẩu là bắt buộc'),
     newPassword: passwordSchema,
   }),
 });

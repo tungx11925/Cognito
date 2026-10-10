@@ -2,18 +2,37 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { questionGenerationService } from '../services/question-generation.service';
 import { documentProcessingService } from '../services/document-processing.service';
+import { entitlementService } from '../services/entitlement.service';
+import { aiProviderService } from '../services/ai-provider.service';
 import { AppError } from '../utils/AppError';
 
 /**
  * Question Generation Controller — sinh câu hỏi từ bài học/slide, chọn model AI,
  * trọng tâm từ khoá, Preview (DRAFT) → Edit → Save (APPROVED).
- * Role check (teacher/admin) đã được enforce ở routes bằng requireRole middleware.
+ * Role check (user/admin) đã được enforce ở routes bằng requireRole middleware.
  */
 
 export const generateQuestions = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  let reservation: any = null;
   try {
     const userId = req.user!.id;
     const body = (req.body || {}) as any;
+
+    // Pre-check Global System Daily Budget Cap (Phase 27 - Cost Control)
+    // Chặn trước để không trừ oan hạn ngạch cá nhân của user khi hệ thống hết ngân sách
+    await aiProviderService.checkGlobalDailyBudget();
+
+    // Entitlement & Daily Quota check with Atomic Reservation (Phase 20)
+    reservation = await entitlementService.checkAndReserveDailyUsage(userId, 'ai_questions_daily');
+    if (!reservation.allowed) {
+      return res.status(403).json({
+        error: 'LIMIT_EXCEEDED',
+        message: `Bạn đã đạt giới hạn ${reservation.limit} lượt tạo câu hỏi AI trong ngày của gói Miễn phí. Vui lòng nâng cấp lên gói Pro để tạo không giới hạn.`,
+        feature: 'ai_questions_daily',
+        limit: reservation.limit,
+        current: reservation.current,
+      });
+    }
 
     const result = await questionGenerationService.generate({
       userId,
@@ -27,6 +46,7 @@ export const generateQuestions = async (req: AuthRequest, res: Response, next: N
       templateId: body.templateId,
       modelId: body.modelId,
       customInstruction: body.customInstruction,
+      topic: body.topic,
       mode: body.mode,
       name: body.name,
       configKey: body.configKey,
@@ -37,6 +57,9 @@ export const generateQuestions = async (req: AuthRequest, res: Response, next: N
     }
     return res.status(201).json(result);
   } catch (error) {
+    if (reservation?.reserved) {
+      await entitlementService.refundDailyUsage(req.user!.id, 'ai_questions_daily');
+    }
     next(error);
   }
 };

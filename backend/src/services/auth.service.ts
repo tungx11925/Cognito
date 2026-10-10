@@ -1,24 +1,17 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
+import { signToken, verifyToken } from '../utils/jwt';
 import { userRepository } from '../repositories/user.repository';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/mailer';
-import { activityService } from './activity.service';
+import { streakService } from './streak.service';
 import { db } from '../db';
 
 export class AuthService {
   async getUserStudyDates(userId: number): Promise<string[]> {
     try {
-      const datesRes = await db.query(
-        'SELECT study_date FROM user_study_dates WHERE user_id = $1 ORDER BY study_date DESC',
-        [userId]
-      );
-      return datesRes.rows.map(row => {
-        const d = new Date(row.study_date);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      });
+      const streakInfo = await streakService.calculateUserStreak(userId);
+      return streakInfo.studyDates;
     } catch (err) {
       console.error('Error in getUserStudyDates:', err);
       return [];
@@ -48,9 +41,8 @@ export class AuthService {
       name,
     });
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'student' }, 
-      process.env.JWT_SECRET_KEY!, 
+    const token = signToken(
+      { id: user.id, email: user.email, role: user.role || 'user', jti: randomUUID() },
       { expiresIn: '24h' }
     );
 
@@ -86,36 +78,26 @@ export class AuthService {
       return { requires2FA: true, email: user.email };
     }
 
-    // --- CHECK FOR FIRST LOGIN ---
-    const membershipCheck = await db.query(
-      'SELECT status, organization_id FROM organization_members WHERE user_id = $1 AND status = $2 LIMIT 1',
-      [user.id, 'PENDING_FIRST_LOGIN']
-    );
-    if (membershipCheck.rows.length > 0) {
-      return { 
-        requiresPasswordChange: true, 
-        email: user.email, 
-        organizationId: membershipCheck.rows[0].organization_id 
-      };
-    }
-    // -----------------------------
-
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'student' }, 
-      process.env.JWT_SECRET_KEY!, 
+    const token = signToken(
+      { id: user.id, email: user.email, role: user.role || 'user', jti: randomUUID() },
       { expiresIn: '24h' }
     );
 
-    await activityService.updateUserStreak(user.id);
+    const streakInfo = await streakService.calculateUserStreak(user.id);
     const updatedUserRes = await userRepository.findById(user.id);
-    const studyDates = await this.getUserStudyDates(user.id);
 
-    const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = updatedUserRes;
+    const { password: _p, verification_code: _v, code_expires_at: _c, reset_password_token: _r, reset_password_expires: _re, ...safeUser } = updatedUserRes;
 
     return { 
       requires2FA: false,
       token, 
-      user: { ...safeUser, study_dates: studyDates }
+      user: { 
+        ...safeUser, 
+        streak: streakInfo.currentStreak,
+        longest_streak: streakInfo.longestStreak,
+        studied_today: streakInfo.studiedToday,
+        study_dates: streakInfo.studyDates,
+      }
     };
   }
 
@@ -134,19 +116,26 @@ export class AuthService {
 
     await userRepository.updateVerificationCode(user.id, null, null);
 
-    await activityService.updateUserStreak(user.id);
+    const streakInfo = await streakService.calculateUserStreak(user.id);
     const updatedUserRes = await userRepository.findById(user.id);
-    const studyDates = await this.getUserStudyDates(user.id);
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'student' }, 
-      process.env.JWT_SECRET_KEY!, 
+    const token = signToken(
+      { id: user.id, email: user.email, role: user.role || 'user', jti: randomUUID() },
       { expiresIn: '24h' }
     );
 
-    const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = updatedUserRes;
+    const { password: _p, verification_code: _v, code_expires_at: _c, reset_password_token: _r, reset_password_expires: _re, ...safeUser } = updatedUserRes;
 
-    return { token, user: { ...safeUser, study_dates: studyDates } };
+    return { 
+      token, 
+      user: { 
+        ...safeUser, 
+        streak: streakInfo.currentStreak,
+        longest_streak: streakInfo.longestStreak,
+        studied_today: streakInfo.studiedToday,
+        study_dates: streakInfo.studyDates,
+      } 
+    };
   }
 
   async toggleVerification(userId: number, enable: boolean) {
@@ -171,29 +160,75 @@ export class AuthService {
       });
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role || 'student' }, 
-      process.env.JWT_SECRET_KEY!, 
+    const token = signToken(
+      { id: user.id, email: user.email, role: user.role || 'user', jti: randomUUID() },
       { expiresIn: '24h' }
     );
 
-    await activityService.updateUserStreak(user.id);
+    const streakInfo = await streakService.calculateUserStreak(user.id);
     const updatedUserRes = await userRepository.findById(user.id);
-    const studyDates = await this.getUserStudyDates(user.id);
 
-    const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = updatedUserRes;
+    const { password: _p, verification_code: _v, code_expires_at: _c, reset_password_token: _r, reset_password_expires: _re, ...safeUser } = updatedUserRes;
 
-    return { token, user: { ...safeUser, study_dates: studyDates } };
+    return { 
+      token, 
+      user: { 
+        ...safeUser, 
+        streak: streakInfo.currentStreak,
+        longest_streak: streakInfo.longestStreak,
+        studied_today: streakInfo.studiedToday,
+        study_dates: streakInfo.studyDates,
+      } 
+    };
   }
 
   async getMe(userId: number) {
-    await activityService.updateUserStreak(userId);
     const user = await userRepository.findById(userId);
     if (!user) throw new Error('Người dùng không tồn tại');
 
-    const studyDates = await this.getUserStudyDates(userId);
-    const { password: _p, verification_code: _v, code_expires_at: _c, ...safeUser } = user;
-    return { ...safeUser, study_dates: studyDates };
+    const streakInfo = await streakService.calculateUserStreak(userId);
+    const { password: _p, verification_code: _v, code_expires_at: _c, reset_password_token: _r, reset_password_expires: _re, ...safeUser } = user;
+    return { 
+      ...safeUser, 
+      streak: streakInfo.currentStreak,
+      longest_streak: streakInfo.longestStreak,
+      studied_today: streakInfo.studiedToday,
+      study_dates: streakInfo.studyDates,
+    };
+  }
+
+  async refreshToken(oldToken: string) {
+    if (!oldToken) {
+      throw new Error('Thiếu token xác thực');
+    }
+    if (!process.env.JWT_SECRET_KEY) {
+      throw new Error('Missing JWT_SECRET_KEY in environment variables');
+    }
+
+    let decoded: any;
+    try {
+      decoded = verifyToken(oldToken);
+    } catch (err: any) {
+      throw new Error('Token không hợp lệ hoặc đã hết hạn');
+    }
+
+    if (!decoded || !decoded.id) {
+      throw new Error('Token không hợp lệ');
+    }
+
+    const user = await userRepository.findById(decoded.id);
+    if (!user) {
+      throw new Error('Người dùng không tồn tại');
+    }
+
+    const newToken = signToken(
+      { id: user.id, email: user.email, role: user.role || 'user', jti: randomUUID() },
+      { expiresIn: '24h' }
+    );
+
+    const studyDates = await this.getUserStudyDates(user.id);
+    const { password: _p, verification_code: _v, code_expires_at: _c, reset_password_token: _r, reset_password_expires: _re, ...safeUser } = user;
+    return { token: newToken, user: { ...safeUser, study_dates: studyDates } };
   }
 
   async updateAvatar(userId: number, avatarUrl: string) {
@@ -220,7 +255,9 @@ export class AuthService {
   }
 
   async upgradePremium(userId: number) {
-    const user = await userRepository.updateRole(userId, 'premium');
+    const nextMonth = new Date();
+    nextMonth.setDate(nextMonth.getDate() + 30);
+    const user = await userRepository.updatePremiumStatus(userId, true, nextMonth);
     if (!user) throw new Error('Người dùng không tồn tại');
 
     const studyDates = await this.getUserStudyDates(userId);

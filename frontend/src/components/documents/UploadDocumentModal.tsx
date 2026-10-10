@@ -45,6 +45,7 @@ export default function UploadDocumentModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState(defaultCategory);
+  const [visibility, setVisibility] = useState<'private' | 'public'>('private');
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'processing' | 'success' | 'error'>('idle');
@@ -111,6 +112,7 @@ export default function UploadDocumentModal({
     formData.append('title', title.trim());
     if (description.trim()) formData.append('description', description.trim());
     if (category.trim()) formData.append('category', category.trim());
+    formData.append('visibility', visibility);
 
     const xhr = new XMLHttpRequest();
     xhrRef.current = xhr;
@@ -319,6 +321,42 @@ export default function UploadDocumentModal({
             />
           </div>
 
+          {/* Visibility */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Chế độ hiển thị</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setVisibility('private')}
+                disabled={isUploading}
+                className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                  visibility === 'private'
+                    ? 'bg-[#1a3a2a] text-white border-[#1a3a2a] shadow-sm'
+                    : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                🔒 Riêng tư (Chỉ mình tôi)
+              </button>
+              <button
+                type="button"
+                onClick={() => setVisibility('public')}
+                disabled={isUploading}
+                className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                  visibility === 'public'
+                    ? 'bg-[#1a3a2a] text-white border-[#1a3a2a] shadow-sm'
+                    : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                🌐 Công khai (Có liên kết)
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">
+              {visibility === 'private'
+                ? 'Chỉ bạn mới có quyền xem và truy cập tài liệu này.'
+                : 'Bất kỳ ai có liên kết tài liệu hoặc xem hồ sơ công khai đều có thể xem.'}
+            </p>
+          </div>
+
           {/* Drop Zone */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -361,12 +399,12 @@ export default function UploadDocumentModal({
                           type="file"
                           className="sr-only"
                           onChange={handleFileInputChange}
-                          accept=".pdf,.doc,.docx,.pptx,.ppt,.txt,.png,.jpg,.jpeg,.webp"
+                          accept=".pdf,.doc,.docx,.pptx,.ppt,.txt,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv"
                         />
                       </label>
                       <span>hoặc kéo thả vào đây</span>
                     </div>
-                    <p className="text-xs text-gray-400">PDF, PPTX, Word, TXT, Ảnh · Tối đa {MAX_SIZE_MB}MB</p>
+                    <p className="text-xs text-gray-400">PDF, Word, PPTX, TXT, Excel/CSV, Ảnh · Tối đa {MAX_SIZE_MB}MB</p>
                   </>
                 )}
               </div>

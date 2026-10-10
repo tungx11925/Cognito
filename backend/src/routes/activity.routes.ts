@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middlewares/auth.middleware';
+import { authenticate, optionalAuthenticate } from '../middlewares/auth.middleware';
 import * as ActivityController from '../controllers/activity.controller';
 
 const router = Router();
@@ -9,12 +9,11 @@ router.get('/notifications/stream', ActivityController.streamNotifications);
 router.get('/leaderboard', ActivityController.getLeaderboard);
 
 // Protected routes
-// Tasks
 router.get('/tasks', authenticate, ActivityController.getTasks);
 router.post('/tasks/progress', authenticate, ActivityController.updateTaskProgress);
 
 // Friends & Profile
 router.get('/friends', authenticate, ActivityController.getFriends);
-router.get('/users/:targetUserId/profile', authenticate, ActivityController.getProfile);
+router.get('/users/:targetUserId/profile', optionalAuthenticate, ActivityController.getProfile);
 
 export default router;

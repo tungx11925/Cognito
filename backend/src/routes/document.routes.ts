@@ -10,6 +10,13 @@ import {
   updateDocument, 
   deleteDocument 
 } from '../controllers/document.controller';
+import {
+  toggleLikeDocument,
+  toggleSaveDocument,
+  getDocumentEngagement,
+  getUserSavedDocuments,
+  getUserLikedDocuments
+} from '../controllers/document-engagement.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate';
 import { uploadDocumentSchema, getDocumentsSchema, getDocumentByIdSchema, getDocumentStatusSchema, createDocumentSchema, updateDocumentSchema } from '../schemas/document.schema';
@@ -43,9 +50,19 @@ const upload = multer({
 
 router.use(authenticate);
 
+// Collection routes (Must be declared before :id param routes)
+router.get('/user/saved', getUserSavedDocuments);
+router.get('/user/liked', getUserLikedDocuments);
+
 router.post('/upload', upload.single('file'), validate(uploadDocumentSchema), uploadDocument);
 router.post('/', validate(createDocumentSchema), createDocument);
 router.get('/', validate(getDocumentsSchema), getDocuments);
+
+// Single document engagement routes
+router.post('/:id/like', toggleLikeDocument);
+router.post('/:id/save', toggleSaveDocument);
+router.get('/:id/engagement', getDocumentEngagement);
+
 router.get('/:id/status', validate(getDocumentStatusSchema), getDocumentStatus);
 router.get('/:id/chunks', validate(getDocumentStatusSchema), getDocumentChunks);
 router.get('/:id', validate(getDocumentByIdSchema), getDocumentById);
@@ -54,4 +71,3 @@ router.put('/:id', validate(updateDocumentSchema), updateDocument);
 router.delete('/:id', deleteDocument);
 
 export default router;
-

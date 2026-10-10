@@ -1,0 +1,50 @@
+[
+  {
+    "from": "/library",
+    "to": "/notes",
+    "fromLoadMs": 18030,
+    "transitionMs": 25
+  },
+  {
+    "from": "/notes",
+    "to": "/library",
+    "fromLoadMs": 7183,
+    "transitionMs": 13
+  },
+  {
+    "from": "/library",
+    "to": "/flashcards",
+    "fromLoadMs": 616,
+    "transitionMs": 25
+  },
+  {
+    "from": "/flashcards",
+    "to": "/library",
+    "fromLoadMs": 1582,
+    "transitionMs": 26
+  },
+  {
+    "from": "/home",
+    "to": "/community",
+    "fromLoadMs": 1841,
+    "transitionMs": 30
+  },
+  {
+    "from": "/community",
+    "to": "/home",
+    "fromLoadMs": 1748,
+    "transitionMs": 26
+  },
+  {
+    "from": "/viewer/793",
+    "to": "/quiz",
+    "fromLoadMs": 26359,
+    "transitionMs": 56
+  },
+  {
+    "from": "/quiz",
+    "to": "/viewer/793",
+    "fromLoadMs": 13151,
+    "transitionMs": 63
+  }
+]

@@ -29,7 +29,7 @@ export class UserRepository {
   async create(user: any, client?: PoolClient) {
     const q = client || db;
     const result = await q.query(
-      'INSERT INTO users (email, phone, password, name) VALUES ($1, $2, $3, $4) RETURNING id, email, phone, name, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role',
+      'INSERT INTO users (email, phone, password, name) VALUES ($1, $2, $3, $4) RETURNING id, email, phone, name, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role, is_premium, premium_until, bio, headline',
       [user.email, user.phone, user.password, user.name]
     );
     return result.rows[0];
@@ -46,7 +46,7 @@ export class UserRepository {
   async updateAvatar(id: number, avatarUrl: string, client?: PoolClient) {
     const q = client || db;
     const result = await q.query(
-      'UPDATE users SET avatar_url = $1 WHERE id = $2 RETURNING id, email, name, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role',
+      'UPDATE users SET avatar_url = $1 WHERE id = $2 RETURNING id, email, name, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role, is_premium, premium_until',
       [avatarUrl, id]
     );
     return result.rows[0];
@@ -55,7 +55,7 @@ export class UserRepository {
   async updateVerificationStatus(id: number, isVerified: boolean, client?: PoolClient) {
     const q = client || db;
     const result = await q.query(
-      'UPDATE users SET is_verified = $1 WHERE id = $2 RETURNING id, email, name, phone, education, address, website, avatar_url, is_verified, streak, last_study_date',
+      'UPDATE users SET is_verified = $1 WHERE id = $2 RETURNING id, email, name, phone, education, address, website, avatar_url, is_verified, streak, last_study_date, role, is_premium, premium_until',
       [isVerified, id]
     );
     return result.rows[0];
@@ -64,8 +64,30 @@ export class UserRepository {
   async updateProfile(id: number, data: any, client?: PoolClient) {
     const q = client || db;
     const result = await q.query(
-      'UPDATE users SET name = $1, phone = $2, education = $3, address = $4, privacy_setting = $5 WHERE id = $6 RETURNING id, email, name, phone, education, address, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role',
-      [data.name, data.phone, data.education, data.address, data.privacy_setting, id]
+      `UPDATE users 
+       SET name = $1, 
+           phone = $2, 
+           education = $3, 
+           address = $4, 
+           privacy_setting = $5, 
+           bio = COALESCE($7, bio), 
+           headline = COALESCE($8, headline),
+           avatar_url = COALESCE($9, avatar_url),
+           website = COALESCE($10, website)
+       WHERE id = $6 
+       RETURNING id, email, name, phone, education, address, website, created_at, avatar_url, is_verified, streak, last_study_date, privacy_setting, role, is_premium, premium_until, bio, headline`,
+      [
+        data.name, 
+        data.phone, 
+        data.education, 
+        data.address, 
+        data.privacy_setting, 
+        id, 
+        data.bio !== undefined ? data.bio : null, 
+        data.headline !== undefined ? data.headline : null,
+        data.avatar_url !== undefined ? data.avatar_url : null,
+        data.website !== undefined ? data.website : null
+      ]
     );
     return result.rows[0];
   }
@@ -78,13 +100,26 @@ export class UserRepository {
   async updateRole(id: number, role: string, client?: PoolClient) {
     const q = client || db;
     const result = await q.query(
-      'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, email, name, role, phone, education, address, website, avatar_url, is_verified, streak, last_study_date, privacy_setting',
+      'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, email, name, role, is_premium, premium_until, phone, education, address, website, avatar_url, is_verified, streak, last_study_date, privacy_setting',
       [role, id]
     );
     return result.rows[0];
   }
 
+  async updatePremiumStatus(id: number, isPremium: boolean, premiumUntil: Date | null = null, client?: PoolClient) {
+    const q = client || db;
+    const result = await q.query(
+      'UPDATE users SET is_premium = $1, premium_until = $2 WHERE id = $3 RETURNING id, email, name, role, is_premium, premium_until, phone, education, address, website, avatar_url, is_verified, streak, last_study_date, privacy_setting',
+      [isPremium, premiumUntil, id]
+    );
+    return result.rows[0];
+  }
+
   async checkAvailability(field: string, value: string, client?: PoolClient) {
+    const allowedFields = ['email', 'phone', 'name'];
+    if (!allowedFields.includes(field)) {
+      throw new Error(`Invalid field for checkAvailability: ${field}`);
+    }
     const q = client || db;
     const query = `SELECT id FROM users WHERE ${field} = $1`;
     const result = await q.query(query, [value]);

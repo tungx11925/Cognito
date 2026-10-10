@@ -1,0 +1,355 @@
+{
+  "timestamp": "2026-10-09T13:39:12.062Z",
+  "routes": [
+    {
+      "route": "/",
+      "name": "Landing /",
+      "status": 200,
+      "durationMs": 9588,
+      "totalRequests": 62,
+      "xhrFetchCount": 16,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/_not-found",
+      "name": "404 /_not-found",
+      "status": 404,
+      "durationMs": 1491,
+      "totalRequests": 46,
+      "xhrFetchCount": 11,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 3
+    },
+    {
+      "route": "/admin",
+      "name": "Admin Dashboard",
+      "status": 200,
+      "durationMs": 1338,
+      "totalRequests": 36,
+      "xhrFetchCount": 9,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/ai-test",
+      "name": "AI Test Workspace",
+      "status": 200,
+      "durationMs": 1412,
+      "totalRequests": 68,
+      "xhrFetchCount": 22,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/community",
+      "name": "Community Resource Exchange",
+      "status": 200,
+      "durationMs": 1319,
+      "totalRequests": 57,
+      "xhrFetchCount": 16,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/flashcards",
+      "name": "Flashcard Decks",
+      "status": 200,
+      "durationMs": 1594,
+      "totalRequests": 69,
+      "xhrFetchCount": 18,
+      "duplicateCount": 2,
+      "duplicateDetails": "/api/flashcards/decks (x2); /api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/flashcards/2",
+      "name": "Flashcard Study [deckId]",
+      "status": 200,
+      "durationMs": 1381,
+      "totalRequests": 63,
+      "xhrFetchCount": 18,
+      "duplicateCount": 2,
+      "duplicateDetails": "/api/flashcards/decks (x2); /api/tasks (x2)",
+      "errorsCount": 4
+    },
+    {
+      "route": "/focus",
+      "name": "Focus Mode",
+      "status": 200,
+      "durationMs": 1305,
+      "totalRequests": 61,
+      "xhrFetchCount": 17,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/home",
+      "name": "Home Feed",
+      "status": 200,
+      "durationMs": 1657,
+      "totalRequests": 63,
+      "xhrFetchCount": 16,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/leaderboard",
+      "name": "Leaderboard",
+      "status": 200,
+      "durationMs": 1306,
+      "totalRequests": 60,
+      "xhrFetchCount": 17,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/library",
+      "name": "Library Documents",
+      "status": 200,
+      "durationMs": 1475,
+      "totalRequests": 64,
+      "xhrFetchCount": 17,
+      "duplicateCount": 2,
+      "duplicateDetails": "/api/documents (x2); /api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/messages",
+      "name": "Messages Direct Chat",
+      "status": 200,
+      "durationMs": 1311,
+      "totalRequests": 59,
+      "xhrFetchCount": 16,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/mindmap",
+      "name": "Mindmap Workspace",
+      "status": 200,
+      "durationMs": 1688,
+      "totalRequests": 68,
+      "xhrFetchCount": 19,
+      "duplicateCount": 2,
+      "duplicateDetails": "/api/documents (x2); /api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/notes",
+      "name": "Notes Workspace",
+      "status": 200,
+      "durationMs": 1483,
+      "totalRequests": 67,
+      "xhrFetchCount": 19,
+      "duplicateCount": 2,
+      "duplicateDetails": "/api/documents (x2); /api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/premium",
+      "name": "Premium Pricing",
+      "status": 200,
+      "durationMs": 1402,
+      "totalRequests": 65,
+      "xhrFetchCount": 20,
+      "duplicateCount": 2,
+      "duplicateDetails": "/api/payment/plans (x3); /api/tasks (x2)",
+      "errorsCount": 4
+    },
+    {
+      "route": "/premium/return",
+      "name": "Payment Return",
+      "status": 200,
+      "durationMs": 1314,
+      "totalRequests": 76,
+      "xhrFetchCount": 21,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/premium/sandbox-checkout",
+      "name": "Sandbox Checkout",
+      "status": 200,
+      "durationMs": 1311,
+      "totalRequests": 73,
+      "xhrFetchCount": 20,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/profile",
+      "name": "User Profile",
+      "status": 200,
+      "durationMs": 1419,
+      "totalRequests": 60,
+      "xhrFetchCount": 18,
+      "duplicateCount": 4,
+      "duplicateDetails": "/api/documents (x2); /api/flashcards/decks (x2); /api/progress/summary (x2); /api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/profile/1040",
+      "name": "Public Profile [userId]",
+      "status": 200,
+      "durationMs": 1485,
+      "totalRequests": 62,
+      "xhrFetchCount": 16,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/progress",
+      "name": "Progress Analytics",
+      "status": 200,
+      "durationMs": 1317,
+      "totalRequests": 60,
+      "xhrFetchCount": 17,
+      "duplicateCount": 2,
+      "duplicateDetails": "/api/progress/summary (x2); /api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/quiz",
+      "name": "Quiz Hub",
+      "status": 200,
+      "durationMs": 1303,
+      "totalRequests": 62,
+      "xhrFetchCount": 17,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 4
+    },
+    {
+      "route": "/quiz/1",
+      "name": "Quiz Attempt [testSetId]",
+      "status": 200,
+      "durationMs": 1368,
+      "totalRequests": 42,
+      "xhrFetchCount": 11,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 3
+    },
+    {
+      "route": "/reset-password",
+      "name": "Reset Password",
+      "status": 200,
+      "durationMs": 1306,
+      "totalRequests": 35,
+      "xhrFetchCount": 9,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/search",
+      "name": "Global Search",
+      "status": 200,
+      "durationMs": 1348,
+      "totalRequests": 65,
+      "xhrFetchCount": 22,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/settings",
+      "name": "Settings",
+      "status": 200,
+      "durationMs": 1506,
+      "totalRequests": 57,
+      "xhrFetchCount": 15,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/shared/df88584accad8025a26465cd2b2207d7",
+      "name": "Shared Link [token]",
+      "status": 200,
+      "durationMs": 1371,
+      "totalRequests": 60,
+      "xhrFetchCount": 17,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/study-sessions",
+      "name": "Study Sessions",
+      "status": 200,
+      "durationMs": 1327,
+      "totalRequests": 77,
+      "xhrFetchCount": 21,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 2
+    },
+    {
+      "route": "/viewer/793",
+      "name": "Document Viewer [id]",
+      "status": 200,
+      "durationMs": 1407,
+      "totalRequests": 46,
+      "xhrFetchCount": 11,
+      "duplicateCount": 1,
+      "duplicateDetails": "/api/tasks (x2)",
+      "errorsCount": 3
+    }
+  ],
+  "transitions": [
+    {
+      "from": "/library",
+      "to": "/notes",
+      "durationMs": 22
+    },
+    {
+      "from": "/notes",
+      "to": "/library",
+      "durationMs": 8
+    },
+    {
+      "from": "/library",
+      "to": "/flashcards",
+      "durationMs": 19
+    },
+    {
+      "from": "/flashcards",
+      "to": "/library",
+      "durationMs": 9
+    },
+    {
+      "from": "/home",
+      "to": "/community",
+      "durationMs": 7
+    },
+    {
+      "from": "/community",
+      "to": "/home",
+      "durationMs": 11
+    },
+    {
+      "from": "/viewer/793",
+      "to": "/quiz",
+      "durationMs": 15
+    },
+    {
+      "from": "/quiz",
+      "to": "/viewer/793",
+      "durationMs": 13
+    }
+  ]
+}

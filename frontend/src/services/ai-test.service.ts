@@ -35,16 +35,6 @@ export const getDocumentContent = (docId: number) =>
 export const getTestSets = () =>
   apiFetch('/test-sets', { headers: getAuthHeaders() });
 
-export const generateTestSet = (payload: {
-  configKey: string;
-  documentContent: string;
-  name?: string;
-}) =>
-  apiFetch('/test-sets/generate', {
-    method: 'POST',
-    headers: authJson(),
-    body: JSON.stringify(payload),
-  });
 
 export const toggleTestSetStatus = (id: number, is_active: boolean) =>
   apiFetch(`/test-sets/${id}/status`, {
@@ -88,6 +78,7 @@ export interface GenerateQuestionsPayload {
   templateId: string;
   modelId?: number;
   customInstruction?: string;
+  topic?: string;
   mode: 'practice' | 'exam';
   name?: string;
   configKey?: string;
@@ -118,4 +109,77 @@ export const approveTestSet = (testSetId: number) =>
 
 export const getTestSetDetail = (testSetId: number) =>
   apiFetch(`/test-sets/${testSetId}`, { headers: getAuthHeaders() });
+
+// ── Existing Exam Import (Phase 7: Word/PDF/Excel/Text Rule-based + AI Fallback) ──
+export interface ParsedQuestionItem {
+  index: number;
+  type: 'MULTIPLE_CHOICE' | 'FILL_BLANK' | 'ESSAY' | 'TRUE_FALSE';
+  content: string;
+  score: number;
+  options?: Record<string, string>;
+  correctAnswer?: string | string[];
+  explanation?: string;
+  sourceText?: string;
+}
+
+export interface ExamParseResponse {
+  success: boolean;
+  data: {
+    title: string;
+    extractionMethod: 'RULE_BASED' | 'AI_NORMALIZED';
+    questions: ParsedQuestionItem[];
+    stats: {
+      totalQuestions: number;
+      multipleChoiceCount: number;
+      trueFalseCount: number;
+      fillBlankCount: number;
+      essayCount: number;
+      answerKeyCount: number;
+    };
+    warnings: string[];
+  };
+  error?: string;
+}
+
+export const parseExamFile = async (
+  file: File,
+  name?: string,
+  useAI: boolean = false
+): Promise<ExamParseResponse> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (name) formData.append('name', name);
+  formData.append('useAI', String(useAI));
+
+  return apiFetch('/exams/parse', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: formData,
+  });
+};
+
+export const parseExamText = async (payload: {
+  textContent: string;
+  name?: string;
+  useAI?: boolean;
+}): Promise<ExamParseResponse> => {
+  return apiFetch('/exams/parse', {
+    method: 'POST',
+    headers: authJson(),
+    body: JSON.stringify(payload),
+  });
+};
+
+export const importExamQuestions = async (payload: {
+  name: string;
+  questions: ParsedQuestionItem[];
+  status?: 'DRAFT' | 'APPROVED';
+}) => {
+  return apiFetch('/exams/import', {
+    method: 'POST',
+    headers: authJson(),
+    body: JSON.stringify(payload),
+  });
+};
+
 

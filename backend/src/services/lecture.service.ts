@@ -243,7 +243,7 @@ export class LectureService {
     const geminiApiKey = process.env.GEMINI_API_KEY;
     const groqApiKey = process.env.GROQ_API_KEY;
 
-    const prompt = `Bạn là chuyên gia thiết kế bài giảng sư phạm cao cấp. Hãy đọc kỹ tài liệu sau và chuyển đổi thành một bộ Slide bài giảng trình chiếu chuyên nghiệp cho Giảng viên.
+    const prompt = `Bạn là chuyên gia thiết kế tài liệu trình chiếu cao cấp. Hãy đọc kỹ tài liệu sau và chuyển đổi thành một bộ Slide trình chiếu chuyên nghiệp phục vụ học tập và thuyết trình cá nhân.
 
 QUY TẮC BẮT BUỘC VỀ CHÍNH TẢ & FONT TIẾNG VIỆT (QUAN TRỌNG):
 - Toàn bộ tiêu đề, nội dung, ghi chú PHẢI viết bằng Tiếng Việt chuẩn Unicode (NFC), chuẩn chính tả 100%.
@@ -262,7 +262,7 @@ QUY TẮC BẮT BUỘC VỀ TRÌNH BÀY SLIDE (CANVA & POWERPOINT STANDARD):
    - "callout_type": "definition" | "formula" | "takeaway" | "warning"
    - "callout_title": Tiêu đề hộp ghi chú (VD: "Định nghĩa", "Công thức", "Lưu ý")
    - "callout_content": 1-2 câu cô đọng trong hộp ghi chú
-   - "speaker_notes": Gợi ý cho giảng viên khi thuyết trình slide này
+   - "speaker_notes": Gợi ý ghi chú khi thuyết trình hoặc tự ôn tập slide này
 
 4. Trả về ĐÚNG MẢNG JSON thuần túy (không markdown, không bọc \`\`\`json):
 [
@@ -484,9 +484,9 @@ ${extractedText.substring(0, 15000)}
     }
 
     // Build prompt based on action
-    let systemPrompt = `Bạn là trợ lý sư phạm AI cao cấp hỗ trợ Giảng viên trong buổi thuyết trình bài giảng.
-Bài giảng: "${lecture.title}"
-Môn học: "${lecture.subject}"
+    let systemPrompt = `Bạn là trợ lý AI học tập thông minh hỗ trợ người dùng trong buổi thuyết trình và tự học.
+Chủ đề: "${lecture.title}"
+Lĩnh vực: "${lecture.subject}"
 Slide hiện tại: Trang ${slideNumber}/${lecture.total_slides}
 Nội dung trang slide:
 """
@@ -496,19 +496,19 @@ ${pageContext}
 `;
 
     if (action === 'notes') {
-      systemPrompt += `Nhiệm vụ: Hãy soạn "Gợi ý giảng dạy & Speaker Notes" cho giảng viên khi chiếu trang slide này:
+      systemPrompt += `Nhiệm vụ: Hãy soạn "Gợi ý thuyết trình & Speaker Notes" cho người học khi trình bày hoặc tự ôn tập trang slide này:
 1. 🎯 Điểm nhấn cốt lõi cần truyền đạt (2-3 gạch đầu dòng)
-2. 💡 Câu hỏi tương tác / Tình huống gợi mở thảo luận cho lớp học
-3. ⚠️ Lưu ý những điểm sinh viên hay hiểu sai hoặc cần giải thích kỹ.
+2. 💡 Câu hỏi đào sâu / Tình huống thảo luận mở rộng
+3. ⚠️ Lưu ý những điểm trọng tâm dễ nhầm lẫn hoặc cần nắm vững.
 Hãy trả về định dạng Markdown đẹp, chuyên nghiệp, tiếng Việt chuẩn 100%.`;
     } else if (action === 'summary') {
-      systemPrompt += `Nhiệm vụ: Hãy tóm tắt 3 ý trọng tâm súc tích nhất của trang slide này cho sinh viên ghi nhớ nhanh. Trả về định dạng Markdown.`;
+      systemPrompt += `Nhiệm vụ: Hãy tóm tắt 3 ý trọng tâm súc tích nhất của trang slide này để người học ghi nhớ nhanh. Trả về định dạng Markdown.`;
     } else if (action === 'explain') {
-      systemPrompt += `Nhiệm vụ: Hãy giảng giải chi tiết, rõ ràng và trực quan về nội dung của trang slide này như một giáo sư tâm huyết. Có ví dụ thực tế minh họa. Trả về Markdown.`;
+      systemPrompt += `Nhiệm vụ: Hãy giảng giải chi tiết, rõ ràng và trực quan về nội dung của trang slide này như một chuyên gia hướng dẫn tận tâm. Có ví dụ thực tế minh họa. Trả về Markdown.`;
     } else if (action === 'quiz') {
-      systemPrompt += `Nhiệm vụ: Hãy tạo 2 câu hỏi trắc nghiệm nhanh (4 lựa chọn A, B, C, D) dựa trên nội dung trang slide này để giảng viên đố nhanh cả lớp. Kèm theo đáp án đúng và lời giải thích ngắn gọn. Trả về Markdown.`;
+      systemPrompt += `Nhiệm vụ: Hãy tạo 2 câu hỏi trắc nghiệm nhanh (4 lựa chọn A, B, C, D) dựa trên nội dung trang slide này để người học tự kiểm tra kiến thức. Kèm theo đáp án đúng và lời giải thích ngắn gọn. Trả về Markdown.`;
     } else if (action === 'chat') {
-      systemPrompt += `Nhiệm vụ: Trả lời câu hỏi sau của giảng viên/học sinh liên quan đến trang slide này:
+      systemPrompt += `Nhiệm vụ: Trả lời câu hỏi sau của người học liên quan đến trang slide này:
 "${userQuestion || 'Giải thích thêm về nội dung này'}"
 Trả lời súc tích, dễ hiểu và chuyên sâu bằng Tiếng Việt chuẩn.`;
     }

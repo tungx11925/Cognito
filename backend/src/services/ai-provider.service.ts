@@ -44,6 +44,7 @@ export interface ProviderChatResult {
   latencyMs: number;
   inputTokens: number | null;
   outputTokens: number | null;
+  estimatedCost?: number;
 }
 
 interface AdapterCompleteRequest {
@@ -87,16 +88,20 @@ class GroqAdapter implements AIProviderAdapter {
 
   async complete(req: AdapterCompleteRequest): Promise<AdapterCompleteResult> {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const maxTokens = Math.max(req.maxTokens || 4096, 4096);
     const completion = await groq.chat.completions.create({
       messages: req.messages.map(m => ({ role: m.role, content: m.content })) as any,
       model: req.modelName,
       temperature: req.temperature,
-      max_tokens: req.maxTokens,
+      max_tokens: maxTokens,
       ...(req.jsonMode && this.supportsJsonMode(req.modelName)
         ? { response_format: { type: 'json_object' as const } }
         : {}),
     });
-    const text = completion.choices[0]?.message?.content || '';
+    let text = completion.choices[0]?.message?.content || '';
+    if (!text.trim() && (completion.choices[0]?.message as any)?.reasoning) {
+      text = (completion.choices[0]?.message as any).reasoning;
+    }
     const usage = (completion as any)?.usage;
     return {
       text,
@@ -111,7 +116,7 @@ class GeminiAdapter implements AIProviderAdapter {
 
   isAvailable(): boolean {
     const key = process.env.GEMINI_API_KEY;
-    return !!(key && !key.includes('your_'));
+    return !!(key && !key.includes('your_') && !key.includes('placeholder') && key.length > 20);
   }
 
   supportsJsonMode(_modelName: string): boolean {
@@ -119,7 +124,7 @@ class GeminiAdapter implements AIProviderAdapter {
   }
 
   defaultModelName(): string {
-    return process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+    return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   }
 
   async complete(req: AdapterCompleteRequest): Promise<AdapterCompleteResult> {
@@ -162,6 +167,17 @@ class AIProviderService {
 
   private logsAvailable = true; // tắt warn lặp nếu bảng ai_request_logs chưa tồn tại
 
+  /**
+   * Inject hoặc khôi phục adapter phục vụ testing và mock sandbox (GAP-07)
+   */
+  setAdapter(provider: ProviderName, adapter: AIProviderAdapter): void {
+    this.adapters[provider] = adapter;
+  }
+
+  getAdapter(provider: ProviderName): AIProviderAdapter | undefined {
+    return this.adapters[provider];
+  }
+
   // ─────────────────────────── Model resolution ───────────────────────────
 
   async resolveModel(
@@ -169,11 +185,17 @@ class AIProviderService {
     taskType?: string,
     targetTier?: 'fast' | 'balanced' | 'advanced'
   ): Promise<{
-    id: number; model_name: string; display_name: string; tier: string; provider: ProviderName;
+    id: number;
+    model_name: string;
+    display_name: string;
+    tier: string;
+    input_cost: number | null;
+    output_cost: number | null;
+    provider: ProviderName;
   } | null> {
     if (modelId) {
       const result = await db.query(
-        `SELECT am.id, am.model_name, am.display_name, am.tier, ap.name AS provider
+        `SELECT am.id, am.model_name, am.display_name, am.tier, am.input_cost, am.output_cost, ap.name AS provider
          FROM ai_models am
          JOIN ai_providers ap ON ap.id = am.provider_id
          WHERE am.id = $1 AND am.is_active = true AND ap.is_active = true`,
@@ -185,7 +207,7 @@ class AIProviderService {
     // Không có modelId: tự động chọn model theo tier hoặc taskType
     const effectiveTier = targetTier || (taskType === 'keyword_extraction' ? 'fast' : 'balanced');
     const tierResult = await db.query(
-      `SELECT am.id, am.model_name, am.display_name, am.tier, ap.name AS provider
+      `SELECT am.id, am.model_name, am.display_name, am.tier, am.input_cost, am.output_cost, ap.name AS provider
        FROM ai_models am
        JOIN ai_providers ap ON ap.id = am.provider_id
        WHERE am.tier = $1 AND am.is_active = true AND ap.is_active = true
@@ -198,7 +220,7 @@ class AIProviderService {
 
     // Fallback: lấy model bất kỳ đang active
     const fallbackResult = await db.query(
-      `SELECT am.id, am.model_name, am.display_name, am.tier, ap.name AS provider
+      `SELECT am.id, am.model_name, am.display_name, am.tier, am.input_cost, am.output_cost, ap.name AS provider
        FROM ai_models am
        JOIN ai_providers ap ON ap.id = am.provider_id
        WHERE am.is_active = true AND ap.is_active = true
@@ -208,7 +230,7 @@ class AIProviderService {
     return fallbackResult.rows[0] || null;
   }
 
-  /** Tìm id trong bảng ai_models theo tên model (để lưu ai_model_id khi gọi bằng model mặc định env) */
+  /** Tìm id trong bảng ai_models theo tên model */
   async findModelIdByName(modelName: string): Promise<number | null> {
     try {
       const result = await db.query(
@@ -216,6 +238,24 @@ class AIProviderService {
         [modelName]
       );
       return result.rows[0]?.id || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Tìm thông tin giá theo tên model (USD trên 1M tokens) */
+  async findModelPricingByName(modelName: string): Promise<{ id: number; input_cost: number; output_cost: number } | null> {
+    try {
+      const result = await db.query(
+        'SELECT id, input_cost, output_cost FROM ai_models WHERE model_name = $1 AND is_active = true LIMIT 1',
+        [modelName]
+      );
+      if (!result.rows[0]) return null;
+      return {
+        id: result.rows[0].id,
+        input_cost: Number(result.rows[0].input_cost || 0.10),
+        output_cost: Number(result.rows[0].output_cost || 0.40),
+      };
     } catch {
       return null;
     }
@@ -231,14 +271,95 @@ class AIProviderService {
          CASE am.tier WHEN 'fast' THEN 1 WHEN 'balanced' THEN 2 WHEN 'advanced' THEN 3 ELSE 4 END,
          ap.name, am.created_at`
     );
-    return result.rows;
+    return result.rows.map(m => {
+      const adapter = this.adapters[m.provider as ProviderName];
+      const isAvailable = adapter ? adapter.isAvailable() : false;
+      return {
+        ...m,
+        is_available: isAvailable,
+        isAvailable,
+      };
+    });
+  }
+
+  // ─────────────────────────── Cost Calculation & Budget Control ───────────────────────────
+
+  /**
+   * Tính chi phí AI ước tính theo số token thực tế và đơn giá (USD trên 1 triệu tokens).
+   */
+  calculateEstimatedCost(
+    inputTokens: number | null,
+    outputTokens: number | null,
+    pricing?: { input_cost?: number | string | null; output_cost?: number | string | null } | null
+  ): number {
+    const inTokens = inputTokens || 0;
+    const outTokens = outputTokens || 0;
+    const inRate = pricing?.input_cost !== undefined && pricing?.input_cost !== null ? Number(pricing.input_cost) : 0.10;
+    const outRate = pricing?.output_cost !== undefined && pricing?.output_cost !== null ? Number(pricing.output_cost) : 0.40;
+    const total = (inTokens / 1_000_000) * inRate + (outTokens / 1_000_000) * outRate;
+    return Number(total.toFixed(6));
+  }
+
+  private cachedDailyCost: { timestamp: number; cost: number } | null = null;
+
+  getGlobalDailyBudgetCap(): number {
+    return parseFloat(process.env.SYSTEM_AI_DAILY_BUDGET_USD || '10.0');
+  }
+
+  resetBudgetCache() {
+    this.cachedDailyCost = null;
+  }
+
+  async getTodayAICost(): Promise<number> {
+    const now = Date.now();
+    const cacheTtl = process.env.NODE_ENV === 'test' ? 0 : 2_000;
+    if (this.cachedDailyCost && cacheTtl > 0 && now - this.cachedDailyCost.timestamp < cacheTtl) {
+      return this.cachedDailyCost.cost;
+    }
+    try {
+      const res = await db.query(
+        `SELECT COALESCE(SUM(estimated_cost), 0)::float as total
+         FROM ai_request_logs
+         WHERE created_at >= CURRENT_DATE`
+      );
+      const cost = parseFloat(res.rows[0]?.total || '0');
+      this.cachedDailyCost = { timestamp: now, cost };
+      return cost;
+    } catch (err: any) {
+      console.warn('[AIProvider] Failed to query today AI cost:', err?.message);
+      return 0;
+    }
+  }
+
+  async checkGlobalDailyBudget(): Promise<void> {
+    const todayCost = await this.getTodayAICost();
+    const budgetCap = this.getGlobalDailyBudgetCap();
+    if (todayCost >= budgetCap) {
+      console.error(`[AIProvider] CRITICAL: System daily AI budget cap exceeded! ($${todayCost.toFixed(4)} >= $${budgetCap.toFixed(4)})`);
+      throw new AppError(
+        `Ngân sách AI toàn hệ thống trong ngày đã chạm giới hạn an toàn ($${budgetCap.toFixed(2)}/ngày). Vui lòng thử lại vào ngày mai hoặc liên hệ quản trị viên.`,
+        429,
+        'SYSTEM_AI_BUDGET_EXCEEDED'
+      );
+    }
   }
 
   // ─────────────────────────── Chat / Completion ───────────────────────────
 
-  private buildProviderOrder(resolved: { provider: ProviderName } | null): ProviderName[] {
+  private buildProviderOrder(
+    resolved: { provider: ProviderName } | null,
+    totalChars = 0,
+    hasExplicitModel = false
+  ): ProviderName[] {
+    const longDocThreshold = Number(process.env.AI_LONG_DOC_CHAR_THRESHOLD || 8000);
+    // Nếu tài liệu dài > 8.000 ký tự (AI_LONG_DOC_CHAR_THRESHOLD) và không ép chọn model cụ thể,
+    // ưu tiên Gemini trước Groq (miễn là Gemini khả dụng)
+    if (!hasExplicitModel && totalChars > longDocThreshold && this.adapters.gemini.isAvailable()) {
+      return ['gemini', 'groq'];
+    }
+
     const groqAdapter = this.adapters['groq'];
-    // Ưu tiên Groq trước vì tốc độ chip LPU siêu nhanh (~800ms) so với Gemini (~30s)
+    // Ưu tiên Groq trước vì tốc độ chip LPU siêu nhanh (~800ms)
     if (groqAdapter && groqAdapter.isAvailable()) {
       return ['groq', 'gemini'];
     }
@@ -256,6 +377,7 @@ class AIProviderService {
     modelId: number | null;
     inputTokens?: number | null;
     outputTokens?: number | null;
+    estimatedCost?: number | null;
     latencyMs?: number;
     status: 'success' | 'failed' | 'timeout';
     errorMessage?: string | null;
@@ -264,8 +386,8 @@ class AIProviderService {
     try {
       await db.query(
         `INSERT INTO ai_request_logs
-           (user_id, document_id, task_type, model_id, input_tokens, output_tokens, latency_ms, status, error_message)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+           (user_id, document_id, task_type, model_id, input_tokens, output_tokens, estimated_cost, latency_ms, status, error_message)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           params.userId ?? null,
           params.documentId ?? null,
@@ -273,11 +395,15 @@ class AIProviderService {
           params.modelId,
           params.inputTokens ?? null,
           params.outputTokens ?? null,
+          params.estimatedCost ?? 0,
           params.latencyMs ?? null,
           params.status,
           params.errorMessage ? params.errorMessage.substring(0, 1000) : null,
         ]
       );
+      if (params.estimatedCost && this.cachedDailyCost) {
+        this.cachedDailyCost.cost += params.estimatedCost;
+      }
     } catch (err: any) {
       if (err?.code === '42P01') { // undefined_table — chưa chạy migration
         this.logsAvailable = false;
@@ -298,18 +424,40 @@ class AIProviderService {
   }
 
   /**
-   * Gọi AI qua adapter tương ứng model đã chọn hoặc tier yêu cầu. Fail/timeout → thử provider còn lại
-   * (giữ nguyên fallback chain Groq → Gemini như luồng cũ). Mỗi lần gọi đều ghi log.
+   * Gọi AI qua adapter tương ứng model đã chọn hoặc tier yêu cầu.
+   * - Token / Prompt Length limit: chặn prompt vượt quá 32,000 ký tự (~8,000 tokens).
+   * - Global Daily Budget Cap: kiểm tra trần chi tiêu toàn hệ thống trong ngày.
+   * - Failover & Timeout: mặc định 30s timeout, nếu lỗi/timeout lập tức failover sang provider phụ.
+   * - Ghi nhận số token và chi phí thực tế (estimated_cost) vào ai_request_logs.
    */
   async chat(options: ProviderChatOptions): Promise<ProviderChatResult> {
+    // 1. Kiểm tra độ dài prompt (Cost & Token Limit per request)
+    const MAX_PROMPT_CHARS = 32_000;
+    const totalChars = (options.messages || []).reduce((acc, m) => acc + (m.content?.length || 0), 0);
+    if (totalChars > MAX_PROMPT_CHARS) {
+      throw new AppError(
+        `Nội dung yêu cầu AI (${totalChars} ký tự) vượt quá giới hạn tối đa cho phép (${MAX_PROMPT_CHARS} ký tự). Vui lòng rút ngắn nội dung tài liệu hoặc câu hỏi.`,
+        400,
+        'PROMPT_TOO_LARGE'
+      );
+    }
+
+    // 2. Kiểm tra ngân sách AI toàn hệ thống trong ngày (Global Budget Cap)
+    await this.checkGlobalDailyBudget();
+
     const resolved = await this.resolveModel(options.modelId, options.taskType, options.tier).catch(() => null);
     const temperature = options.temperature ?? 0.6;
-    const maxTokens = options.maxTokens ?? 4096;
-    const timeoutMs = options.timeoutMs ?? 15_000;
+    const maxTokens = Math.min(options.maxTokens ?? 4096, 4096);
+    // Timeout cấu hình linh hoạt: flashcard mặc định ~15s (AI_FLASHCARD_TIMEOUT_MS), câu hỏi 45s, các task khác 30s
+    const flashcardTimeout = Number(process.env.AI_FLASHCARD_TIMEOUT_MS) || 15_000;
+    const timeoutMs = options.timeoutMs ?? (
+      options.taskType === 'flashcard' ? flashcardTimeout :
+      (options.taskType === 'question_generation' ? 45_000 : 30_000)
+    );
 
     let lastError: any = null;
 
-    for (const providerName of this.buildProviderOrder(resolved)) {
+    for (const providerName of this.buildProviderOrder(resolved, totalChars, !!options.modelId)) {
       const adapter = this.adapters[providerName];
       if (!adapter || !adapter.isAvailable()) continue;
 
@@ -337,6 +485,12 @@ class AIProviderService {
           ? resolved.id
           : await this.findModelIdByName(modelName);
 
+        // Tra cứu đơn giá model để tính chi phí thực tế
+        const pricing = resolved && resolved.provider === providerName
+          ? { input_cost: resolved.input_cost, output_cost: resolved.output_cost }
+          : await this.findModelPricingByName(modelName);
+        const estimatedCost = this.calculateEstimatedCost(result.inputTokens, result.outputTokens, pricing);
+
         this.logRequest({
           userId: options.userId,
           documentId: options.documentId,
@@ -344,6 +498,7 @@ class AIProviderService {
           modelId,
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,
+          estimatedCost,
           latencyMs,
           status: 'success',
         }).catch(() => {});
@@ -356,6 +511,7 @@ class AIProviderService {
           latencyMs,
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,
+          estimatedCost,
         };
       } catch (err: any) {
         const isTimeout = err?.message === 'AI_REQUEST_TIMEOUT';
@@ -374,10 +530,10 @@ class AIProviderService {
     }
 
     if (lastError?.message === 'AI_REQUEST_TIMEOUT') {
-      throw new AppError('AI phản hồi quá thời gian cho phép. Vui lòng thử lại hoặc chọn model khác.', 504);
+      throw new AppError('AI phản hồi quá thời gian cho phép (timeout). Vui lòng thử lại hoặc chọn model khác.', 504);
     }
     throw new AppError(
-      'Dịch vụ AI hiện không khả dụng hoặc chưa được cấu hình (GROQ_API_KEY / GEMINI_API_KEY). Vui lòng liên hệ quản trị viên.',
+      'Dịch vụ AI hiện không khả dụng hoặc chưa được cấu hình. Vui lòng liên hệ quản trị viên.',
       503
     );
   }
@@ -474,4 +630,6 @@ ${slideText}`;
 }
 
 export const aiProviderService = new AIProviderService();
+export { AIProviderService, GroqAdapter, GeminiAdapter };
+export type { AIProviderAdapter, AdapterCompleteRequest, AdapterCompleteResult };
 

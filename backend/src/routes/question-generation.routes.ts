@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate, requireRole } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate';
+import { rateLimiter } from '../middlewares/rateLimiter.middleware';
 import {
   generateQuestionsSchema,
   updateQuestionSchema,
@@ -20,19 +21,19 @@ import {
 /**
  * Question Generator routes.
  * Mọi route GHI dữ liệu (generate/patch/delete/approve) bắt buộc qua
- * requireRole('teacher','admin') — role lấy từ JWT đã decode, KHÔNG nhận từ body/query.
+ * requireRole('user','admin') — role lấy từ JWT đã decode, KHÔNG nhận từ body/query.
  */
 const router = Router();
 
 router.use(authenticate);
 
-// ── Sinh câu hỏi (teacher/admin) ──
-router.post('/questions/generate', requireRole('teacher', 'admin'), validate(generateQuestionsSchema), generateQuestions);
+// ── Sinh câu hỏi (user/admin) ──
+router.post('/questions/generate', rateLimiter(60 * 1000, 20), requireRole('user', 'admin'), validate(generateQuestionsSchema), generateQuestions);
 
-// ── Preview: sửa / xoá câu hỏi + duyệt bộ đề (teacher/admin) ──
-router.patch('/questions/:id', requireRole('teacher', 'admin'), validate(updateQuestionSchema), updateQuestion);
-router.delete('/questions/:id', requireRole('teacher', 'admin'), validate(questionIdParamsSchema), deleteQuestion);
-router.post('/test-sets/:id/approve', requireRole('teacher', 'admin'), validate(testSetIdParamsSchema), approveTestSet);
+// ── Preview: sửa / xoá câu hỏi + duyệt bộ đề (user/admin) ──
+router.patch('/questions/:id', requireRole('user', 'admin'), validate(updateQuestionSchema), updateQuestion);
+router.delete('/questions/:id', requireRole('user', 'admin'), validate(questionIdParamsSchema), deleteQuestion);
+router.post('/test-sets/:id/approve', requireRole('user', 'admin'), validate(testSetIdParamsSchema), approveTestSet);
 
 // ── Đọc dữ liệu (mọi user đã đăng nhập) ──
 router.get('/test-sets/:id', validate(testSetIdParamsSchema), getTestSet);

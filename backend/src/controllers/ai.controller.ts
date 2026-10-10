@@ -1,14 +1,16 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { aiService } from '../services/ai.service';
-import { aiProviderService } from '../services/ai-provider.service';
 import { db } from '../db';
 import { generateMindmapWithAI } from '../utils/ai-engine.service';
-import { parserService } from '../services/parser.service';
+import { sanitizeUserInstruction } from '../utils/ai-security';
+import { entitlementService } from '../services/entitlement.service';
+import { aiProviderService } from '../services/ai-provider.service';
 
 export const chatWithDocument = async (req: AuthRequest, res: Response, next: any) => {
+  let reservation: any = null;
   try {
-    const { document_id, message, history, image, images } = req.body;
+    const { document_id, context_mode, message, history, image, images } = req.body;
     const userId = req.user!.id;
     
     // Check old style requests from previous version
@@ -16,15 +18,60 @@ export const chatWithDocument = async (req: AuthRequest, res: Response, next: an
        return res.status(400).json({ error: 'Endpoint deprecated for direct context. Use document_id instead.' });
     }
 
-    let document = null;
-    if (document_id) {
-      const docResult = await db.query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [document_id, userId]);
-      document = docResult.rows[0];
+    // 1. Prompt Injection Protection (Dual-Tier Filter: English & Vietnamese)
+    if (message) {
+      sanitizeUserInstruction(message, 4000);
     }
 
-    const reply = await aiService.chatWithDocument(document, message || '', history, images || image, userId);
-    res.status(200).json({ reply });
+    // 2. Pre-check Global System Daily Budget Cap (Phase 27 - Cost Control)
+    // Chặn trước để không trừ oan hạn ngạch cá nhân của user khi hệ thống hết ngân sách
+    await aiProviderService.checkGlobalDailyBudget();
+
+    // 3. Entitlement / Daily Quota Check with Atomic Reservation (Phase 20)
+    reservation = await entitlementService.checkAndReserveDailyUsage(userId, 'ai_chat_daily');
+    if (!reservation.allowed) {
+      return res.status(403).json({
+        error: 'LIMIT_EXCEEDED',
+        message: `Bạn đã đạt giới hạn ${reservation.limit} tin nhắn chat AI trong ngày của gói Miễn phí. Vui lòng nâng cấp lên gói Pro để tiếp tục trò chuyện không giới hạn.`,
+        feature: 'ai_chat_daily',
+        limit: reservation.limit,
+        current: reservation.current,
+      });
+    }
+
+    let document = null;
+    let effectiveMode: 'GENERAL' | 'DOCUMENT_CONTEXT' = context_mode || (document_id ? 'DOCUMENT_CONTEXT' : 'GENERAL');
+
+    if (document_id) {
+      // Permission check: owner or public document
+      const docResult = await db.query(
+        'SELECT * FROM documents WHERE id = $1 AND (user_id = $2 OR visibility = \'public\')',
+        [document_id, userId]
+      );
+      if (docResult.rows.length === 0) {
+        if (reservation?.reserved) {
+          await entitlementService.refundDailyUsage(userId, 'ai_chat_daily');
+        }
+        return res.status(403).json({ error: 'Không có quyền truy cập tài liệu này hoặc tài liệu không tồn tại' });
+      }
+      document = docResult.rows[0];
+    } else {
+      effectiveMode = 'GENERAL';
+    }
+
+    const chatResult = await aiService.chatWithDocument(document, message || '', history, images || image, userId, effectiveMode);
+    res.setHeader('X-AI-Provider', chatResult.metadata.provider);
+    res.setHeader('X-AI-Model', chatResult.metadata.model);
+    res.setHeader('X-AI-Is-LLM', String(chatResult.metadata.isLLMGenerated));
+    res.status(200).json({
+      reply: chatResult.reply,
+      context_mode: effectiveMode,
+      metadata: chatResult.metadata,
+    });
   } catch (error) {
+    if (reservation?.reserved) {
+      await entitlementService.refundDailyUsage(req.user!.id, 'ai_chat_daily');
+    }
     next(error);
   }
 };
@@ -41,54 +88,6 @@ export const generateQuiz = async (req: AuthRequest, res: Response, next: any) =
     res.status(200).json({ quizzes });
   } catch (error) {
     next(error);
-  }
-};
-
-export const generateFlashcardsFromFile = async (req: Request, res: Response, next: any) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Vui lòng chọn file' });
-
-    const { mimetype, buffer } = req.file;
-    const extractedText = await parserService.parseFromBuffer(buffer, mimetype);
-
-    if (!extractedText.trim()) {
-      return res.status(400).json({ error: 'Không tìm thấy chữ trong tài liệu này.' });
-    }
-
-    const truncatedText = extractedText.substring(0, 20000);
-    const systemPrompt = `Bạn là một chuyên gia học thuật. Hãy đọc đoạn văn bản sau đây và trích xuất ra các khái niệm quan trọng nhất để tạo thành bộ thẻ Flashcard ghi nhớ. 
-Yêu cầu đầu ra BẮT BUỘC phải là một mảng JSON có cấu trúc chính xác như sau, không được chứa thêm bất kỳ đoạn text giải thích nào khác bên ngoài JSON, KHÔNG BỌC TRONG \`\`\`json:
-[
-  { "front": "Thuật ngữ hoặc câu hỏi ngắn bằng ngôn ngữ gốc của tài liệu", "back": "Định nghĩa hoặc câu trả lời chi tiết bằng Tiếng Việt hoặc cùng ngôn ngữ" }
-]`;
-
-    // Đi qua AIProviderAdapter (Groq → Gemini, có timeout + log ai_request_logs)
-    const aiResult = await aiProviderService.chat({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `NỘI DUNG TÀI LIỆU:\n${truncatedText}` },
-      ],
-      temperature: 0.2,
-      maxTokens: 4096,
-      jsonMode: true,
-      taskType: 'flashcard',
-    });
-    const responseText = aiResult.text;
-    const cleanedJsonStr = responseText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
-    
-    let cards = [];
-    try {
-      cards = JSON.parse(cleanedJsonStr);
-    } catch (parseError) {
-      console.error("Lỗi Parse JSON từ AI:", responseText);
-      return res.status(500).json({ error: 'AI trả về định dạng dữ liệu không hợp lệ. Vui lòng thử lại.' });
-    }
-
-    res.status(200).json({ cards });
-
-  } catch (error: any) {
-    console.error("Lỗi AI Flashcard Generator:", error);
-    res.status(500).json({ error: error.message || 'Lỗi server nội bộ' });
   }
 };
 

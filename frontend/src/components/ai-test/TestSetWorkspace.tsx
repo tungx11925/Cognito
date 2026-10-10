@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { Panel, Group, Separator } from "react-resizable-panels";
+import Link from "next/link";
 import { X, Save, CheckCircle2, Clock, Sparkles, Send, Loader2, Play, BookOpen, Trash2, BadgeCheck, FileEdit } from "lucide-react";
 import toast from "react-hot-toast";
 import { getQuestions, bulkUpdateQuestions, approveTestSet, deleteQuestion, getTestSetDetail, updateQuestion } from "@/services/ai-test.service";
@@ -85,7 +86,7 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
     setTestSetStatus("APPROVED");
     const updated = (getValues().questions || []).map(q => ({ ...q, status: "APPROVED" as const }));
     reset({ questions: updated });
-    toast.success("Đã duyệt & lưu! Bộ đề đã sẵn sàng cho học sinh.");
+    toast.success("Đã duyệt & lưu! Bộ đề đã sẵn sàng để luyện tập.");
   };
 
   const handleSaveSingleQuestion = async (idx: number) => {
@@ -178,7 +179,7 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
               <BookOpen size={18} className="text-[#1a3a2a]" /> Workspace Bộ đề
               {testSetStatus === "DRAFT" ? (
                 <span className="text-[10px] font-black text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
-                  <FileEdit size={10} /> NHÁP — chưa hiện cho học sinh
+                  <FileEdit size={10} /> NHÁP — chưa công khai
                 </span>
               ) : (
                 <span className="text-[10px] font-black text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
@@ -205,6 +206,12 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
               {approving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Duyệt &amp; Lưu
             </button>
           )}
+          <Link
+            href={`/quiz/${testSetId}`}
+            className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 rounded-xl hover:bg-emerald-100 transition-colors shadow-sm"
+          >
+            <Play size={16} className="fill-emerald-800" /> Làm bài thi
+          </Link>
         </div>
       </div>
 
@@ -264,6 +271,11 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
                         <p className="text-sm font-semibold text-gray-900 leading-relaxed">
                           {fields[globalIdx].content || "(Chưa có nội dung)"}
                         </p>
+                        {fields[globalIdx].explanation?.includes('LOW_GROUNDING') && (
+                          <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200">
+                            ⚠️ Cần soát lại nội dung (AI cảnh báo: độ bám sát tài liệu thấp)
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-col items-end gap-2 flex-shrink-0 pt-1">
                         <span className="text-xs font-bold text-[#1a3a2a] bg-[#f0fdf4] border border-[#d1fae5] px-2.5 py-1 rounded-lg">
@@ -355,7 +367,7 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
                                   {...register(`questions.${globalIdx}.explanation` as any)}
                                   rows={2}
                                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all resize-none"
-                                  placeholder="Giải thích dễ hiểu cho học sinh — quan trọng với đối tượng Học yếu"
+                                  placeholder="Giải thích chi tiết phương án và kiến thức trọng tâm..."
                                 />
                               </div>
                               <div>

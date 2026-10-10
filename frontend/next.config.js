@@ -2,9 +2,7 @@
 const nextConfig = {
   swcMinify: true,
   reactStrictMode: false,
-  transpilePackages: ['mermaid', 'framer-motion'],
-
-
+  transpilePackages: ['mermaid'],
 
   // Fast image optimization
   images: {
@@ -16,11 +14,11 @@ const nextConfig = {
 
   experimental: {
     optimizeCss: false,
+    optimizePackageImports: ['lucide-react', 'framer-motion', 'recharts', 'katex'],
+    proxyTimeout: 180000,
   },
 
   eslint: {
-    // Warning: This allows production builds to successfully complete even if
-    // your project has ESLint errors. Next.js 14 currently has conflicts with ESLint 9.
     ignoreDuringBuilds: true,
   },
 
@@ -65,9 +63,23 @@ const nextConfig = {
     ];
   },
 
+  async redirects() {
+    return [
+      { source: '/auth/login', destination: '/', permanent: false },
+      { source: '/dashboard', destination: '/library', permanent: false },
+      { source: '/pricing', destination: '/premium', permanent: false },
+      { source: '/study-hub', destination: '/study-sessions', permanent: false },
+    ];
+  },
+
   async rewrites() {
     const backendUrl = (process.env.BACKEND_INTERNAL_URL || 'http://localhost:5000').replace(/\/+$/, '');
     return [
+      // Instantly serve empty JSON for missing sourcemaps from external libs (framer-motion) to avoid 404 delays
+      {
+        source: '/_next/static/chunks/:path*.map',
+        destination: '/empty.json',
+      },
       {
         source: '/api/:path*',
         destination: `${backendUrl}/api/:path*`,
@@ -79,4 +91,9 @@ const nextConfig = {
     ]
   }
 }
-module.exports = nextConfig
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+  openAnalyzer: false,
+});
+
+module.exports = withBundleAnalyzer(nextConfig);

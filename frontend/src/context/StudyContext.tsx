@@ -2,16 +2,39 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
+import {
+  NotificationItem,
+  getNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  getNotificationStreamTicket,
+} from '@/services/notification.service';
+import { apiFetch, getValidToken } from '@/services/api';
 export interface DocumentItem {
   id: number;
   user_id: number;
+  owner?: number;
   title: string;
   description: string;
   doc_url: string;
-  solution_text: string;
-  solution_url: string;
+  file?: string;
+  solution_text?: string;
+  solution_url?: string;
   category: string;
+  file_type?: string;
+  type?: string;
+  file_size?: number;
+  size?: number;
+  status?: string;
+  processing_status?: string;
+  processing_error?: string | null;
+  visibility?: 'private' | 'public';
+  is_community_published?: boolean;
+  page_count?: number;
   created_at: string;
+  updated_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface NoteItem {
@@ -63,11 +86,10 @@ interface StudyContextType {
   setShowLanding: (show: boolean) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  activeUser: { id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null;
-  setActiveUser: (user: { id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null) => void;
-  updateWalletBalance: (amount: number) => void;
+  activeUser: { id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; privacy_setting?: string; created_at?: string; bio?: string; headline?: string; is_premium?: boolean; premium_until?: string } | null;
+  setActiveUser: (user: { id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; privacy_setting?: string; created_at?: string; bio?: string; headline?: string; is_premium?: boolean; premium_until?: string } | null) => void;
   updateAvatar: (file: File) => Promise<boolean>;
-  updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string; privacy_setting?: string }) => Promise<boolean>;
+  updateProfile: (fields: { name: string; phone?: string; education?: string; address?: string; privacy_setting?: string; bio?: string; headline?: string; website?: string }) => Promise<boolean>;
   toggleVerification: (enable: boolean) => Promise<boolean>;
   verify2FA: (email: string, code: string) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
@@ -100,11 +122,19 @@ interface StudyContextType {
   setNewDocSolution: (s: string) => void;
   handleAddDocumentSubmit: (e: React.FormEvent) => Promise<void>;
   handleDeleteDocument: (id: number) => Promise<boolean>;
-  handleEditDocument: (id: number, title: string, category?: string, description?: string) => Promise<boolean>;
+  handleEditDocument: (
+    id: number, 
+    title: string, 
+    category?: string, 
+    description?: string,
+    visibility?: 'private' | 'public',
+    is_community_published?: boolean
+  ) => Promise<boolean>;
 
   // Decks & Flashcards
   decks: FlashcardDeck[];
-  fetchFlashcardDecks: () => Promise<void>;
+  fetchFlashcardDecks: (force?: boolean) => Promise<void>;
+  invalidateCache: (type?: 'documents' | 'decks' | 'tasks' | 'friends' | 'all') => Promise<void>;
   activeDeck: FlashcardDeck | null;
   setActiveDeck: (deck: FlashcardDeck | null) => void;
   activeDeckCards: FlashcardItem[];
@@ -175,6 +205,9 @@ interface StudyContextType {
     total_reviews?: number;
     total_notes?: number;
     chart_data: { day: string; minutes: number }[];
+    goals?: any[];
+    recent_activities?: any[];
+    streak_details?: any;
   };
   fetchAnalytics: () => Promise<void>;
 
@@ -193,223 +226,33 @@ interface StudyContextType {
   setShowDailyRecommendModal: (show: boolean) => void;
   showPremiumModal: boolean;
   setShowPremiumModal: (show: boolean) => void;
+
+  // Notifications
+  notifications: NotificationItem[];
+  unreadNotificationCount: number;
+  fetchNotificationsList: () => Promise<void>;
+  markNotificationRead: (id: number) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 const getAuthHeaders = (): Record<string, string> => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  return {};
 };
 
-const MOCK_DOCUMENTS: DocumentItem[] = [
-  {
-    id: 1,
-    user_id: 2,
-    title: "Trí tuệ nhân tạo & Mô hình ngôn ngữ lớn (LLM)",
-    description: "Tổng quan kiến thức về LLM, cơ chế Transformer và Spaced Repetition.",
-    doc_url: "",
-    solution_text: "Giải thích chi tiết về kiến trúc Transformer, cơ chế Self-Attention.",
-    solution_url: "",
-    category: "Trí tuệ nhân tạo",
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 2,
-    user_id: 2,
-    title: "Toán học nâng cao - Giải tích đại số",
-    description: "Giáo trình toán cao cấp và các phương pháp giải tích phân tích nâng cao.",
-    doc_url: "",
-    solution_text: "Giải tích 1, Tích phân suy rộng, Chuỗi Fourier.",
-    solution_url: "",
-    category: "Toán học",
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 3,
-    user_id: 2,
-    title: "Ngoại ngữ - Tiếng Anh IELTS Vocabulary",
-    description: "Các chủ đề từ vựng học thuật phổ biến trong bài thi IELTS.",
-    doc_url: "",
-    solution_text: "IELTS vocabulary topics: Environment, Technology, Education.",
-    solution_url: "",
-    category: "Ngoại ngữ",
-    created_at: new Date().toISOString()
-  }
-];
-
-const MOCK_DECKS: FlashcardDeck[] = [
-  {
-    id: 21,
-    user_id: 2,
-    name: "Kiến thức Nền tảng CNTT & Phần mềm",
-    description: "Bộ 14 thẻ ôn tập kiến thức cốt lõi Công nghệ Thông tin, Web Architecture & Hệ thống",
-    created_at: new Date().toISOString()
-  }
-];
-
-const MOCK_CARDS: Record<number, FlashcardItem[]> = {
-  21: [
-    {
-      id: 801,
-      deck_id: 21,
-      front: "REST API là gì và các phương thức HTTP phổ biến nhất?",
-      back: "REST API là chuẩn kiến trúc web giao tiếp qua HTTP không lưu trạng thái (Stateless).\nCác phương thức chính: GET (đọc dữ liệu), POST (tạo mới), PUT (cập nhật toàn bộ), PATCH (cập nhật một phần), DELETE (xóa dữ liệu).",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 802,
-      deck_id: 21,
-      front: "Khác biệt cơ bản giữa Cơ sở dữ liệu SQL và NoSQL là gì?",
-      back: "- SQL (Relational): Dữ liệu dạng bảng có schema cố định, quan hệ chặt chẽ, hỗ trợ ACID giao dịch cao (ví dụ: PostgreSQL, MySQL).\n- NoSQL (Non-relational): Dữ liệu phi quan hệ (Document, Key-Value, Graph), schema linh hoạt, dễ mở rộng quy mô ngang (ví dụ: MongoDB, Redis).",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 803,
-      deck_id: 21,
-      front: "Nguyên lý ACID trong hệ quản trị cơ sở dữ liệu gồm những gì?",
-      back: "- A (Atomicity - Nguyên tử): Giao dịch hoàn thành trọn vẹn hoặc rollback hoàn toàn.\n- C (Consistency - Nhất quán): Dữ liệu luôn tuân thủ toàn vẹn ràng buộc.\n- I (Isolation - Cô lập): Các giao dịch chạy đồng thời không ảnh hưởng nhau.\n- D (Durability - Bền vững): Dữ liệu đã commit sẽ lưu vĩnh viễn dù hệ thống gặp sự cố.",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 804,
-      deck_id: 21,
-      front: "JWT (JSON Web Token) hoạt động như thế nào trong xác thực người dùng?",
-      back: "JWT gồm 3 phần: Header (loại token & thuật toán), Payload (thông tin user/claims) và Signature (chữ ký số bí mật xác minh tính toàn vẹn).\nServer không cần lưu session, chỉ cần giải mã và verify chữ ký token do client gửi qua header Authorization (Bearer).",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 805,
-      deck_id: 21,
-      front: "Docker và Containerization giải quyết vấn đề gì trong phát triển phần mềm?",
-      back: "Docker đóng gói ứng dụng cùng mọi dependencies, cấu hình và runtime vào một Container độc lập, gọn nhẹ.\nGiúp loại bỏ hoàn toàn lỗi \"Works on my machine\" (chạy được trên máy dev nhưng lỗi trên server) và tiết kiệm tài nguyên hơn máy ảo (VM).",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 806,
-      deck_id: 21,
-      front: "CI/CD (Continuous Integration / Continuous Deployment) là gì?",
-      back: "- CI (Tích hợp liên tục): Tự động build, kiểm tra cú pháp và chạy test tự động mỗi khi dev push code mới.\n- CD (Triển khai liên tục): Tự động release và deploy sản phẩm lên staging/production an toàn và nhanh chóng khi vượt qua toàn bộ bài test.",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 807,
-      deck_id: 21,
-      front: "4 tính chất cốt lõi của Lập trình Hướng Đối Tượng (OOP) là gì?",
-      back: "1. Encapsulation (Đóng gói): Giấu dữ liệu nội bộ qua private/protected, chỉ mở public interface.\n2. Inheritance (Kế thừa): Class con kế thừa thuộc tính và phương thức từ class cha.\n3. Polymorphism (Đa hình): Các đối tượng khác nhau thực thi cùng một phương thức theo cách riêng.\n4. Abstraction (Trừu tượng): Ẩn đi sự phức tạp cài đặt, chỉ thể hiện hành vi qua interface/abstract class.",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 808,
-      deck_id: 21,
-      front: "Event Loop trong JavaScript hoạt động như thế nào?",
-      back: "JavaScript chạy đơn luồng (Single-thread). Event Loop liên tục kiểm tra Call Stack: khi Call Stack trống, nó sẽ lấy các tác vụ từ Microtask Queue (Promise, async/await) trước, sau đó đến Macrotask Queue (setTimeout, setInterval, I/O) để đưa vào Call Stack thực thi.",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 809,
-      deck_id: 21,
-      front: "Closure trong JavaScript là gì và ứng dụng thực tế?",
-      back: "Closure là hàm có khả năng ghi nhớ và truy cập vào các biến thuộc phạm vi cha (lexical scope) ngay cả khi hàm cha đã kết thúc thực thi.\nỨng dụng: Tạo biến private (dữ liệu đóng gói), module pattern, currying và tối ưu bộ nhớ đệm cache (memoization).",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 810,
-      deck_id: 21,
-      front: "Kiến trúc Microservices khác Monolith như thế nào?",
-      back: "- Monolith: Toàn bộ hệ thống (UI, Business Logic, DB) đóng gói chung trong 1 codebase và deploy cùng 1 khối duy nhất.\n- Microservices: Chia nhỏ hệ thống thành các service độc lập theo từng nghiệp vụ, có DB riêng, giao tiếp qua HTTP/gRPC/Message Queue và deploy độc lập.",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 811,
-      deck_id: 21,
-      front: "Caching (Bộ nhớ đệm) với Redis mang lại lợi ích gì?",
-      back: "Redis lưu trữ dữ liệu dạng key-value trực tiếp trên bộ nhớ RAM, cho tốc độ truy xuất cực nhanh (< 1ms).\nCaching giúp giảm tải trực tiếp cho Database chính, giảm độ trễ (latency) của API và chịu tải lượng truy cập tăng đột biến.",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 812,
-      deck_id: 21,
-      front: "Git Rebase khác Git Merge như thế nào?",
-      back: "- Git Merge: Giữ nguyên lịch sử các commit nhánh tính năng và tạo 1 merge commit nối trên nhánh chính.\n- Git Rebase: Viết lại lịch sử bằng cách chuyển toàn bộ commit của nhánh tính năng đặt lên đỉnh của nhánh đích, tạo lịch sử commit thẳng hàng và sạch sẽ.",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 813,
-      deck_id: 21,
-      front: "Mã trạng thái HTTP Status Code phổ biến (200, 201, 400, 401, 403, 404, 500) biểu thị điều gì?",
-      back: "- 200 OK: Thành công\n- 201 Created: Tạo tài nguyên mới thành công\n- 400 Bad Request: Dữ liệu gửi lên không hợp lệ\n- 401 Unauthorized: Chưa xác thực danh tính (chưa đăng nhập)\n- 403 Forbidden: Không có quyền truy cập tài nguyên\n- 404 Not Found: Không tìm thấy tài nguyên\n- 500 Internal Server Error: Lỗi xử lý phía Server",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    },
-    {
-      id: 814,
-      deck_id: 21,
-      front: "CORS (Cross-Origin Resource Sharing) là gì và cách phòng tránh lỗi CORS?",
-      back: "CORS là cơ chế bảo mật trên trình duyệt chặn web app ở một domain/origin gọi API tới domain khác nếu server không cho phép.\nCách khắc phục: Cấu hình Backend trả về các HTTP Headers thích hợp như Access-Control-Allow-Origin, Access-Control-Allow-Methods, và xử lý OPTIONS preflight request.",
-      ease_factor: 2.5,
-      repetitions: 0,
-      interval_days: 0,
-      next_review_at: new Date().toISOString()
-    }
-  ]
-};
-
-const MOCK_ANALYTICS = {
-  total_study_minutes: 185,
-  total_sessions: 12,
-  total_documents: 3,
-  total_flashcards: 14,
-  streak: 12,
+const EMPTY_ANALYTICS = {
+  total_study_minutes: 0,
+  total_sessions: 0,
+  total_documents: 0,
+  total_flashcards: 0,
+  streak: 0,
   total_reviews: 0,
   total_notes: 0,
-  chart_data: [
-    { day: 'Thứ 2', minutes: 30 },
-    { day: 'Thứ 3', minutes: 45 },
-    { day: 'Thứ 4', minutes: 20 },
-    { day: 'Thứ 5', minutes: 60 },
-    { day: 'Thứ 6', minutes: 15 },
-    { day: 'Thứ 7', minutes: 40 },
-    { day: 'Chủ Nhật', minutes: 50 },
-  ]
+  chart_data: [] as { day: string; minutes: number }[],
+  goals: [] as any[],
+  recent_activities: [] as any[],
+  streak_details: null as any,
 };
 
 const StudyContext = createContext<StudyContextType | undefined>(undefined);
@@ -420,15 +263,16 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; wallet_balance?: number; privacy_setting?: string; created_at?: string } | null>(null);
+  const [activeUser, setActiveUser] = useState<{ id: number; name: string; email: string; role?: string; phone?: string; education?: string; address?: string; website?: string; avatar_url?: string; is_verified?: boolean; streak?: number; last_study_date?: string; study_dates?: string[]; privacy_setting?: string; created_at?: string; bio?: string; headline?: string; is_premium?: boolean; premium_until?: string } | null>(null);
 
-  const updateWalletBalance = (amount: number) => {
-    setActiveUser(prev => prev ? { ...prev, wallet_balance: (prev.wallet_balance || 0) + amount } : null);
-  };
   const [searchQuery, setSearchQuery] = useState('');
 
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: 'success' as 'success' | 'error' });
+
+  // Notifications State
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState<number>(0);
 
   // Documents
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
@@ -481,16 +325,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [quizSubmitted, setQuizSubmitted] = useState(false);
 
   // Analytics states
-  const [analyticsData, setAnalyticsData] = useState({
-    total_study_minutes: 0,
-    total_sessions: 0,
-    total_documents: 0,
-    total_flashcards: 0,
-    streak: 0,
-    total_reviews: 0,
-    total_notes: 0,
-    chart_data: [] as { day: string; minutes: number }[]
-  });
+  const [analyticsData, setAnalyticsData] = useState(EMPTY_ANALYTICS);
 
   // Tasks & Friends states
   const [tasks, setTasks] = useState<any[]>([]);
@@ -513,6 +348,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
@@ -526,7 +362,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
           triggerMessage(data.message || 'Vui lòng đổi mật khẩu để kích hoạt', 'success');
           return { success: true, requiresPasswordChange: true, email: data.email };
         }
-        localStorage.setItem('token', data.token);
+        try { localStorage.removeItem('token'); } catch (e) {}
         setActiveUser(data.user);
         setIsAuthenticated(true);
         setShowDailyRecommendModal(true);
@@ -546,12 +382,13 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, phone, email, password })
       });
       const data = await res.json();
       if (res.ok) {
-        localStorage.setItem('token', data.token);
+        try { localStorage.removeItem('token'); } catch (e) {}
         setActiveUser(data.user);
         setIsAuthenticated(true);
         setShowDailyRecommendModal(true);
@@ -568,47 +405,53 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const logout = async () => {
-    // 1. Flush any active time BEFORE removing the token!
+    // 1. Flush any active time BEFORE logout
     if (activeTrackerUnsentSecondsRef.current > 0 || activeTrackerIsUserActiveRef.current) {
-      const token = localStorage.getItem('token');
-      if (token) {
-        let elapsed = 0;
-        if (activeTrackerIsUserActiveRef.current) {
-          elapsed = (Date.now() - activeTrackerLastActiveTimeRef.current) / 1000;
-        }
-        const totalToSend = Math.floor(activeTrackerUnsentSecondsRef.current + elapsed);
-        if (totalToSend >= 1) {
-          activeTrackerUnsentSecondsRef.current = 0;
-          try {
-            await fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({ seconds: totalToSend })
-            });
-          } catch (e) {
-            console.error("Error flushing active time in logout:", e);
-          }
+      let elapsed = 0;
+      if (activeTrackerIsUserActiveRef.current) {
+        elapsed = (Date.now() - activeTrackerLastActiveTimeRef.current) / 1000;
+      }
+      const totalToSend = Math.floor(activeTrackerUnsentSecondsRef.current + elapsed);
+      if (totalToSend >= 1) {
+        activeTrackerUnsentSecondsRef.current = 0;
+        try {
+          await fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seconds: totalToSend })
+          });
+        } catch (e) {
+          console.error("Error flushing active time in logout:", e);
         }
       }
     }
 
     try {
-      await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST' });
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      });
     } catch (e) {}
-    localStorage.removeItem('token');
+    try { localStorage.removeItem('token'); } catch (e) {}
+
+    // Spec 3.12: BroadcastChannel đồng bộ logout chủ động giữa các tab
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const authChannel = new BroadcastChannel('cognito_auth_channel');
+        authChannel.postMessage({ type: 'ACTIVE_LOGOUT' });
+        authChannel.close();
+      }
+    } catch (e) {}
+
     setActiveUser(null);
     setIsAuthenticated(false);
     triggerMessage('Đăng xuất thành công', 'success');
-    // Force a full reload and redirect to landing page to completely reset Google Sign-in libraries
     window.location.href = '/';
   };
 
   const updateAvatar = async (file: File): Promise<boolean> => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!isAuthenticated) {
       triggerMessage("Bạn chưa đăng nhập", "error");
       return false;
     }
@@ -619,9 +462,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/auth/avatar`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
+        credentials: 'include',
         body: formData
       });
 
@@ -640,9 +481,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
-  const updateProfile = async (fields: { name: string; phone?: string; education?: string; address?: string; privacy_setting?: string }): Promise<boolean> => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+  const updateProfile = async (fields: { name: string; phone?: string; education?: string; address?: string; privacy_setting?: string; bio?: string; headline?: string; website?: string }): Promise<boolean> => {
+    if (!isAuthenticated) {
       triggerMessage("Bạn chưa đăng nhập", "error");
       return false;
     }
@@ -650,9 +490,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/auth/profile`, {
         method: 'PUT',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(fields)
       });
@@ -673,8 +513,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const toggleVerification = async (enable: boolean): Promise<boolean> => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!isAuthenticated) {
       triggerMessage("Bạn chưa đăng nhập", "error");
       return false;
     }
@@ -682,9 +521,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/auth/toggle-verification`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ enable })
       });
@@ -705,8 +544,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const changePassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!isAuthenticated) {
       triggerMessage("Bạn chưa đăng nhập", "error");
       return { success: false, error: "Bạn chưa đăng nhập" };
     }
@@ -714,9 +552,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/auth/change-password`, {
         method: 'PUT',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ currentPassword, newPassword })
       });
@@ -739,12 +577,13 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(`${API_BASE_URL}/auth/verify-2fa`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code })
       });
       const data = await res.json();
       if (res.ok) {
-        localStorage.setItem('token', data.token);
+        try { localStorage.removeItem('token'); } catch (e) {}
         setActiveUser(data.user);
         setIsAuthenticated(true);
         setShowDailyRecommendModal(true);
@@ -761,17 +600,16 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const upgradePremium = async (): Promise<boolean> => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!isAuthenticated) {
       triggerMessage("Bạn chưa đăng nhập", "error");
       return false;
     }
     try {
       const res = await fetch(`${API_BASE_URL}/auth/upgrade-premium`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         }
       });
       const data = await res.json();
@@ -790,31 +628,51 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   useEffect(() => {
-    const fetchMe = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-      // Optimistically assume authenticated if token exists to prevent layout shifting
-      // or kicking user out during dev server restarts
-      setIsAuthenticated(true);
+    const handleSessionExpired = (e: any) => {
+      console.warn('[AUTH_FE] Session expired event received');
+      setActiveUser(null);
+      setIsAuthenticated(false);
+      setShowLoginModal(true);
+      triggerMessage(e.detail?.message || 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+    };
+    window.addEventListener('cognito:session_expired', handleSessionExpired);
 
+    // Spec 3.12: Lắng nghe đăng xuất chủ động từ tab khác qua BroadcastChannel
+    let authChannel: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      authChannel = new BroadcastChannel('cognito_auth_channel');
+      authChannel.onmessage = (event) => {
+        if (event.data?.type === 'ACTIVE_LOGOUT') {
+          console.log('[AUTH_FE] BroadcastChannel: Nhận tín hiệu đăng xuất chủ động từ tab khác');
+          setActiveUser(null);
+          setIsAuthenticated(false);
+          window.location.href = '/';
+        }
+      };
+    }
+
+    return () => {
+      window.removeEventListener('cognito:session_expired', handleSessionExpired);
+      if (authChannel) authChannel.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    const fetchMe = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/auth/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
         if (res.ok) {
           const data = await res.json();
           setActiveUser(data.user);
           setIsAuthenticated(true);
-        } else if (res.status === 401 || res.status === 403) {
-          localStorage.removeItem('token');
+        } else {
           setActiveUser(null);
           setIsAuthenticated(false);
         }
       } catch (e) {
-        console.error(e);
+        console.error('Error fetching /auth/me:', e);
       } finally {
         setLoading(false);
       }
@@ -822,77 +680,95 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     fetchMe();
   }, []);
 
+  const lastDocsFetchRef = useRef<number>(0);
+  const lastDecksFetchRef = useRef<number>(0);
+  const lastTasksFetchRef = useRef<number>(0);
+  const lastFriendsFetchRef = useRef<number>(0);
+
   // API Call: Fetch Documents
-  const fetchDocuments = async () => {
+  const fetchDocuments = async (force: boolean = false) => {
+    const now = Date.now();
+    if (!force && documents.length > 0 && (now - lastDocsFetchRef.current < 25000)) {
+      return;
+    }
+    lastDocsFetchRef.current = now;
     try {
-      const res = await fetch(`${API_BASE_URL}/documents`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setDocuments(data || []);
+      const data = await apiFetch('/documents');
+      if (Array.isArray(data)) {
+        setDocuments(data);
         return;
       }
-      setDocuments(MOCK_DOCUMENTS);
+      setDocuments([]);
     } catch (e) {
       console.error("Error fetching docs:", e);
-      setDocuments(MOCK_DOCUMENTS);
+      setDocuments([]);
     }
   };
 
   // API Call: Fetch Decks
-  const fetchFlashcardDecks = async () => {
+  const fetchFlashcardDecks = async (force: boolean = false) => {
+    const now = Date.now();
+    if (!force && decks.length > 0 && (now - lastDecksFetchRef.current < 25000)) {
+      return;
+    }
+    lastDecksFetchRef.current = now;
     try {
-      const res = await fetch(`${API_BASE_URL}/flashcards/decks`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setDecks(data || []);
+      const data = await apiFetch('/flashcards/decks');
+      if (Array.isArray(data)) {
+        setDecks(data);
         return;
       }
-      setDecks(MOCK_DECKS);
+      setDecks([]);
     } catch (e) {
       console.error("Error fetching decks:", e);
-      setDecks(MOCK_DECKS);
+      setDecks([]);
+    }
+  };
+
+  const invalidateCache = async (type: 'documents' | 'decks' | 'tasks' | 'friends' | 'all' = 'all') => {
+    if (type === 'documents' || type === 'all') {
+      lastDocsFetchRef.current = 0;
+      await fetchDocuments(true);
+    }
+    if (type === 'decks' || type === 'all') {
+      lastDecksFetchRef.current = 0;
+      await fetchFlashcardDecks(true);
+    }
+    if (type === 'tasks' || type === 'all') {
+      lastTasksFetchRef.current = 0;
+      await fetchTasks(true);
+    }
+    if (type === 'friends' || type === 'all') {
+      lastFriendsFetchRef.current = 0;
+      await fetchFriends(true);
     }
   };
 
   // API Call: Fetch cards in a deck
   const fetchCardsForDeck = async (deckId: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/flashcards/decks/${deckId}/cards`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.length > 0) {
-          setActiveDeckCards(data);
-          return;
-        }
+      const data = await apiFetch(`/flashcards/decks/${deckId}/cards`);
+      if (Array.isArray(data)) {
+        setActiveDeckCards(data);
+        return;
       }
-      setActiveDeckCards(MOCK_CARDS[deckId] || []);
+      setActiveDeckCards([]);
     } catch (e) {
       console.error("Error fetching cards:", e);
-      setActiveDeckCards(MOCK_CARDS[deckId] || []);
+      setActiveDeckCards([]);
     }
   };
 
   // API Call: Fetch notes for active document
   const fetchNotesForDoc = async (docId: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/notes/document/${docId}`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.length > 0) {
-          setNotesTitle(data[0].title);
-          setNotesText(data[0].content);
-        } else {
-          setNotesTitle('Ghi chú của tôi');
-          setNotesText('');
-        }
+      const data = await apiFetch(`/notes/document/${docId}`);
+      if (Array.isArray(data) && data.length > 0) {
+        setNotesTitle(data[0].title);
+        setNotesText(data[0].content);
+      } else {
+        setNotesTitle('Ghi chú của tôi');
+        setNotesText('');
       }
     } catch (e) {
       console.error("Error fetching notes:", e);
@@ -902,28 +778,42 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch stats
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/study-sessions/stats`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAnalyticsData(data);
+      const summary = await apiFetch('/progress/summary');
+      if (summary && !summary.error) {
+        setAnalyticsData({
+          total_study_minutes: summary.total_study_minutes || 0,
+          total_sessions: summary.total_activities || 0,
+          total_documents: summary.total_documents_read || 0,
+          total_flashcards: summary.total_flashcards_reviewed || 0,
+          streak: summary.streak?.currentStreak || 0,
+          total_reviews: summary.total_flashcards_reviewed || 0,
+          total_notes: summary.total_notes || 0,
+          chart_data: (summary.weekly_chart || []).map((c: any) => ({
+            day: c.day,
+            minutes: c.minutes,
+          })),
+          goals: summary.daily_goals || [],
+          recent_activities: summary.recent_activities || [],
+          streak_details: summary.streak,
+        });
         return;
       }
-      setAnalyticsData(MOCK_ANALYTICS);
+      setAnalyticsData(EMPTY_ANALYTICS);
     } catch (e) {
       console.error("Error fetching stats:", e);
-      setAnalyticsData(MOCK_ANALYTICS);
+      setAnalyticsData(EMPTY_ANALYTICS);
     }
   };
 
-  const fetchTasks = async () => {
+  const fetchTasks = async (force: boolean = false) => {
+    const now = Date.now();
+    if (!force && tasks.length > 0 && (now - lastTasksFetchRef.current < 25000)) {
+      return;
+    }
+    lastTasksFetchRef.current = now;
     try {
-      const res = await fetch(`${API_BASE_URL}/tasks`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await apiFetch('/tasks');
+      if (Array.isArray(data)) {
         setTasks(data);
       }
     } catch (e) {
@@ -931,13 +821,15 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
-  const fetchFriends = async () => {
+  const fetchFriends = async (force: boolean = false) => {
+    const now = Date.now();
+    if (!force && friends.length > 0 && (now - lastFriendsFetchRef.current < 25000)) {
+      return;
+    }
+    lastFriendsFetchRef.current = now;
     try {
-      const res = await fetch(`${API_BASE_URL}/friends`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await apiFetch('/friends');
+      if (Array.isArray(data)) {
         setFriends(data);
       }
     } catch (e) {
@@ -945,59 +837,191 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
-  // Real-time SSE Connection for Daily Tasks, Streaks & Live Notifications
-  useEffect(() => {
+  const fetchNotificationsList = async () => {
     if (!isAuthenticated) return;
-    
-    // Fetch initial tasks on login/auth
-    fetchTasks();
+    try {
+      const res = await getNotifications({ limit: 30 });
+      if (res.notifications) {
+        setNotifications(res.notifications);
+        setUnreadNotificationCount(res.unreadCount || 0);
+      }
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+    }
+  };
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    if (!token) return;
+  const markNotificationRead = async (id: number) => {
+    try {
+      const res = await markNotificationAsRead(id);
+      if (res.success) {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+        setUnreadNotificationCount(prev => Math.max(0, prev - 1));
+      }
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    try {
+      const res = await markAllNotificationsAsRead();
+      if (res.success) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+        setUnreadNotificationCount(0);
+      }
+    } catch (err) {
+      console.error('Error marking all notifications as read:', err);
+    }
+  };
+
+  // Real-time Unified SSE Stream for Tasks, Notifications & Live Chat (Zero query JWT, Multiplexed)
+  useEffect(() => {
+    if (!isAuthenticated || typeof window === 'undefined') return;
+
+    fetchTasks();
+    fetchNotificationsList();
 
     let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource(`${API_BASE_URL}/notifications/stream?token=${encodeURIComponent(token)}`);
+    let isCancelled = false;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
 
-      eventSource.addEventListener('TASK_COMPLETED', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data && data.task) {
-            setTasks(prev => prev.map(t => t.task_type === data.task.task_type ? { ...t, ...data.task, is_completed: true, completed: true } : t));
-            setTaskCompletionToast({
-              type: data.taskType || data.task.task_type,
-              title: data.title || data.task.title
-            });
-            triggerMessage(`🎉 Xuất sắc! Bạn vừa hoàn thành nhiệm vụ "${data.title || data.task.title}"!`, 'success');
-          }
-        } catch (err) {
-          console.error('Error handling SSE TASK_COMPLETED event:', err);
+    const scheduleReconnect = () => {
+      if (isCancelled || document.visibilityState === 'hidden') return;
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.warn(`[SSE] Đã vượt quá số lần thử kết nối lại tối đa (${MAX_RECONNECT_ATTEMPTS}). Dừng reconnect.`);
+        return;
+      }
+      reconnectAttempts++;
+      const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+      console.log(`[SSE] Kết nối lại sau ${backoffDelay}ms (lần ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+      reconnectTimeout = setTimeout(setupSSE, backoffDelay);
+    };
+
+    const handleVisibilityChangeSSE = () => {
+      if (document.visibilityState === 'visible' && !eventSource && !isCancelled) {
+        console.log('[SSE] Tab hiển thị trở lại, tiếp tục kết nối SSE...');
+        reconnectAttempts = 0;
+        setupSSE();
+      } else if (document.visibilityState === 'hidden' && eventSource) {
+        console.log('[SSE] Tab bị ẩn, tạm dừng stream SSE để tiết kiệm tài nguyên...');
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        eventSource.close();
+        eventSource = null;
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChangeSSE);
+
+    const setupSSE = async () => {
+      if (isCancelled || document.visibilityState === 'hidden') return;
+      try {
+        const ticketRes = await getNotificationStreamTicket();
+        if (isCancelled) return;
+        if (!ticketRes || (ticketRes as any).status === 401) {
+          console.warn('[SSE] Ticket 401: Đóng stream, không tự động đăng xuất.');
+          return;
         }
-      });
 
-      eventSource.addEventListener('TASK_PROGRESS', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data && data.task) {
-            setTasks(prev => prev.map(t => t.task_type === data.task.task_type ? { ...t, ...data.task } : t));
-          }
-        } catch (err) {
-          console.error('Error handling SSE TASK_PROGRESS event:', err);
+        let streamUrl = `${API_BASE_URL}/notifications/stream`;
+        if (ticketRes.ticket) {
+          streamUrl += `?ticket=${encodeURIComponent(ticketRes.ticket)}`;
         }
-      });
 
-      eventSource.onerror = (err) => {
-        // EventSource will automatically retry in background
-        console.warn('SSE notification stream reconnecting...');
-      };
-    } catch (e) {
-      console.error('Failed to initialize SSE connection:', e);
-    }
+        const es = new EventSource(streamUrl, { withCredentials: true });
+        eventSource = es;
+
+        es.onopen = () => {
+          reconnectAttempts = 0; // Reset số lần thử khi kết nối thành công
+        };
+
+        // 1. Task Completed Event
+        es.addEventListener('TASK_COMPLETED', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data && data.task) {
+              setTasks(prev => prev.map(t => t.task_type === data.task.task_type ? { ...t, ...data.task, is_completed: true, completed: true } : t));
+              setTaskCompletionToast({
+                type: data.taskType || data.task.task_type,
+                title: data.title || data.task.title
+              });
+              triggerMessage(`🎉 Xuất sắc! Bạn vừa hoàn thành nhiệm vụ "${data.title || data.task.title}"!`, 'success');
+            }
+          } catch (err) {
+            console.error('Error handling SSE TASK_COMPLETED event:', err);
+          }
+        });
+
+        // 2. Task Progress Event
+        es.addEventListener('TASK_PROGRESS', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data && data.task) {
+              setTasks(prev => prev.map(t => t.task_type === data.task.task_type ? { ...t, ...data.task } : t));
+            }
+          } catch (err) {
+            console.error('Error handling SSE TASK_PROGRESS event:', err);
+          }
+        });
+
+        // 3. New Notification Event (Multiplexed)
+        es.addEventListener('NEW_NOTIFICATION', (e: MessageEvent) => {
+          try {
+            const notif = JSON.parse(e.data);
+            if (notif && notif.id) {
+              setNotifications(prev => {
+                if (prev.some(n => n.id === notif.id)) return prev;
+                return [notif, ...prev];
+              });
+              setUnreadNotificationCount(prev => prev + 1);
+              triggerMessage(`🔔 ${notif.title}: ${notif.content}`, 'success');
+            }
+          } catch (err) {
+            console.error('Error handling SSE NEW_NOTIFICATION event:', err);
+          }
+        });
+
+        // 4. New Message Event (Multiplexed for Global Badge & Chat View)
+        es.addEventListener('NEW_MESSAGE', (e: MessageEvent) => {
+          try {
+            const payload = JSON.parse(e.data);
+            window.dispatchEvent(new CustomEvent('cognito:new_message', { detail: payload }));
+          } catch (err) {
+            console.error('Error handling SSE NEW_MESSAGE event:', err);
+          }
+        });
+
+        // 5. Messages Read Event (Multiplexed)
+        es.addEventListener('MESSAGES_READ', (e: MessageEvent) => {
+          try {
+            const payload = JSON.parse(e.data);
+            window.dispatchEvent(new CustomEvent('cognito:messages_read', { detail: payload }));
+          } catch (err) {
+            console.error('Error handling SSE MESSAGES_READ event:', err);
+          }
+        });
+
+        es.onerror = () => {
+          if (eventSource) eventSource.close();
+          eventSource = null;
+          scheduleReconnect();
+        };
+      } catch (err: any) {
+        if (err?.status === 401) {
+          console.warn('[SSE] Ticket failed with 401. Stream closed.');
+          return;
+        }
+        scheduleReconnect();
+      }
+    };
+
+    setupSSE();
 
     return () => {
-      if (eventSource) {
-        eventSource.close();
-      }
+      isCancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChangeSSE);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (eventSource) eventSource.close();
     };
   }, [isAuthenticated]);
 
@@ -1006,35 +1030,31 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const prevTask = tasks.find(t => t.task_type === taskType);
       const previousValue = prevTask ? prevTask.current_value : 0;
 
-      const res = await fetch(`${API_BASE_URL}/tasks/progress`, {
+      const data = await apiFetch('/tasks/progress', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
         },
         body: JSON.stringify({ task_type: taskType, increment })
       });
-      if (res.ok) {
-        const data = await res.json();
+      if (data && !data.error && data.task) {
         const updatedTask = data.task;
-        if (updatedTask) {
-          setTasks(prev => prev.map(t => t.task_type === taskType ? updatedTask : t));
-          
-          // Only trigger progress update toast if the task was not already completed
-          if (previousValue < updatedTask.target_value) {
-            setTaskProgressToast({
-              type: taskType,
-              title: updatedTask.title,
-              description: updatedTask.description,
-              previousValue,
-              currentValue: updatedTask.current_value,
-              targetValue: updatedTask.target_value
-            });
+        setTasks(prev => prev.map(t => t.task_type === taskType ? updatedTask : t));
+        
+        // Only trigger progress update toast if the task was not already completed
+        if (previousValue < updatedTask.target_value) {
+          setTaskProgressToast({
+            type: taskType,
+            title: updatedTask.title,
+            description: updatedTask.description,
+            previousValue,
+            currentValue: updatedTask.current_value,
+            targetValue: updatedTask.target_value
+          });
 
-            if (data.justCompleted) {
-              setTaskCompletionToast({ type: taskType, title: updatedTask.title });
-              triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${updatedTask.title}"! 🎉`, "success");
-            }
+          if (data.justCompleted) {
+            setTaskCompletionToast({ type: taskType, title: updatedTask.title });
+            triggerMessage(`Chúc mừng! Bạn đã hoàn thành nhiệm vụ "${updatedTask.title}"! 🎉`, "success");
           }
         }
       }
@@ -1052,11 +1072,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/documents`, {
+      const data = await apiFetch('/documents', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
         },
         body: JSON.stringify({
           title: newDocTitle,
@@ -1068,17 +1087,18 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         })
       });
 
-      if (res.ok) {
+      if (data && !data.error) {
         triggerMessage("Tải lên tài liệu học tập thành công!");
         setShowAddDocModal(false);
         setNewDocTitle('');
         setNewDocDesc('');
         setNewDocContent('');
         setNewDocSolution('');
-        fetchDocuments();
+        lastDocsFetchRef.current = 0;
+        await fetchDocuments(true);
         fetchAnalytics();
       } else {
-        triggerMessage("Không thể thêm tài liệu mới", "error");
+        triggerMessage(data?.error || "Không thể thêm tài liệu mới", "error");
       }
     } catch (e) {
       triggerMessage("Lỗi kết nối server", "error");
@@ -1087,32 +1107,25 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const executeDeleteDocument = async (id: number): Promise<boolean> => {
     try {
-      const res = await fetch(`${API_BASE_URL}/documents/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
+      const data = await apiFetch(`/documents/${id}`, {
+        method: 'DELETE'
       });
-      if (res.ok) {
+      if (data && !data.error) {
         triggerMessage("Đã xóa tài liệu thành công", "success");
         setDocuments(prev => prev.filter(d => d.id !== id));
-        fetchDocuments();
+        lastDocsFetchRef.current = 0;
+        await fetchDocuments(true);
         fetchAnalytics();
         if (activeDoc?.id === id) setActiveDoc(null);
         return true;
       } else {
-        const data = await res.json().catch(() => ({}));
-        // If it's a mock document id <= 3 and not in DB, remove locally
-        if (id <= 3 && !data.error?.includes('quyền')) {
-          setDocuments(prev => prev.filter(d => d.id !== id));
-          triggerMessage("Đã xóa tài liệu thành công", "success");
-          return true;
-        }
-        triggerMessage(data.error || "Không thể xóa tài liệu này", "error");
+        triggerMessage(data?.error || "Không thể xóa tài liệu này", "error");
         return false;
       }
     } catch (e) {
-      setDocuments(prev => prev.filter(d => d.id !== id));
-      triggerMessage("Đã xóa tài liệu thành công", "success");
-      return true;
+      console.error("Error deleting document:", e);
+      triggerMessage("Lỗi kết nối khi xóa tài liệu", "error");
+      return false;
     }
   };
 
@@ -1121,23 +1134,29 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   // API Call: Edit Document (Rename / Edit)
-  const handleEditDocument = async (id: number, title: string, category?: string, description?: string): Promise<boolean> => {
+  const handleEditDocument = async (
+    id: number, 
+    title: string, 
+    category?: string, 
+    description?: string,
+    visibility?: 'private' | 'public',
+    is_community_published?: boolean
+  ): Promise<boolean> => {
     try {
-      const res = await fetch(`${API_BASE_URL}/documents/${id}`, {
+      const data = await apiFetch(`/documents/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
         },
-        body: JSON.stringify({ title, category, description })
+        body: JSON.stringify({ title, category, description, visibility, is_community_published })
       });
-      if (res.ok) {
+      if (data && !data.error) {
         triggerMessage("Đã chỉnh sửa thông tin tài liệu thành công");
-        fetchDocuments();
+        lastDocsFetchRef.current = 0;
+        await fetchDocuments(true);
         return true;
       } else {
-        const err = await res.json();
-        triggerMessage(err.error || "Lỗi khi chỉnh sửa tài liệu", "error");
+        triggerMessage(data?.error || "Lỗi khi chỉnh sửa tài liệu", "error");
         return false;
       }
     } catch (e) {
@@ -1155,11 +1174,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/flashcards/decks`, {
+      const data = await apiFetch('/flashcards/decks', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
         },
         body: JSON.stringify({
           name: newDeckName,
@@ -1167,13 +1185,16 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         })
       });
 
-      if (res.ok) {
+      if (data && !data.error) {
         triggerMessage("Đã tạo bộ thẻ ghi nhớ mới!");
         setShowAddDeckModal(false);
         setNewDeckName('');
         setNewDeckDesc('');
-        fetchFlashcardDecks();
+        lastDecksFetchRef.current = 0;
+        await fetchFlashcardDecks(true);
         fetchAnalytics();
+      } else {
+        triggerMessage(data?.error || "Lỗi khi tạo bộ thẻ", "error");
       }
     } catch (e) {
       triggerMessage("Lỗi kết nối máy chủ", "error");
@@ -1185,11 +1206,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!activeDoc) return;
     setNotesSaving(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/notes`, {
+      const data = await apiFetch('/notes', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
         },
         body: JSON.stringify({
           document_id: activeDoc.id,
@@ -1198,7 +1218,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         })
       });
 
-      if (res.ok) {
+      if (data && !data.error) {
         const d = new Date();
         setNotesSavedTime(`${d.getHours()}:${d.getMinutes() < 10 ? '0' + d.getMinutes() : d.getMinutes()}:${d.getSeconds() < 10 ? '0' + d.getSeconds() : d.getSeconds()}`);
       }
@@ -1219,11 +1239,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setChatLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/ai/chat`, {
+      const data = await apiFetch('/ai/chat', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
         },
         body: JSON.stringify({
           document_id: activeDoc.id,
@@ -1231,11 +1250,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         })
       });
 
-      if (res.ok) {
-        const data = await res.json();
+      if (data && !data.error && data.reply) {
         setChatMessages(prev => [...prev, { sender: 'ai', text: data.reply }]);
       } else {
-        setChatMessages(prev => [...prev, { sender: 'ai', text: "Tôi đang gặp khó khăn khi truy xuất thông tin này. Bạn vui lòng thử lại nhé." }]);
+        setChatMessages(prev => [...prev, { sender: 'ai', text: data?.error || "Tôi đang gặp khó khăn khi truy xuất thông tin này. Bạn vui lòng thử lại nhé." }]);
       }
     } catch (e) {
       setChatMessages(prev => [...prev, { sender: 'ai', text: "Lỗi kết nối. Không thể liên hệ với trợ lý AI." }]);
@@ -1251,18 +1269,18 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setQuizSubmitted(false);
     setSelectedAnswers({});
     try {
-      const res = await fetch(`${API_BASE_URL}/ai/generate-quiz`, {
+      const data = await apiFetch('/ai/generate-quiz', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
         },
         body: JSON.stringify({ document_id: activeDoc.id })
       });
-      if (res.ok) {
-        const data = await res.json();
+      if (data && !data.error && data.quizzes) {
         setQuizzes(data.quizzes);
         triggerMessage("Đã tạo câu hỏi ôn tập thành công!");
+      } else {
+        triggerMessage(data?.error || "Lỗi khi tạo Quiz", "error");
       }
     } catch (e) {
       triggerMessage("Lỗi khi tạo Quiz", "error");
@@ -1278,17 +1296,15 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const currentCard = activeDeckCards[currentCardIndex];
     
     try {
-      const res = await fetch(`${API_BASE_URL}/flashcards/review/${currentCard.id}`, {
+      const data = await apiFetch(`/flashcards/review/${currentCard.id}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
         },
         body: JSON.stringify({ difficulty })
       });
 
-      if (res.ok) {
-        const data = await res.json();
+      if (data && !data.error) {
         triggerMessage(`Thẻ ghi nhớ được lên lịch ôn tập sau ${data.next_review_days} ngày!`);
         
         if (data.updated_streak !== undefined) {
@@ -1340,19 +1356,17 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     
     if (activeDoc) {
       try {
-        const res = await fetch(`${API_BASE_URL}/study-sessions`, {
+        const data = await apiFetch('/study-sessions', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            ...getAuthHeaders()
           },
           body: JSON.stringify({
             document_id: activeDoc.id,
             duration_seconds: elapsedStudyTime || (timerMaxMinutes * 60)
           })
         });
-        if (res.ok) {
-          const data = await res.json();
+        if (data && !data.error) {
           if (data.updated_streak !== undefined) {
             setActiveUser(prev => prev ? { ...prev, streak: data.updated_streak } : null);
           }
@@ -1470,28 +1484,19 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (authFailed) return;
       authFailed = true;
       activeTrackerIsUserActiveRef.current = false;
-      localStorage.removeItem('token');
-      setActiveUser(null);
-      setIsAuthenticated(false);
-      triggerMessage('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại', 'error');
+      console.warn('[AUTH_FE_DEBUG] [HANDLE_AUTH_EXPIRED_PING] /active-ping returned 401! (Wipe bypassed for audit)');
+      console.trace();
+      // Bypassed for log-only audit
     };
 
     const sendPing = (seconds: number) => {
       if (authFailed) return;
-      fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
+      apiFetch('/study-sessions/active-ping', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
         },
         body: JSON.stringify({ seconds })
-      })
-      .then(res => {
-        if (res.status === 401) {
-          handleAuthExpired();
-          return;
-        }
-        if (res.ok) return res.json();
       })
       .then(data => {
         if (data && data.task_update) {
@@ -1510,13 +1515,22 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     const sendBeaconPing = (seconds: number) => {
       if (authFailed) return;
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const url = `${API_BASE_URL}/study-sessions/active-ping?token=${encodeURIComponent(token)}`;
-      const blob = new Blob([JSON.stringify({ seconds })], {
-        type: 'application/json'
-      });
-      navigator.sendBeacon(url, blob);
+      // Modern keepalive fetch with HttpOnly cookie (no query token in URL)
+      try {
+        fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ seconds }),
+          keepalive: true
+        }).catch(() => {});
+      } catch (e) {
+        // Fallback sendBeacon without query token
+        const blob = new Blob([JSON.stringify({ seconds })], {
+          type: 'application/json'
+        });
+        navigator.sendBeacon(`${API_BASE_URL}/study-sessions/active-ping`, blob);
+      }
     };
 
     const flushActiveTime = (isUnloading = false) => {
@@ -1634,7 +1648,6 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setShowLoginModal,
       activeUser,
       setActiveUser,
-      updateWalletBalance,
       searchQuery,
 
       setSearchQuery,
@@ -1666,6 +1679,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       decks,
       fetchFlashcardDecks,
+      invalidateCache,
       activeDeck,
       setActiveDeck,
       activeDeckCards,
@@ -1739,20 +1753,15 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       showDailyRecommendModal,
       setShowDailyRecommendModal,
       showPremiumModal,
-      setShowPremiumModal
+      setShowPremiumModal,
+
+      // Notifications
+      notifications,
+      unreadNotificationCount,
+      fetchNotificationsList,
+      markNotificationRead,
+      markAllNotificationsRead,
     }}>
-      <Toaster 
-        position="top-center" 
-        containerStyle={{ zIndex: 99999 }}
-        toastOptions={{
-          style: {
-            borderRadius: '16px',
-            background: '#ffffff',
-            color: '#1a2e1c',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
-          }
-        }}
-      />
       {children}
     </StudyContext.Provider>
   );

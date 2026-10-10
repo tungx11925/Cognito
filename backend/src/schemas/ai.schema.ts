@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const aiChatSchema = z.object({
   body: z.object({
     document_id: z.number().optional(),
+    context_mode: z.enum(['GENERAL', 'DOCUMENT_CONTEXT']).optional(),
     message: z.string().optional(),
     history: z.array(z.any()).optional(),
     chat_history: z.array(

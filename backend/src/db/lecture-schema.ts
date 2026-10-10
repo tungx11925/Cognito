@@ -42,14 +42,16 @@ export async function bootstrapLectureSchema() {
       ALTER TABLE lecture_slides ADD COLUMN IF NOT EXISTS image_url TEXT;
     `);
 
-    // 2. Check if sample lecture exists, if not seed it for instant testing
-    const countCheck = await db.query('SELECT COUNT(*) FROM lectures');
-    if (parseInt(countCheck.rows[0].count, 10) === 0) {
+    // 2. Sample lecture seed (ONLY for explicit development / testing seed, NEVER in production)
+    const shouldSeed = process.env.NODE_ENV !== 'production' && process.env.SEED_SAMPLE_LECTURES === 'true';
+    if (shouldSeed) {
+      const countCheck = await db.query('SELECT COUNT(*) FROM lectures');
+      if (parseInt(countCheck.rows[0].count, 10) === 0) {
       const lectureRes = await db.query(`
         INSERT INTO lectures (title, description, subject, chapter_count, total_slides, cover_color)
         VALUES (
           'Introduction to Machine Learning',
-          'Giáo trình bài giảng Trí tuệ Nhân tạo & Học máy chuyên sâu dành cho Giảng viên',
+          'Tài liệu bài học Trí tuệ Nhân tạo & Học máy chuyên sâu dành cho Người học',
           'Trí tuệ nhân tạo',
           3,
           24,
@@ -157,7 +159,7 @@ In Artificial Neural Networks (ANN), this is modeled mathematically as $y = f(\\
           callout_type: i % 2 === 0 ? 'formula' : 'takeaway',
           callout_title: i % 2 === 0 ? 'Formula / Calculation' : 'Important Note',
           callout_content: `Key theoretical insight for slide ${i}. Ensure students understand intuitive mechanics.`,
-          speaker_notes: `Ghi chú cho giảng viên tại slide số ${i}: Nhắc sinh viên làm bài lab thực hành.`
+          speaker_notes: `Ghi chú cá nhân tại slide số ${i}: Tự ôn luyện và làm bài lab thực hành.`
         });
       }
 
@@ -181,7 +183,8 @@ In Artificial Neural Networks (ANN), this is modeled mathematically as $y = f(\\
         ]);
       }
     }
-  } catch (error) {
+  }
+} catch (error) {
     console.error('Error bootstrapping lecture schema:', error);
   }
 }

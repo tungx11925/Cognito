@@ -6,6 +6,7 @@ import { User, Phone, Mail, Lock, Eye, EyeOff, CheckCircle2, XCircle, Circle, X,
 import { useStudy } from '@/context/StudyContext';
 import { useRouter } from 'next/navigation';
 import { googleLogin } from '../../services/auth.service';
+import { getSafeReturnUrl } from './RouteGuard';
 import Lottie from 'lottie-react';
 import loginAnimation from './login-animation.json';
 import registerAnimation from './register-animation.json';
@@ -131,10 +132,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
   const [twoFACode, setTwoFACode] = useState('');
   const [twoFAError, setTwoFAError] = useState('');
   
-  const [isForceChangePasswordMode, setIsForceChangePasswordMode] = useState(false);
-  const [forceChangeEmail, setForceChangeEmail] = useState('');
-  const [forceChangeError, setForceChangeError] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const phoneRegex = /^(03|05|07|08|09)\d{8}$/;
@@ -175,7 +173,8 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         setIsAuthenticated(true);
         onClose();
         triggerMessage("Đăng nhập bằng Google thành công!", "success");
-        router.push('/home');
+        const target = getSafeReturnUrl('/home');
+        router.push(target);
       } else {
         triggerMessage(res.error || "Không thể đăng nhập bằng Google", "error");
       }
@@ -427,17 +426,13 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         if (result.requires2FA) {
           setTwoFAEmail(result.email || email);
           setIsTwoFAMode(true);
-        } else if (result.requiresPasswordChange) {
-          setForceChangeEmail(result.email || email);
-          setIsForceChangePasswordMode(true);
         } else {
           onClose();
           if (result.role === 'admin') {
             router.push('/admin');
-          } else if (result.role === 'teacher') {
-            router.push('/teacher');
           } else {
-            router.push('/home');
+            const target = getSafeReturnUrl('/home');
+            router.push(target);
           }
         }
       }
@@ -454,40 +449,13 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     const success = await verify2FA(twoFAEmail, twoFACode);
     if (success) {
       onClose();
-      router.push('/home');
+      const target = getSafeReturnUrl('/home');
+      router.push(target);
     } else {
       setTwoFAError('Mã xác nhận không hợp lệ');
     }
   };
 
-  const handleForceChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setForceChangeError('');
-    if (!newPassword || newPassword.length < 8) {
-      setForceChangeError('Mật khẩu mới phải có ít nhất 8 ký tự');
-      return;
-    }
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/auth/force-change-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: forceChangeEmail, currentPassword: password, newPassword })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        localStorage.setItem('token', data.token);
-        setActiveUser(data.user);
-        setIsAuthenticated(true);
-        triggerMessage(data.message || 'Kích hoạt thành công', 'success');
-        onClose();
-        router.push('/school');
-      } else {
-        setForceChangeError(data.error || 'Đổi mật khẩu thất bại');
-      }
-    } catch (err) {
-      setForceChangeError('Lỗi kết nối');
-    }
-  };
 
   const handleTwoFASubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -498,7 +466,8 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     const success = await verify2FA(twoFAEmail, twoFACode);
     if (success) {
       onClose();
-      router.push('/home');
+      const target = getSafeReturnUrl('/home');
+      router.push(target);
     } else {
       setTwoFAError("Mã xác thực không chính xác hoặc đã hết hạn");
     }
@@ -544,49 +513,6 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
       onClose();
     }
   };
-
-  if (isForceChangePasswordMode) {
-    return (
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <motion.div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8">
-              <button onClick={onClose} className="absolute top-6 right-6 text-gray-400 hover:text-gray-900 transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-              
-              <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-gray-900">Kích hoạt tài khoản</h2>
-                <p className="text-gray-500 mt-2 text-sm">Tài khoản này được cấp bởi Nhà trường. Bạn cần đổi mật khẩu để bảo mật trước khi tiếp tục.</p>
-              </div>
-
-              <form onSubmit={handleForceChangePassword} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu mới</label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                    placeholder="Nhập mật khẩu mới"
-                  />
-                </div>
-                
-                {forceChangeError && (
-                  <p className="text-sm text-red-500 text-center">{forceChangeError}</p>
-                )}
-
-                <button type="submit" className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl">
-                  Đổi mật khẩu & Kích hoạt
-                </button>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    );
-  }
 
   if (!isOpen) return null;
 

@@ -1,0 +1,46 @@
+{
+  "testUser": "repro_1791554909992@test.cognito",
+  "routeResults": [
+    {
+      "route": "/library",
+      "isStillLoggedIn": false,
+      "tokenPresent": false,
+      "unauthorizedCount": 2,
+      "authEventsCount": 4
+    }
+  ],
+  "unauthorizedResponses": [
+    {
+      "status": 401,
+      "url": "http://localhost:3000/api/notifications/stream-ticket",
+      "timestamp": 1791554921329
+    },
+    {
+      "status": 401,
+      "url": "http://localhost:3000/api/notifications?limit=30",
+      "timestamp": 1791554921336
+    }
+  ],
+  "authEvents": [
+    {
+      "type": "CONSOLE",
+      "text": "[AUTH_FE_DEBUG] [401_FROM_API] Endpoint returned 401: /api/notifications/stream-ticket Request options: {method: POST}",
+      "timestamp": 1791554921331
+    },
+    {
+      "type": "CONSOLE",
+      "text": "[AUTH_FE_DEBUG] [WIPING_TOKEN] Removing token due to 401 on: /api/notifications/stream-ticket",
+      "timestamp": 1791554921332
+    },
+    {
+      "type": "CONSOLE",
+      "text": "[AUTH_FE_DEBUG] [HANDLE_UNAUTHORIZED_EVENT] Received cognito:unauthorized event! Clearing session!",
+      "timestamp": 1791554921335
+    },
+    {
+      "type": "CONSOLE",
+      "text": "[AUTH_FE_DEBUG] [401_FROM_API] Endpoint returned 401: /api/notifications?limit=30 Request options: undefined",
+      "timestamp": 1791554921336
+    }
+  ]
+}

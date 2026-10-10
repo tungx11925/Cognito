@@ -139,6 +139,27 @@ export async function indexDocumentChunks(
 }
 
 /**
+ * Embed a list of already inserted chunks and update their embedding column.
+ */
+export async function embedChunks(chunks: Array<{ id: number; content: string }>): Promise<void> {
+  if (!isEmbeddingConfigured() || !chunks.length) return;
+  const batchSize = 50;
+  for (let i = 0; i < chunks.length; i += batchSize) {
+    const batch = chunks.slice(i, i + batchSize);
+    const texts = batch.map(c => c.content);
+    const vectors = await embedBatch(texts);
+    for (let j = 0; j < batch.length; j++) {
+      const vector = vectors[j];
+      if (!vector || vector.length !== EMBEDDING_DIM) continue;
+      await db.query(
+        'UPDATE document_chunks SET embedding = $1::vector WHERE id = $2',
+        [toVectorLiteral(vector), batch[j].id]
+      );
+    }
+  }
+}
+
+/**
  * Similarity search theo vector (pgvector cosine). Chỉ search trong 1 tài liệu.
  * Fallback tự động về keyword search nếu chưa có embedding/key.
  */

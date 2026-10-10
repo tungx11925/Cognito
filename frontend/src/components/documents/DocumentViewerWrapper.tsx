@@ -26,6 +26,9 @@ export default function DocumentViewerWrapper({
   url: string;
   fileType?: string;
 }) {
+  const [error, setError] = useState<string | null>(null);
+  const [useFallback, setUseFallback] = useState(false);
+
   if (!rawUrl) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center p-8 text-gray-400">
@@ -38,9 +41,6 @@ export default function DocumentViewerWrapper({
     ? rawUrl.replace('http://', 'https://')
     : rawUrl;
 
-  const [error, setError] = useState<string | null>(null);
-  const [useFallback, setUseFallback] = useState(false);
-
   const fileExt = getFileExtension(url);
   const isDocx = 
     (fileType && (fileType.includes('word') || fileType.includes('officedocument') || fileType.includes('docx') || fileType.includes('msword'))) ||
@@ -49,6 +49,23 @@ export default function DocumentViewerWrapper({
   const isPdf = 
     (fileType && fileType.includes('pdf')) || 
     (!isDocx && fileExt === 'pdf');
+
+  const isImage = 
+    (fileType && fileType.startsWith('image/')) || 
+    ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(fileExt);
+
+  if (isImage) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gray-900/5 p-4 overflow-auto">
+        <img
+          src={url}
+          alt="Document preview"
+          className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
+          onError={() => setError('Không thể tải tệp ảnh.')}
+        />
+      </div>
+    );
+  }
 
   if (isDocx) {
     return (

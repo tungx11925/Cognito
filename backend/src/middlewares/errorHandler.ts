@@ -5,7 +5,8 @@ import { ZodError } from 'zod';
 export const errorHandler = (err: Error, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
-      error: err.message
+      error: err.message,
+      code: err.code || (err.statusCode === 429 ? 'QUOTA_EXCEEDED' : err.statusCode === 504 ? 'AI_TIMEOUT' : 'APP_ERROR')
     });
   }
 

@@ -1,49 +1,16 @@
 import { activityRepository } from '../repositories/activity.repository';
 import { getVietnamDateString } from '../utils/date.util';
 import { sseService } from '../utils/sse.service';
+import { streakService } from './streak.service';
+import { notificationService } from './notification.service';
 
 class ActivityService {
   async updateUserStreak(userId: number) {
     try {
-      const today = new Date();
-      const todayStr = getVietnamDateString(today);
-
-      await activityRepository.logStudyDate(userId, todayStr);
-      const datesRes = await activityRepository.getStudyDates(userId);
-
-      const dates: string[] = datesRes.map(row => {
-        const d = new Date(row.study_date);
-        return getVietnamDateString(d);
-      });
-
-      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-      const yesterdayStr = getVietnamDateString(yesterday);
-
-      let streak = 0;
-      let checkDate = new Date(); // Start checking from today
-
-      if (!dates.includes(todayStr)) {
-        if (dates.includes(yesterdayStr)) {
-          checkDate = yesterday;
-        } else {
-          // No study today or yesterday
-          await activityRepository.resetStreak(userId);
-          return 0;
-        }
-      }
-
-      while (true) {
-        const checkStr = getVietnamDateString(checkDate);
-        if (dates.includes(checkStr)) {
-          streak++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-          break;
-        }
-      }
-
-      await activityRepository.updateStreak(userId, streak);
-      return streak;
+      const streakInfo = await streakService.calculateUserStreak(userId);
+      // Đồng bộ vào users.streak để duy trì tương thích ngược cho các query cũ
+      await activityRepository.updateStreak(userId, streakInfo.currentStreak);
+      return streakInfo.currentStreak;
     } catch (error) {
       console.error('Error in updateUserStreak:', error);
       return 0;
@@ -129,6 +96,15 @@ class ActivityService {
             rewardXP: 50,
             timestamp: new Date().toISOString()
           });
+
+          // Insert persistent task completion notification in DB
+          notificationService.createNotification({
+            userId,
+            type: 'task',
+            title: 'Nhiệm vụ hoàn thành!',
+            content: `Bạn đã hoàn thành nhiệm vụ "${completedTask.title}" (+50 XP)`,
+            link: '/progress',
+          }).catch(err => console.error('Error creating task completion notification:', err));
 
           return { task: completedTask, justCompleted: true };
         }

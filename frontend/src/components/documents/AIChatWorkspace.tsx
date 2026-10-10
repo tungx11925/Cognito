@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { chatWithAI, generateQuiz } from '@/services/ai.service';
-import { Send, Bot, User, Brain, AlertCircle, PlayCircle, Loader2, Trash2, Image as ImageIcon, X, Maximize2 } from 'lucide-react';
+import { Send, Bot, User, Brain, AlertCircle, PlayCircle, Loader2, Trash2, Image as ImageIcon, X, Maximize2, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStudy } from '@/context/StudyContext';
 
@@ -13,6 +13,9 @@ import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import 'katex/dist/katex.min.css';
 import { preprocessMathContent } from '@/utils/math';
+
+import StickyPromptBar, { ActivePromptState } from '@/components/ai/StickyPromptBar';
+import { ArrowDown } from 'lucide-react';
 
 interface Props {
   documentId: number;
@@ -33,7 +36,12 @@ interface Message {
   images?: string[];
   type?: 'text' | 'quiz' | 'flashcards';
   data?: any;
+  appliedPrompt?: {
+    text: string;
+    label?: string;
+  };
 }
+
 
 const MarkdownRenderer = ({ content, isUser }: { content: string; isUser: boolean }) => {
   const normalizedContent = preprocessMathContent(content);
@@ -119,13 +127,18 @@ const MarkdownRenderer = ({ content, isUser }: { content: string; isUser: boolea
 };
 
 export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
+  const [contextMode, setContextMode] = useState<'DOCUMENT_CONTEXT' | 'GENERAL'>('DOCUMENT_CONTEXT');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [selectedImages, setSelectedImages] = useState<UploadedImage[]>([]);
   const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [activePrompt, setActivePrompt] = useState<ActivePromptState | null>(null);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   
   // Load chat history from localStorage on mount
   useEffect(() => {
@@ -155,17 +168,17 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const handleScroll = () => {
+    if (!chatContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    setShowScrollBottom(scrollHeight - scrollTop - clientHeight > 180);
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    const handleSendAI = (e: any) => {
-      handleSend(e.detail);
-    };
-    window.addEventListener('SEND_AI_MESSAGE', handleSendAI);
-    return () => window.removeEventListener('SEND_AI_MESSAGE', handleSendAI);
-  }, [documentId]);
+
 
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -255,6 +268,12 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
     if (fileInputRef.current) fileInputRef.current.value = '';
     setIsLoading(true);
 
+    // Apply active prompt if present
+    const promptSnapshot = activePrompt;
+    const finalContentToSend = promptSnapshot
+      ? `[Chỉ dẫn yêu cầu từ người dùng: "${promptSnapshot.text}"]\n\n${userMsg.content}`
+      : userMsg.content;
+
     try {
       const history = messages
         .filter(m => m.id !== 'welcome' && m.type !== 'quiz')
@@ -263,27 +282,79 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
           content: m.content
         }));
 
-      const response = await chatWithAI(documentId, userMsg.content, history, currentImages);
+      const response = await chatWithAI(documentId, finalContentToSend, history, currentImages, contextMode);
+
+      if (response && response.error) {
+        let classifiedContent = '';
+        const errText = (response.message || response.error || '').toLowerCase();
+        const errCode = response.code || '';
+
+        if (errCode === 'QUOTA_EXCEEDED' || errCode === 'LIMIT_EXCEEDED' || errText.includes('hạn ngạch') || errText.includes('giới hạn') || errText.includes('quota') || errText.includes('budget')) {
+          classifiedContent = `⚠️ **Hết hạn mức AI (Quota Exceeded)**\n\n${response.message || response.error}\n\n*Gợi ý:* Bạn có thể nâng cấp tài khoản hoặc đợi sang ngày mới để được cấp mới lượt tương tác.`;
+          toast.error('Đã đạt giới hạn lượt chat AI trong ngày');
+        } else if (errCode === 'AI_TIMEOUT' || errText.includes('timeout') || errText.includes('thời gian chờ')) {
+          classifiedContent = `⏱️ **Quá thời gian phản hồi (Timeout)**\n\n${response.message || response.error}\n\n*Gợi ý:* Hãy thử rút ngắn câu hỏi hoặc chia nhỏ nội dung cần hỏi.`;
+          toast.error('AI phản hồi quá thời gian cho phép');
+        } else if (errCode === 'AI_PROVIDER_ERROR' || errText.includes('nhà cung cấp') || errText.includes('provider') || errText.includes('502') || errText.includes('503')) {
+          classifiedContent = `⚙️ **Lỗi dịch vụ AI (Provider Error)**\n\n${response.message || response.error}\n\nDịch vụ AI đang gặp sự cố tạm thời. Vui lòng thử lại sau giây lát.`;
+          toast.error('Dịch vụ AI đang gặp sự cố kết nối');
+        } else if (response.error.includes('Server trả về HTML')) {
+          classifiedContent = `🔌 **Lỗi cấu hình kết nối máy chủ**\n\n${response.error}\n\nVui lòng kiểm tra lại địa chỉ API backend.`;
+        } else {
+          classifiedContent = `❌ **Lỗi phản hồi:** ${response.message || response.error}`;
+        }
+
+        const errAiMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'ai',
+          content: classifiedContent,
+          type: 'text',
+          appliedPrompt: promptSnapshot ? { text: promptSnapshot.text, label: promptSnapshot.label } : undefined
+        };
+        setMessages(prev => [...prev, errAiMsg]);
+        return;
+      }
+
       const aiMsg: Message = { 
         id: (Date.now() + 1).toString(), 
         role: 'ai', 
-        content: response.reply || 'Xin lỗi, tôi không thể trả lời lúc này.',
-        type: 'text'
+        content: response.reply || 'Không nhận được câu trả lời từ AI. Vui lòng thử lại.',
+        type: 'text',
+        appliedPrompt: promptSnapshot ? { text: promptSnapshot.text, label: promptSnapshot.label } : undefined
       };
       setMessages(prev => [...prev, aiMsg]);
-    } catch (error) {
+
+      // If active prompt was not pinned, unapply it after sending
+      if (promptSnapshot && !promptSnapshot.isPinned) {
+        setActivePrompt(null);
+      }
+    } catch (error: any) {
       console.error('Chat error:', error);
       const errMsg: Message = { 
         id: (Date.now() + 1).toString(), 
         role: 'ai', 
-        content: 'Đã có lỗi xảy ra khi phân tích và kết nối với AI. Vui lòng thử lại sau.',
-        type: 'text'
+        content: `❌ **Lỗi kết nối mạng:** ${error?.message || 'Không thể gửi tin nhắn đến máy chủ. Vui lòng kiểm tra kết nối mạng.'}`,
+        type: 'text',
+        appliedPrompt: promptSnapshot ? { text: promptSnapshot.text, label: promptSnapshot.label } : undefined
       };
       setMessages(prev => [...prev, errMsg]);
     } finally {
       setIsLoading(false);
     }
   };
+
+
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+
+  useEffect(() => {
+    const handleSendAI = (e: any) => {
+      setContextMode('DOCUMENT_CONTEXT');
+      handleSendRef.current(e.detail);
+    };
+    window.addEventListener('SEND_AI_MESSAGE', handleSendAI);
+    return () => window.removeEventListener('SEND_AI_MESSAGE', handleSendAI);
+  }, []);
 
   const handleGenerateQuiz = async () => {
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: 'Tạo bài trắc nghiệm từ tài liệu này' };
@@ -348,19 +419,64 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
 
   return (
     <div className="flex-1 flex flex-col relative bg-[#EBE9E4] overflow-hidden">
-      {/* Header with Clear Button */}
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-        <button 
-          onClick={clearHistory}
-          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shadow-sm bg-white border border-gray-300 cursor-pointer"
-          title="Xóa lịch sử trò chuyện"
-        >
-          <Trash2 size={16} />
-        </button>
+      {/* Context Mode Toggle Header (Master Prompt Phase 5: GENERAL vs DOCUMENT_CONTEXT) */}
+      <div className="px-3.5 py-2 bg-white/95 backdrop-blur-md border-b border-gray-300 flex items-center justify-between shrink-0 z-10 shadow-xs">
+        <div className="flex items-center gap-1 bg-[#EBE9E4] p-0.5 rounded-lg border border-gray-300">
+          <button 
+            type="button"
+            onClick={() => setContextMode('DOCUMENT_CONTEXT')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
+              contextMode === 'DOCUMENT_CONTEXT' 
+                ? 'bg-[#0D2B24] text-white shadow-xs' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-white/40'
+            }`}
+            title="AI ưu tiên đối chiếu và trích xuất ngữ cảnh tài liệu đang mở"
+          >
+            <span>📄</span>
+            <span>Theo tài liệu</span>
+          </button>
+          <button 
+            type="button"
+            onClick={() => setContextMode('GENERAL')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
+              contextMode === 'GENERAL' 
+                ? 'bg-[#0D2B24] text-white shadow-xs' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-white/40'
+            }`}
+            title="Hỏi đáp kiến thức học tập tổng quát ngoài tài liệu"
+          >
+            <span>🌐</span>
+            <span>Tổng quát</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-gray-500 hidden sm:inline">
+            {contextMode === 'DOCUMENT_CONTEXT' ? 'Ưu tiên tài liệu' : 'Kiến thức chung'}
+          </span>
+          <button 
+            onClick={clearHistory}
+            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shadow-xs bg-white border border-gray-300 cursor-pointer"
+            title="Xóa lịch sử trò chuyện"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
 
+      {/* Sticky Applied Prompt Bar (Master Prompt Phase 41 / Spec C) */}
+      <StickyPromptBar
+        documentId={documentId}
+        activePrompt={activePrompt}
+        onChangeActivePrompt={setActivePrompt}
+      />
+
       {/* Chat Messages Area */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-[#EBE9E4] pb-44 pt-10">
+      <div 
+        ref={chatContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-5 space-y-6 bg-[#EBE9E4] pb-44 pt-3 relative"
+      >
         {messages.map((msg) => {
           const displayImages = msg.images || (msg.image ? [msg.image] : []);
           const isUser = msg.role === 'user';
@@ -371,11 +487,21 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
               </div>
               
               <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[90%]`}>
+                {/* Applied Prompt Badge on AI messages */}
+                {!isUser && msg.appliedPrompt && (
+                  <div className="mb-1.5 flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-emerald-100/90 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 text-[11px] text-emerald-900 dark:text-emerald-200 shadow-2xs font-sans">
+                    <Sparkles size={11} className="text-emerald-600 shrink-0" />
+                    <span className="font-bold">Chỉ dẫn:</span>
+                    <span className="truncate max-w-[280px] italic">&quot;{msg.appliedPrompt.text}&quot;</span>
+                  </div>
+                )}
+
                 <div className={`border rounded-2xl p-4 text-[14px] leading-relaxed shadow-md ${
                   isUser 
                     ? 'bg-[#0D2B24] text-white border-[#0b1f1a] rounded-tr-sm' 
                     : 'bg-white border-gray-300 text-gray-800 rounded-tl-sm'
                 }`}>
+
                   {/* Display Images Gallery if attached */}
                   {displayImages.length > 0 && (
                     <div className={`mb-3 ${
@@ -453,9 +579,21 @@ export default function AIChatWorkspace({ documentId, documentTitle }: Props) {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Floating Scroll-to-Bottom Button */}
+      {showScrollBottom && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-24 right-6 z-30 px-3 py-1.5 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border border-gray-300 dark:border-zinc-700 shadow-md rounded-full text-xs font-bold text-gray-700 dark:text-gray-200 flex items-center gap-1.5 hover:bg-emerald-50 dark:hover:bg-zinc-700 transition-all active:scale-95 animate-in fade-in slide-in-from-bottom-2 cursor-pointer"
+        >
+          <ArrowDown size={14} className="text-emerald-600" />
+          Về câu hỏi gần nhất
+        </button>
+      )}
       
       {/* Fixed Input Chat Box */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#EBE9E4] via-[#EBE9E4] to-transparent pt-6 z-20">
+
         {/* Multi-Image Attachment Preview Tray */}
         {selectedImages.length > 0 && (
           <div className="mb-2.5 p-2.5 bg-white/95 backdrop-blur-md border border-emerald-500/40 rounded-2xl shadow-md animate-in slide-in-from-bottom-2 duration-200">

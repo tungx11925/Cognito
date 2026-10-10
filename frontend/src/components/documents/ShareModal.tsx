@@ -1,38 +1,75 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Link as LinkIcon, Globe, Lock, Users, Copy, Check } from 'lucide-react';
+import { X, Globe, Lock, Users, Copy, Check, EyeOff, Loader2 } from 'lucide-react';
 
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
   resourceId: number;
   resourceType: 'document' | 'deck';
-  triggerMessage: (msg: string, type?: 'success'|'error') => void;
+  triggerMessage: (msg: string, type?: 'success' | 'error') => void;
+  onShareUpdated?: () => void;
 }
 
-export default function ShareModal({ isOpen, onClose, resourceId, resourceType, triggerMessage }: ShareModalProps) {
+export default function ShareModal({ 
+  isOpen, 
+  onClose, 
+  resourceId, 
+  resourceType, 
+  triggerMessage,
+  onShareUpdated 
+}: ShareModalProps) {
   const [visibility, setVisibility] = useState<'private' | 'restricted' | 'public'>('private');
   const [accessType, setAccessType] = useState<'viewer' | 'editor' | 'forker'>('viewer');
-  const [price, setPrice] = useState<number>(0);
+  const [isCommunityPublished, setIsCommunityPublished] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+  useEffect(() => {
+    if (!isOpen || !resourceId) return;
+
+    let isMounted = true;
+    const fetchCurrentStatus = async () => {
+      setInitialLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_BASE_URL}/shares/status/${resourceType}/${resourceId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setVisibility(data.visibility || 'private');
+            setIsCommunityPublished(Boolean(data.isCommunityPublished));
+            if (data.shareUrl) setShareUrl(data.shareUrl);
+            if (data.accessType) setAccessType(data.accessType);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load current share status', err);
+      } finally {
+        if (isMounted) setInitialLoading(false);
+      }
+    };
+
+    fetchCurrentStatus();
+    return () => { isMounted = false; };
+  }, [isOpen, resourceId, resourceType, API_BASE_URL]);
 
   if (!isOpen) return null;
 
-  const handleGenerateLink = async () => {
+  const handleSaveShareSettings = async (targetVisibility?: 'private' | 'restricted' | 'public') => {
+    const selectedVis = targetVisibility || visibility;
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const body: any = { visibility, accessType };
+      const body: any = { visibility: selectedVis, accessType };
       if (resourceType === 'document') body.documentId = resourceId;
       else body.deckId = resourceId;
-
-      if (visibility === 'public') {
-        body.price = price;
-      }
 
       const res = await fetch(`${API_BASE_URL}/shares/generate`, {
         method: 'POST',
@@ -45,24 +82,33 @@ export default function ShareModal({ isOpen, onClose, resourceId, resourceType, 
 
       const data = await res.json();
       if (res.ok) {
-        if (visibility === 'private') {
-          triggerMessage("Đã chuyển tài nguyên về chế độ riêng tư.");
-          onClose();
+        setVisibility(selectedVis);
+        setIsCommunityPublished(selectedVis === 'public');
+        if (selectedVis === 'private') {
+          setShareUrl('');
+          triggerMessage("Đã gỡ khỏi cộng đồng và chuyển về chế độ riêng tư thành công.", "success");
         } else {
-          setShareUrl(data.shareUrl);
-          triggerMessage("Đã cập nhật quyền chia sẻ thành công.");
+          setShareUrl(data.shareUrl || '');
+          triggerMessage(
+            selectedVis === 'public'
+              ? "Tài liệu đã được công khai lên Cộng đồng thành công!"
+              : "Đã bật chia sẻ bằng liên kết (Không xuất hiện trên Cộng đồng).",
+            "success"
+          );
         }
+        if (onShareUpdated) onShareUpdated();
       } else {
-        triggerMessage(data.error || "Lỗi khi chia sẻ", "error");
+        triggerMessage(data.error || "Lỗi khi cập nhật quyền chia sẻ", "error");
       }
     } catch (e) {
-      triggerMessage("Lỗi kết nối", "error");
+      triggerMessage("Lỗi kết nối máy chủ", "error");
     } finally {
       setLoading(false);
     }
   };
 
   const handleCopy = () => {
+    if (!shareUrl) return;
     navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -75,97 +121,178 @@ export default function ShareModal({ isOpen, onClose, resourceId, resourceType, 
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative w-full max-w-lg bg-white rounded-xl shadow-xl overflow-hidden"
+        className="relative w-full max-w-lg bg-card text-card-foreground rounded-2xl shadow-2xl border border-border overflow-hidden"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-xl font-semibold text-[#1a3d28]">Chia sẻ {resourceType === 'document' ? 'tài liệu' : 'bộ thẻ'}</h2>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
-            <X size={20} />
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/30">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              Chia sẻ {resourceType === 'document' ? 'tài liệu' : 'bộ thẻ ghi nhớ'}
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              1 Nguồn sự thật: Kiểm soát hiển thị trên Cộng đồng & Liên kết
+            </p>
+          </div>
+          <button 
+            onClick={onClose} 
+            className="p-1.5 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors"
+          >
+            <X size={18} />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Quyền truy cập chung */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Quyền truy cập chung</h3>
-            <div className="space-y-3">
-              <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${visibility === 'private' ? 'border-[#1a3d28] bg-green-50/50' : 'border-gray-200'}`}>
-                <input type="radio" name="visibility" className="mt-1" checked={visibility === 'private'} onChange={() => setVisibility('private')} />
-                <div>
-                  <div className="flex items-center gap-2 font-medium text-gray-900"><Lock size={16} /> Hạn chế (Riêng tư)</div>
-                  <p className="text-sm text-gray-500">Chỉ bạn mới có quyền truy cập tài nguyên này.</p>
+        {/* Body */}
+        <div className="p-6 space-y-5">
+          {initialLoading ? (
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <span className="text-xs">Đang tải trạng thái chia sẻ...</span>
+            </div>
+          ) : (
+            <>
+              {/* Status Badge */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border/60">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Trạng thái hiện tại:</span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                    visibility === 'public' 
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      : visibility === 'restricted'
+                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                      : 'bg-muted text-muted-foreground border border-border'
+                  }`}>
+                    {visibility === 'public' ? 'Công khai trên Cộng đồng' : visibility === 'restricted' ? 'Chia sẻ bằng link' : 'Riêng tư (Chỉ mình bạn)'}
+                  </span>
                 </div>
-              </label>
 
-              <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${visibility === 'restricted' ? 'border-[#1a3d28] bg-green-50/50' : 'border-gray-200'}`}>
-                <input type="radio" name="visibility" className="mt-1" checked={visibility === 'restricted'} onChange={() => setVisibility('restricted')} />
-                <div>
-                  <div className="flex items-center gap-2 font-medium text-gray-900"><Users size={16} /> Bất kỳ ai có đường liên kết</div>
-                  <p className="text-sm text-gray-500">Bất kỳ ai trên Internet có đường liên kết đều có thể xem.</p>
+                {/* Nút gỡ nhanh nếu đang công khai */}
+                {isCommunityPublished && (
+                  <button
+                    onClick={() => handleSaveShareSettings('private')}
+                    disabled={loading}
+                    className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-600 hover:underline font-medium"
+                  >
+                    <EyeOff size={13} />
+                    Gỡ khỏi Cộng đồng
+                  </button>
+                )}
+              </div>
+
+              {/* 3 Lựa chọn rõ ràng */}
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5">
+                  Chọn quyền truy cập
+                </h3>
+                <div className="space-y-2.5">
+                  {/* 1. Riêng tư */}
+                  <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    visibility === 'private' 
+                      ? 'border-primary/60 bg-primary/5 shadow-sm' 
+                      : 'border-border/70 hover:border-border hover:bg-muted/20'
+                  }`}>
+                    <input 
+                      type="radio" 
+                      name="visibility" 
+                      className="mt-1 text-primary focus:ring-primary" 
+                      checked={visibility === 'private'} 
+                      onChange={() => setVisibility('private')} 
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 font-medium text-sm text-foreground">
+                        <Lock size={15} className="text-muted-foreground" /> 
+                        Riêng tư (Chỉ chủ sở hữu)
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Chỉ mình bạn có quyền xem và thao tác. Ẩn khỏi trang Cộng đồng và Tìm kiếm.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* 2. Chia sẻ bằng liên kết */}
+                  <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    visibility === 'restricted' 
+                      ? 'border-primary/60 bg-primary/5 shadow-sm' 
+                      : 'border-border/70 hover:border-border hover:bg-muted/20'
+                  }`}>
+                    <input 
+                      type="radio" 
+                      name="visibility" 
+                      className="mt-1 text-primary focus:ring-primary" 
+                      checked={visibility === 'restricted'} 
+                      onChange={() => setVisibility('restricted')} 
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 font-medium text-sm text-foreground">
+                        <Users size={15} className="text-blue-500" /> 
+                        Chia sẻ bằng liên kết (Link-only)
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Bất kỳ ai có đường link đều có thể xem ở chế độ chỉ đọc. <strong>Không xuất hiện</strong> trên bảng tin Cộng đồng.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* 3. Công khai lên Cộng đồng */}
+                  <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    visibility === 'public' 
+                      ? 'border-primary/60 bg-primary/5 shadow-sm' 
+                      : 'border-border/70 hover:border-border hover:bg-muted/20'
+                  }`}>
+                    <input 
+                      type="radio" 
+                      name="visibility" 
+                      className="mt-1 text-primary focus:ring-primary" 
+                      checked={visibility === 'public'} 
+                      onChange={() => setVisibility('public')} 
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 font-medium text-sm text-foreground">
+                        <Globe size={15} className="text-emerald-500" /> 
+                        Công khai lên Cộng đồng
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Xuất hiện ngay tại <strong>Cộng đồng</strong>, <strong>Tìm kiếm công khai</strong>, và <strong>Hồ sơ của bạn</strong>.
+                      </p>
+                    </div>
+                  </label>
                 </div>
-              </label>
+              </div>
 
-              <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${visibility === 'public' ? 'border-[#1a3d28] bg-green-50/50' : 'border-gray-200'}`}>
-                <input type="radio" name="visibility" className="mt-1" checked={visibility === 'public'} onChange={() => setVisibility('public')} />
-                <div>
-                  <div className="flex items-center gap-2 font-medium text-gray-900"><Globe size={16} /> Công khai trên Chợ Cộng Đồng</div>
-                  <p className="text-sm text-gray-500">Chia sẻ trên Marketplace để nhận lại Coins/Points.</p>
+              {/* Share URL Box */}
+              {shareUrl && visibility !== 'private' && (
+                <div className="p-3 bg-muted/50 rounded-xl border border-border/80 space-y-1.5">
+                  <div className="text-[11px] font-medium text-muted-foreground">Đường dẫn chia sẻ trực tiếp:</div>
+                  <div className="flex items-center justify-between gap-2 bg-background p-2 rounded-lg border border-border">
+                    <span className="text-xs text-foreground truncate font-mono select-all">{shareUrl}</span>
+                    <button 
+                      onClick={handleCopy} 
+                      className="flex items-center gap-1 px-2.5 py-1 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
+                    >
+                      {copied ? <Check size={12} className="text-green-300" /> : <Copy size={12} />}
+                      {copied ? 'Đã sao chép' : 'Sao chép'}
+                    </button>
+                  </div>
                 </div>
-              </label>
-            </div>
-          </div>
-
-          {/* Quyền hạn hoặc Giá */}
-          {visibility === 'restricted' && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Vai trò</h3>
-              <select 
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                value={accessType}
-                onChange={(e) => setAccessType(e.target.value as any)}
-              >
-                <option value="viewer">Người xem</option>
-                <option value="editor">Người chỉnh sửa</option>
-                {resourceType === 'deck' && <option value="forker">Được phép sao chép (Fork)</option>}
-              </select>
-            </div>
+              )}
+            </>
           )}
-
-          {visibility === 'public' && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Giá tiền (Xu/Points)</h3>
-              <input 
-                type="number" 
-                min="0"
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                placeholder="Nhập 0 để miễn phí"
-                value={price}
-                onChange={(e) => setPrice(Number(e.target.value))}
-              />
-              <p className="text-xs text-gray-500 mt-1">Nhập 0 nếu bạn muốn đóng góp miễn phí cho cộng đồng.</p>
-            </div>
-          )}
-
-          {shareUrl && visibility !== 'private' && (
-            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-between gap-3">
-              <span className="text-sm text-gray-600 truncate">{shareUrl}</span>
-              <button onClick={handleCopy} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-md text-sm font-medium hover:bg-gray-50 whitespace-nowrap">
-                {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                {copied ? 'Đã chép' : 'Sao chép'}
-              </button>
-            </div>
-          )}
-
         </div>
 
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Đóng</button>
+        {/* Footer */}
+        <div className="px-6 py-3.5 bg-muted/30 border-t border-border flex justify-end gap-2.5">
           <button 
-            onClick={handleGenerateLink} 
-            disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#1a3d28] hover:bg-[#143020] rounded-lg flex items-center gap-2"
+            onClick={onClose} 
+            className="px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors"
           >
-            {loading ? 'Đang lưu...' : (shareUrl ? 'Cập nhật' : 'Tạo liên kết')}
+            Đóng
+          </button>
+          <button 
+            onClick={() => handleSaveShareSettings()} 
+            disabled={loading || initialLoading}
+            className="px-4 py-2 text-xs font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-xl flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
+          >
+            {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {loading ? 'Đang lưu...' : (visibility === 'public' ? 'Lưu & Đăng Cộng đồng' : 'Cập nhật')}
           </button>
         </div>
       </motion.div>

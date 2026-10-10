@@ -18,3 +18,22 @@ export const register = (data: any) => apiFetch('/auth/register', {
     body: JSON.stringify(data)
 });
 
+export const refreshToken = (token?: string) => apiFetch('/auth/refresh', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    }
+});
+
+export const getMe = (token?: string) => apiFetch('/auth/me', {
+    method: 'GET',
+    headers: {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    }
+});
+
+export const logout = () => apiFetch('/auth/logout', {
+    method: 'POST'
+});
+

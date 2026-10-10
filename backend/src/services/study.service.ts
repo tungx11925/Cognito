@@ -1,59 +1,26 @@
 import { db } from '../db';
 import { getVietnamDateString } from '../utils/date.util';
+import { progressService } from './progress.service';
 
 export class StudyService {
   async getStats(userId: number) {
-    const [
-      totalTimeResult,
-      sessionsCountResult,
-      documentCountResult,
-      flashcardsCountResult,
-      userRes,
-      totalReviewsResult,
-      totalNotesResult,
-      chartResult
-    ] = await Promise.all([
-      db.query('SELECT COALESCE(SUM(duration_seconds), 0) as total_seconds FROM study_sessions WHERE user_id = $1', [userId]),
-      db.query('SELECT COUNT(*) as count FROM study_sessions WHERE user_id = $1', [userId]),
-      db.query('SELECT COUNT(*) as count FROM documents WHERE user_id = $1', [userId]),
-      db.query(`SELECT COUNT(*) as count FROM flashcards f JOIN flashcard_decks d ON f.deck_id = d.id WHERE d.user_id = $1`, [userId]),
-      db.query('SELECT streak FROM users WHERE id = $1', [userId]),
-      db.query(`SELECT COALESCE(SUM(repetitions), 0) as count FROM flashcards f JOIN flashcard_decks d ON f.deck_id = d.id WHERE d.user_id = $1`, [userId]),
-      db.query('SELECT COUNT(*) as count FROM notes WHERE user_id = $1', [userId]),
-      db.query(`
-        WITH days AS (
-          SELECT generate_series(
-            (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - INTERVAL '6 days',
-            (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date,
-            INTERVAL '1 day'
-          )::date AS day
-        )
-        SELECT
-          d.day,
-          COALESCE(uda.active_seconds, 0) as active_seconds,
-          EXTRACT(DOW FROM d.day)::int as dow
-        FROM days d
-        LEFT JOIN user_daily_activity uda
-          ON uda.activity_date = d.day AND uda.user_id = $1
-        ORDER BY d.day ASC
-      `, [userId])
-    ]);
-
-    const dayNames = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
-    const chartData = chartResult.rows.map((row: any) => ({
-      day: dayNames[row.dow],
-      minutes: Math.round(Number(row.active_seconds) / 60)
-    }));
+    const summary = await progressService.getProgressSummary(userId);
 
     return {
-      total_study_minutes: Math.round(Number(totalTimeResult.rows[0].total_seconds) / 60),
-      total_sessions: Number(sessionsCountResult.rows[0].count),
-      total_documents: Number(documentCountResult.rows[0].count),
-      total_flashcards: Number(flashcardsCountResult.rows[0].count),
-      streak: userRes.rows[0]?.streak || 0,
-      total_reviews: Number(totalReviewsResult.rows[0].count),
-      total_notes: Number(totalNotesResult.rows[0].count),
-      chart_data: chartData
+      total_study_minutes: summary.total_study_minutes,
+      total_sessions: summary.total_activities,
+      total_documents: summary.total_documents_read,
+      total_flashcards: summary.total_flashcards_reviewed,
+      streak: summary.streak.currentStreak,
+      total_reviews: summary.total_flashcards_reviewed,
+      total_notes: summary.total_notes,
+      chart_data: summary.weekly_chart.map((c: any) => ({
+        day: c.day,
+        minutes: c.minutes,
+      })),
+      goals: summary.daily_goals,
+      recent_activities: summary.recent_activities,
+      streak_details: summary.streak,
     };
   }
 
@@ -70,15 +37,54 @@ export class StudyService {
       [userId, dateStr, seconds]
     );
 
+    await db.query(
+      `INSERT INTO user_study_dates (user_id, study_date)
+       VALUES ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)
+       ON CONFLICT (user_id, study_date) DO NOTHING`,
+      [userId]
+    );
+
     return result.rows[0].active_seconds;
   }
 
   async createStudySession(userId: number, documentId: number, durationSeconds: number) {
+    // 1. Kiểm tra xem người dùng có đang có phiên Focus nào đang chạy cho tài liệu này không
+    // Nếu có, thời lượng được quản lý bởi Focus Session, không tạo phiên read_doc độc lập trùng lặp
+    const activeFocus = await db.query(
+      `SELECT id FROM study_sessions 
+       WHERE user_id = $1 AND document_id = $2 AND status = 'IN_PROGRESS' 
+       ORDER BY started_at DESC LIMIT 1`,
+      [userId, documentId]
+    );
+    if (activeFocus.rows.length > 0) {
+      return activeFocus.rows[0];
+    }
+
     const result = await db.query(
       'INSERT INTO study_sessions (user_id, document_id, duration_seconds) VALUES ($1, $2, $3) RETURNING *',
       [userId, documentId, durationSeconds]
     );
-    return result.rows[0];
+    const session = result.rows[0];
+
+    try {
+      await db.query(
+        `INSERT INTO learning_activities (user_id, activity_type, entity_type, entity_id, duration_seconds, details, idempotency_key)
+         VALUES ($1, 'read_doc', 'document', $2, $3, $4, $5)
+         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
+        [userId, documentId, durationSeconds, JSON.stringify({ sessionId: session.id }), `study_session:${session.id}`]
+      );
+
+      await db.query(
+        `INSERT INTO user_study_dates (user_id, study_date)
+         VALUES ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)
+         ON CONFLICT (user_id, study_date) DO NOTHING`,
+        [userId]
+      );
+    } catch (actErr) {
+      console.warn('Session activity log non-fatal error:', actErr);
+    }
+
+    return session;
   }
 
   async getNotesByDocument(userId: number, documentId: number) {

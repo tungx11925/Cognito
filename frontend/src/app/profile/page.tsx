@@ -19,6 +19,7 @@ import RegisterModal from "@/components/auth/RegisterModal";
 import { AnimatePresence } from "framer-motion";
 import { VIETNAM_DATA } from "@/utils/vietnamData";
 import { getAllFlashcards } from "@/services/flashcard.service";
+import SavedAndLikedDocumentsTab from "@/components/profile/SavedAndLikedDocumentsTab";
 
 
 /* ── UI Components ───────────────────────────────────────── */
@@ -33,27 +34,27 @@ const Card = ({ children, className = "" }: any) => {
     .trim();
 
   return (
-    <div className={`bg-white rounded-2xl border-2 border-[#1a2e1c]/45 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.16)] overflow-hidden transition-all duration-300 hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.24)] hover:border-[#1a2e1c]/65 ${cleanedClassName}`}>
+    <div className={`bg-white dark:bg-zinc-900 rounded-2xl border-2 border-[#1a2e1c]/45 dark:border-zinc-700 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.16)] dark:shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)] overflow-hidden transition-all duration-300 hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.24)] dark:hover:shadow-[6px_6px_0px_0px_rgba(16,185,129,0.2)] hover:border-[#1a2e1c]/65 dark:hover:border-emerald-600/60 ${cleanedClassName}`}>
       {children}
     </div>
   );
 };
 const CardHeader = ({ children, className = "" }: any) => <div className={`px-6 pt-5 pb-4 ${className}`}>{children}</div>;
-const CardTitle = ({ children, className = "" }: any) => <h3 className={`font-semibold text-gray-900 ${className}`}>{children}</h3>;
+const CardTitle = ({ children, className = "" }: any) => <h3 className={`font-semibold text-gray-900 dark:text-zinc-100 ${className}`}>{children}</h3>;
 const CardContent = ({ children, className = "" }: any) => <div className={`px-6 pb-6 ${className}`}>{children}</div>;
 const Badge = ({ children, className = "", variant = "default" }: any) => {
   const base = "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold";
   const variants: any = { 
-    default: "bg-gray-100 text-gray-800", 
-    outline: "border border-gray-200 text-gray-800",
-    pro: "bg-[#1a2e1c] text-white"
+    default: "bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-zinc-200", 
+    outline: "border border-gray-200 dark:border-zinc-700 text-gray-800 dark:text-zinc-200",
+    pro: "bg-[#1a2e1c] dark:bg-emerald-700 text-white"
   };
   return <span className={`${base} ${variants[variant] || ""} ${className}`}>{children}</span>;
 };
 const Button = ({ children, className = "", size = "default", variant = "default", ...props }: any) => {
   const base = "inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none";
   const sizes: any = { default: "h-10 px-4 py-2", sm: "h-8 px-3 text-xs" };
-  const variants: any = { default: "bg-[#1a2e1c] text-white hover:bg-[#2d5a3d]", outline: "border border-gray-200 bg-transparent hover:bg-gray-50 text-gray-900" };
+  const variants: any = { default: "bg-[#1a2e1c] dark:bg-emerald-700 text-white hover:bg-[#2d5a3d] dark:hover:bg-emerald-600", outline: "border border-gray-200 dark:border-zinc-700 bg-transparent hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-900 dark:text-zinc-100" };
   return <button className={`${base} ${sizes[size] || sizes.default} ${variants[variant] || variants.default} ${className}`} {...props}>{children}</button>;
 };
 const Progress = ({ value, className = "", children }: any) => (
@@ -61,7 +62,7 @@ const Progress = ({ value, className = "", children }: any) => (
     {children ? children : <div className="h-full bg-primary transition-all" style={{ width: `${value || 0}%` }} />}
   </div>
 );
-const Separator = ({ className = "" }: any) => <div className={`shrink-0 bg-gray-200 h-[1px] w-full ${className}`} />;
+const Separator = ({ className = "" }: any) => <div className={`shrink-0 bg-gray-200 dark:bg-zinc-800 h-[1px] w-full ${className}`} />;
 
 /* ── Data ──────────────────────────────────────────── */
 // Fallback week data (only used if API returns empty chart_data)
@@ -93,14 +94,24 @@ const SUBJECT_COLORS = [
   "#3b82f6", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4",
 ];
 function computeSubjects(docs: any[], deckCountsMap: Record<number, { total: number; mastered: number }>, decksArr: any[]) {
-  return [
-    { name: "Toán học", level: 80, color: "#ef4444", xp: "420 XP" },
-    { name: "Văn học", level: 65, color: "#8b5cf6", xp: "280 XP" },
-    { name: "Tiếng Anh", level: 90, color: "#22c55e", xp: "550 XP" },
-    { name: "Vật lý", level: 70, color: "#06b6d4", xp: "310 XP" },
-    { name: "Hóa học", level: 55, color: "#6366f1", xp: "190 XP" },
-    { name: "Sinh học", level: 75, color: "#84cc16", xp: "330 XP" },
-  ];
+  if (!docs || docs.length === 0) {
+    return [];
+  }
+  const categoryCounts: Record<string, number> = {};
+  for (const d of docs) {
+    const cat = d.category || 'Tài liệu học tập';
+    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+  }
+  return Object.entries(categoryCounts).map(([cat, count], idx) => {
+    const color = SUBJECT_COLORS[idx % SUBJECT_COLORS.length];
+    const level = Math.min(100, count * 20);
+    return {
+      name: cat,
+      level,
+      color,
+      xp: `${count * 50} XP`,
+    };
+  });
 }
 
 // Compute achievements dynamically from real user data
@@ -242,15 +253,15 @@ function StreakCard({ streak = 0, lastStudyDate, studyDates = [] }: { streak?: n
         <div className="flex items-end justify-between">
           <div>
             <div className="flex items-end gap-2">
-              <span className="text-5xl font-bold text-[#1a2e1c]">{currentStreak}</span>
-              <span className="text-gray-400 mb-2 text-sm">/ {streakTarget} ngày mục tiêu</span>
+              <span className="text-5xl font-bold text-[#1a2e1c] dark:text-emerald-400">{currentStreak}</span>
+              <span className="text-gray-400 dark:text-zinc-500 mb-2 text-sm">/ {streakTarget} ngày mục tiêu</span>
             </div>
-            <p className="text-xs text-gray-400 mt-0.5">Ngày hiện tại: <span className="font-semibold text-[#2d5a3d]">{todayLabel}</span></p>
+            <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">Ngày hiện tại: <span className="font-semibold text-[#2d5a3d] dark:text-emerald-400">{todayLabel}</span></p>
           </div>
-          <div className="text-right text-xs text-gray-400">
+          <div className="text-right text-xs text-gray-400 dark:text-zinc-500">
             <p className="font-medium">{today.getDate()}/{today.getMonth() + 1}/{today.getFullYear()}</p>
             {studiedToday ? (
-              <p className="text-[#2d5a3d] font-semibold mt-0.5">✓ Đã học hôm nay</p>
+              <p className="text-[#2d5a3d] dark:text-emerald-400 font-semibold mt-0.5">✓ Đã học hôm nay</p>
             ) : (
               <p className="text-orange-500 font-semibold mt-0.5">⚡ Chưa học hôm nay</p>
             )}
@@ -258,24 +269,24 @@ function StreakCard({ streak = 0, lastStudyDate, studyDates = [] }: { streak?: n
         </div>
 
         <div>
-          <div className="flex justify-between text-xs text-gray-400 mb-1.5">
+          <div className="flex justify-between text-xs text-gray-400 dark:text-zinc-500 mb-1.5">
             <span>Tiến độ đến mục tiêu {streakTarget} ngày</span>
-            <span className="text-[#2d5a3d] font-medium">{progressPct.toFixed(0)}%</span>
+            <span className="text-[#2d5a3d] dark:text-emerald-400 font-medium">{progressPct.toFixed(0)}%</span>
           </div>
-          <Progress value={progressPct} className="h-2.5 bg-gray-100">
-             <div className="h-full bg-gradient-to-r from-orange-400 to-[#2d5a3d] rounded-full transition-all" style={{ width: `${progressPct}%` }} />
+          <Progress value={progressPct} className="h-2.5 bg-gray-100 dark:bg-zinc-800">
+             <div className="h-full bg-gradient-to-r from-orange-400 to-[#2d5a3d] dark:to-emerald-500 rounded-full transition-all" style={{ width: `${progressPct}%` }} />
           </Progress>
         </div>
 
         <div>
-          <p className="text-xs text-gray-400 mb-2">6 tuần gần đây</p>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 mb-2">6 tuần gần đây</p>
           <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
             {/* Day headers — highlight the current weekday column */}
             {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((d, idx) => (
               <div
                 key={d}
                 className={`text-center text-[10px] font-bold pb-1 ${
-                  idx === daysSinceMonday ? "text-[#1a2e1c]" : "text-gray-500"
+                  idx === daysSinceMonday ? "text-[#1a2e1c] dark:text-emerald-400" : "text-gray-500 dark:text-zinc-500"
                 }`}
               >
                 {d}
@@ -292,7 +303,7 @@ function StreakCard({ streak = 0, lastStudyDate, studyDates = [] }: { streak?: n
               );
               if (status === 'today-empty') return (
                 <div key={i} title="Hôm nay — Chưa học"
-                  className="aspect-square rounded-full flex items-center justify-center ring-2 ring-orange-300 ring-offset-1 bg-orange-50">
+                  className="aspect-square rounded-full flex items-center justify-center ring-2 ring-orange-300 ring-offset-1 bg-orange-50 dark:bg-orange-950/40">
                   <span className="text-orange-500 font-black leading-none" style={{ fontSize: 10 }}>!</span>
                 </div>
               );
@@ -305,37 +316,37 @@ function StreakCard({ streak = 0, lastStudyDate, studyDates = [] }: { streak?: n
               );
               if (status === 'future') return (
                 <div key={i} title="Chưa đến ngày"
-                  className="aspect-square rounded-full border border-dashed border-gray-200" />
+                  className="aspect-square rounded-full border border-dashed border-gray-200 dark:border-zinc-700" />
               );
               return (
                 <div key={i} title="Chưa học"
-                  className={`aspect-square rounded-full ${col === daysSinceMonday ? 'bg-gray-200' : 'bg-gray-100'}`} />
+                  className={`aspect-square rounded-full ${col === daysSinceMonday ? 'bg-gray-200 dark:bg-zinc-700' : 'bg-gray-100 dark:bg-zinc-800'}`} />
               );
             })}
           </div>
-          <div className="flex items-center justify-end gap-3 mt-2.5 text-[10px] text-gray-400">
+          <div className="flex items-center justify-end gap-3 mt-2.5 text-[10px] text-gray-400 dark:text-zinc-500">
             <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-gray-100 border border-gray-200 inline-block" />Chưa học
+              <span className="w-2.5 h-2.5 rounded-full bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 inline-block" />Chưa học
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: 'linear-gradient(135deg,#f97316,#22c55e)' }} />Streak
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#1a2e1c] inline-block ring-1 ring-orange-400 ring-offset-[1px]" />Hôm nay
+              <span className="w-2.5 h-2.5 rounded-full bg-[#1a2e1c] dark:bg-emerald-600 inline-block ring-1 ring-orange-400 ring-offset-[1px]" />Hôm nay
             </span>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2 pt-1">
           {[
-            { label: "Streak hiện tại", value: `${currentStreak} ngày`, icon: "🔥", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
-            { label: "Hôm nay", value: studiedToday ? '✅ Đã học' : '⚡ Chưa học', icon: "📅", bg: studiedToday ? "bg-[#eef8f0]" : "bg-[#fff8ec]", border: studiedToday ? "border-[#2d5a3d]/25" : "border-amber-200" },
-            { label: "Cần thêm", value: `${Math.max(streakTarget - currentStreak, 0)} ngày`, icon: "🎯", bg: "bg-[#fcf8ec]", border: "border-amber-200" },
+            { label: "Streak hiện tại", value: `${currentStreak} ngày`, icon: "🔥", bg: "bg-[#eef8f0] dark:bg-zinc-800", border: "border-[#2d5a3d]/25 dark:border-zinc-700" },
+            { label: "Hôm nay", value: studiedToday ? '✅ Đã học' : '⚡ Chưa học', icon: "📅", bg: studiedToday ? "bg-[#eef8f0] dark:bg-zinc-800" : "bg-[#fff8ec] dark:bg-zinc-800", border: studiedToday ? "border-[#2d5a3d]/25 dark:border-zinc-700" : "border-amber-200 dark:border-zinc-700" },
+            { label: "Cần thêm", value: `${Math.max(streakTarget - currentStreak, 0)} ngày`, icon: "🎯", bg: "bg-[#fcf8ec] dark:bg-zinc-800", border: "border-amber-200 dark:border-zinc-700" },
           ].map(s => (
             <div key={s.label} className={`p-2.5 rounded-xl ${s.bg} border ${s.border} text-center shadow-2xs`}>
               <p className="text-base">{s.icon}</p>
-              <p className="text-sm font-semibold text-gray-800 mt-0.5">{s.value}</p>
-              <p className="text-[10px] text-gray-400 font-medium">{s.label}</p>
+              <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200 mt-0.5">{s.value}</p>
+              <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">{s.label}</p>
             </div>
           ))}
         </div>
@@ -379,27 +390,14 @@ export default function UserProfile() {
 
   React.useEffect(() => {
     if (decks && decks.length > 0) {
-      const fetchCounts = async () => {
-        const countsMap: Record<number, { total: number; mastered: number }> = {};
-        await Promise.all(
-          decks.map(async (deck) => {
-            try {
-              const cardsList = await getAllFlashcards(deck.id);
-              if (Array.isArray(cardsList)) {
-                const total = cardsList.length;
-                const mastered = cardsList.filter((c: any) => c.repetitions > 0).length;
-                countsMap[deck.id] = { total, mastered };
-              } else {
-                countsMap[deck.id] = { total: 0, mastered: 0 };
-              }
-            } catch (e) {
-              countsMap[deck.id] = { total: 0, mastered: 0 };
-            }
-          })
-        );
-        setDeckCounts(countsMap);
-      };
-      fetchCounts();
+      const countsMap: Record<number, { total: number; mastered: number }> = {};
+      decks.forEach((deck: any) => {
+        countsMap[deck.id] = {
+          total: Number(deck.card_count || 0),
+          mastered: Number(deck.mastered_count || 0)
+        };
+      });
+      setDeckCounts(countsMap);
     }
   }, [decks]);
 
@@ -412,6 +410,9 @@ export default function UserProfile() {
   const [editPhone, setEditPhone] = useState("");
   const [editEducation, setEditEducation] = useState("");
   const [editAddress, setEditAddress] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [editHeadline, setEditHeadline] = useState("");
+  const [editPrivacySetting, setEditPrivacySetting] = useState<string>("public");
   const [selectedProvince, setSelectedProvince] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
   const [provinceQuery, setProvinceQuery] = useState("");
@@ -475,7 +476,10 @@ export default function UserProfile() {
         name: editName,
         phone: editPhone,
         education: editEducation,
-        address: finalAddress
+        address: finalAddress,
+        bio: editBio,
+        headline: editHeadline,
+        privacy_setting: editPrivacySetting,
       });
       if (success) {
         setIsEditing(false);
@@ -517,14 +521,14 @@ export default function UserProfile() {
     : "NA";
 
   return (
-    <div className="min-h-screen bg-[#ebe8e0] grid-bg pb-10">
+    <div className="min-h-screen bg-[#ebe8e0] dark:bg-[#0B0F17] grid-bg pb-10">
 
       {/* Toast Alert */}
       {globalMessage && globalMessage.text && (
         <div className={`fixed top-5 right-5 z-[9999] px-5 py-3 rounded-xl shadow-lg flex items-center gap-3 border ${
           globalMessage.type === 'success' 
-            ? 'bg-white text-emerald-700 border-emerald-200' 
-            : 'bg-white text-rose-700 border-rose-200'
+            ? 'bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' 
+            : 'bg-white dark:bg-zinc-800 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
         }`}>
           <div className={`w-2 h-2 rounded-full animate-ping ${globalMessage.type === 'success' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
           <span className="font-semibold text-sm">{globalMessage.text}</span>
@@ -541,7 +545,7 @@ export default function UserProfile() {
 
       <div className="max-w-6xl mx-auto px-4 pt-20 pb-7 space-y-6">
         {/* Profile Card */}
-        <Card className="border-0 shadow-md overflow-hidden bg-white">
+        <Card className="border-0 shadow-md overflow-hidden bg-white dark:bg-zinc-900">
           {/* Cover */}
           <div className="h-36 relative bg-[#1a2e1c]" style={{
             backgroundImage: "radial-gradient(circle at 15% 60%, rgba(74,124,89,0.6) 0%, transparent 50%), radial-gradient(circle at 85% 30%, rgba(106,173,129,0.4) 0%, transparent 50%)",
@@ -562,7 +566,7 @@ export default function UserProfile() {
                   />
                   <div 
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-24 h-24 bg-[#2d5a3d] border-4 border-white shadow-lg rounded-full flex items-center justify-center overflow-hidden cursor-pointer group relative"
+                    className="w-24 h-24 bg-[#2d5a3d] border-4 border-white dark:border-zinc-900 shadow-lg rounded-full flex items-center justify-center overflow-hidden cursor-pointer group relative"
                   >
                     {activeUser?.avatar_url ? (
                       <img 
@@ -584,11 +588,11 @@ export default function UserProfile() {
                   </div>
                   <button 
                     onClick={() => fileInputRef.current?.click()}
-                    className="absolute bottom-1 right-1 w-6 h-6 bg-[#1a2e1c] hover:bg-[#2d5a3d] rounded-full flex items-center justify-center transition-colors shadow"
+                    className="absolute bottom-1 right-1 w-6 h-6 bg-[#1a2e1c] dark:bg-emerald-700 hover:bg-[#2d5a3d] dark:hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors shadow"
                   >
                     <Camera className="w-3 h-3 text-white" />
                   </button>
-                  <span className="absolute top-2 right-2 w-3 h-3 bg-green-400 border-2 border-white rounded-full animate-pulse" />
+                  <span className="absolute top-2 right-2 w-3 h-3 bg-green-400 border-2 border-white dark:border-zinc-900 rounded-full animate-pulse" />
                 </div>
                 <div className="pb-1 flex-1">
                   {(() => {
@@ -602,20 +606,26 @@ export default function UserProfile() {
                     return (
                       <>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-gray-900 text-2xl font-bold">{activeUser?.name || "Người dùng"}</h2>
+                          <h2 className="text-gray-900 dark:text-zinc-100 text-2xl font-bold">{activeUser?.name || "Người dùng"}</h2>
                           <Badge variant="pro" className="text-xs px-2 py-0.5 hover:bg-[#2d5a3d]">⭐ Pro</Badge>
-                          <Badge className="bg-amber-100 text-amber-700 text-xs px-2 py-0 border border-amber-200">Cấp {level}</Badge>
+                          <Badge className="bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-xs px-2 py-0 border border-amber-200 dark:border-amber-800">Cấp {level}</Badge>
                         </div>
-                        <p className="text-sm text-gray-400 mt-0.5">@{(activeUser as any)?.username || activeUser?.name?.toLowerCase().replace(/\s+/g, '') || "nguoidung"}</p>
+                        <p className="text-sm text-gray-400 dark:text-zinc-500 mt-0.5">@{(activeUser as any)?.username || activeUser?.name?.toLowerCase().replace(/\s+/g, '') || "nguoidung"}</p>
+                        {activeUser?.headline && (
+                          <p className="text-xs text-[#2d5a3d] dark:text-emerald-400 font-semibold mt-1">{activeUser.headline}</p>
+                        )}
+                        {activeUser?.bio && (
+                          <p className="text-xs text-gray-600 dark:text-zinc-400 mt-1 max-w-sm italic border-l-2 border-[#2d5a3d]/50 pl-2">{activeUser.bio}</p>
+                        )}
 
                         {/* XP Progress Bar — dynamic */}
                         <div className="mt-3 max-w-xs">
-                          <div className="flex justify-between text-[10px] text-gray-500 mb-1">
-                            <span className="font-semibold text-[#2d5a3d]">Tiến trình Cấp {level}</span>
-                            <span className="font-medium text-gray-600">{currentLevelXP.toLocaleString()} / {xpToNextLevel.toLocaleString()} XP ({pct}%)</span>
+                          <div className="flex justify-between text-[10px] text-gray-500 dark:text-zinc-400 mb-1">
+                            <span className="font-semibold text-[#2d5a3d] dark:text-emerald-400">Tiến trình Cấp {level}</span>
+                            <span className="font-medium text-gray-600 dark:text-zinc-300">{currentLevelXP.toLocaleString()} / {xpToNextLevel.toLocaleString()} XP ({pct}%)</span>
                           </div>
-                          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200/50">
-                            <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                          <div className="h-1.5 w-full bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden border border-gray-200/50 dark:border-zinc-700">
+                            <div className="h-full bg-[#2d5a3d] dark:bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
                           </div>
                         </div>
                       </>
@@ -626,7 +636,18 @@ export default function UserProfile() {
 
               {/* Actions */}
               <div className="flex gap-2 pb-1 shrink-0">
-                <Button size="sm" variant="outline" className="gap-1.5 border-[#1a2e1c]/30 text-[#1a2e1c] hover:bg-[#1a2e1c]/5">
+                {activeUser?.id && (
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={() => router.push(`/profile/${activeUser.id}`)}
+                    className="gap-1.5 border-[#1a2e1c]/30 dark:border-zinc-700 text-[#1a2e1c] dark:text-emerald-400 hover:bg-[#1a2e1c]/5 dark:hover:bg-zinc-800"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    Xem trang công khai
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" className="gap-1.5 border-[#1a2e1c]/30 dark:border-zinc-700 text-[#1a2e1c] dark:text-emerald-400 hover:bg-[#1a2e1c]/5 dark:hover:bg-zinc-800">
                   <Share2 className="w-3.5 h-3.5" />
                   Chia sẻ
                 </Button>
@@ -676,10 +697,13 @@ export default function UserProfile() {
                     // Parse education
                     const savedEducation = activeUser?.education || "";
                     setEditEducation(savedEducation);
+                    setEditBio(activeUser?.bio || "");
+                    setEditHeadline(activeUser?.headline || "");
+                    setEditPrivacySetting(activeUser?.privacy_setting || "public");
                     
                     setIsEditing(true);
                   }}
-                  className="bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white gap-1.5"
+                  className="bg-[#1a2e1c] dark:bg-emerald-700 hover:bg-[#2d5a3d] dark:hover:bg-emerald-600 text-white gap-1.5"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   Chỉnh sửa
@@ -698,19 +722,19 @@ export default function UserProfile() {
           return (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "Bộ Flashcard", value: `${decks.length}`, icon: Layers, sub: "Đang sở hữu", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25", iconBg: "bg-blue-50 text-blue-500" },
-                { label: "Thẻ đã học", value: `${totalCards}`, icon: Brain, sub: `${totalMastered} thẻ thành thạo`, bg: "bg-[#edf4fc]", border: "border-blue-200", iconBg: "bg-pink-50 text-pink-500" },
-                { label: "Streak hiện tại", value: `${activeUser?.streak ?? 0} ngày`, icon: Flame, sub: activeUser?.last_study_date ? `Gần nhất: ${new Date(activeUser.last_study_date).toLocaleDateString('vi-VN')}` : 'Chưa học ngày nào', bg: "bg-[#fcf3eb]", border: "border-orange-200", iconBg: "bg-red-50 text-red-500" },
-                { label: "Độ chính xác", value: totalCards > 0 ? `${totalPct}%` : "0%", icon: Target, sub: "Thành thạo", bg: "bg-[#f5ecfc]", border: "border-purple-200", iconBg: "bg-emerald-50 text-emerald-600" },
+                { label: "Bộ Flashcard", value: `${decks.length}`, icon: Layers, sub: "Đang sở hữu", bg: "bg-[#eef8f0] dark:bg-zinc-800", border: "border-[#2d5a3d]/25 dark:border-zinc-700", iconBg: "bg-blue-50 dark:bg-blue-950/50 text-blue-500 dark:text-blue-400" },
+                { label: "Thẻ đã học", value: `${totalCards}`, icon: Brain, sub: `${totalMastered} thẻ thành thạo`, bg: "bg-[#edf4fc] dark:bg-zinc-800", border: "border-blue-200 dark:border-zinc-700", iconBg: "bg-pink-50 dark:bg-pink-950/50 text-pink-500 dark:text-pink-400" },
+                { label: "Streak hiện tại", value: `${activeUser?.streak ?? 0} ngày`, icon: Flame, sub: activeUser?.last_study_date ? `Gần nhất: ${new Date(activeUser.last_study_date).toLocaleDateString('vi-VN')}` : 'Chưa học ngày nào', bg: "bg-[#fcf3eb] dark:bg-zinc-800", border: "border-orange-200 dark:border-zinc-700", iconBg: "bg-red-50 dark:bg-red-950/50 text-red-500 dark:text-red-400" },
+                { label: "Độ chính xác", value: totalCards > 0 ? `${totalPct}%` : "0%", icon: Target, sub: "Thành thạo", bg: "bg-[#f5ecfc] dark:bg-zinc-800", border: "border-purple-200 dark:border-zinc-700", iconBg: "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400" },
               ].map((s) => (
-                <div key={s.label} className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-[#1a2e1c]/18 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.07)] hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.12)] hover:border-[#1a2e1c]/30 transition-all duration-300">
+                <div key={s.label} className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-900 rounded-2xl border-2 border-[#1a2e1c]/18 dark:border-zinc-700 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.07)] dark:shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)] hover:shadow-[6px_6px_0px_0px_rgba(26,46,28,0.12)] hover:border-[#1a2e1c]/30 dark:hover:border-zinc-600 transition-all duration-300">
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${s.iconBg}`}>
                     <s.icon className="w-4.5 h-4.5" />
                   </div>
                   <div>
-                    <p className="text-gray-900 font-bold leading-tight">{s.value}</p>
-                    <p className="text-[11px] text-gray-500 font-semibold leading-tight mt-0.5">{s.label}</p>
-                    <p className="text-[10px] text-[#4a7c59] font-semibold leading-tight mt-0.5">{s.sub}</p>
+                    <p className="text-gray-900 dark:text-zinc-100 font-bold leading-tight">{s.value}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-zinc-400 font-semibold leading-tight mt-0.5">{s.label}</p>
+                    <p className="text-[10px] text-[#4a7c59] dark:text-emerald-400 font-semibold leading-tight mt-0.5">{s.sub}</p>
                   </div>
                 </div>
               ))}
@@ -727,8 +751,8 @@ export default function UserProfile() {
 
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
-                  <BarChart2 className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                <CardTitle className="flex items-center gap-2 text-gray-800 dark:text-zinc-100 text-base">
+                  <BarChart2 className="w-4.5 h-4.5 text-[#2d5a3d] dark:text-emerald-400" />
                   Thống kê học tập
                 </CardTitle>
               </CardHeader>
@@ -743,15 +767,15 @@ export default function UserProfile() {
                     const flashcardsCount = totalCards || analyticsData?.total_flashcards || 0;
 
                     return [
-                      { label: "Tổng thời gian học", value: `${studyHours} giờ`, color: "text-emerald-700", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/25" },
-                      { label: "Phiên Pomodoro", value: `${sessions} phiên`, color: "text-blue-700", bg: "bg-[#edf4fc]", border: "border-blue-200" },
-                      { label: "Lượt ôn tập thẻ", value: `${analyticsData?.total_reviews || 0} lượt`, color: "text-purple-700", bg: "bg-[#f5ecfc]", border: "border-purple-200" },
-                      { label: "Tài liệu học tập", value: `${docsCount} tài liệu`, color: "text-amber-700", bg: "bg-[#fcf8ec]", border: "border-amber-200" },
-                      { label: "Ghi chú học tập", value: `${analyticsData?.total_notes || 0} ghi chú`, color: "text-indigo-700", bg: "bg-[#eceffc]", border: "border-indigo-200" },
-                      { label: "Flashcard đã tạo", value: `${flashcardsCount} thẻ`, color: "text-rose-700", bg: "bg-[#fcecef]", border: "border-rose-200" },
+                      { label: "Tổng thời gian học", value: `${studyHours} giờ`, color: "text-emerald-700 dark:text-emerald-400", bg: "bg-[#eef8f0] dark:bg-zinc-800", border: "border-[#2d5a3d]/25 dark:border-zinc-700" },
+                      { label: "Phiên Pomodoro", value: `${sessions} phiên`, color: "text-blue-700 dark:text-blue-400", bg: "bg-[#edf4fc] dark:bg-zinc-800", border: "border-blue-200 dark:border-zinc-700" },
+                      { label: "Lượt ôn tập thẻ", value: `${analyticsData?.total_reviews || 0} lượt`, color: "text-purple-700 dark:text-purple-400", bg: "bg-[#f5ecfc] dark:bg-zinc-800", border: "border-purple-200 dark:border-zinc-700" },
+                      { label: "Tài liệu học tập", value: `${docsCount} tài liệu`, color: "text-amber-700 dark:text-amber-400", bg: "bg-[#fcf8ec] dark:bg-zinc-800", border: "border-amber-200 dark:border-zinc-700" },
+                      { label: "Ghi chú học tập", value: `${analyticsData?.total_notes || 0} ghi chú`, color: "text-indigo-700 dark:text-indigo-400", bg: "bg-[#eceffc] dark:bg-zinc-800", border: "border-indigo-200 dark:border-zinc-700" },
+                      { label: "Flashcard đã tạo", value: `${flashcardsCount} thẻ`, color: "text-rose-700 dark:text-rose-400", bg: "bg-[#fcecef] dark:bg-zinc-800", border: "border-rose-200 dark:border-zinc-700" },
                     ].map((item) => (
                       <div key={item.label} className={`flex justify-between items-center p-2.5 rounded-xl ${item.bg} border ${item.border} shadow-2xs`}>
-                        <span className="text-xs font-semibold text-gray-600">{item.label}</span>
+                        <span className="text-xs font-semibold text-gray-600 dark:text-zinc-400">{item.label}</span>
                         <span className={`text-xs font-bold ${item.color}`}>{item.value}</span>
                       </div>
                     ));
@@ -763,11 +787,11 @@ export default function UserProfile() {
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
-                    <Users className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                  <CardTitle className="flex items-center gap-2 text-gray-800 dark:text-zinc-100 text-base">
+                    <Users className="w-4.5 h-4.5 text-[#2d5a3d] dark:text-emerald-400" />
                     Bạn bè học cùng
                   </CardTitle>
-                  <Badge variant="outline" className="text-xs border-[#2d5a3d]/30 text-[#2d5a3d]">{friends.length} bạn</Badge>
+                  <Badge variant="outline" className="text-xs border-[#2d5a3d]/30 text-[#2d5a3d] dark:text-emerald-400">{friends.length} bạn</Badge>
                 </div>
               </CardHeader>
               <CardContent className="pt-0">
@@ -777,9 +801,9 @@ export default function UserProfile() {
                       <div 
                         key={f.id} 
                         onClick={() => router.push(`/profile/${f.id}`)}
-                        className="flex items-center gap-3 p-3 bg-[#f4f7f4] border border-[#2d5a3d]/20 rounded-xl transition-all duration-200 hover:bg-emerald-50/30 hover:border-[#2d5a3d]/35 group cursor-pointer shadow-2xs"
+                        className="flex items-center gap-3 p-3 bg-[#f4f7f4] dark:bg-zinc-800/60 border border-[#2d5a3d]/20 dark:border-zinc-700 rounded-xl transition-all duration-200 hover:bg-emerald-50/30 dark:hover:bg-zinc-800 group cursor-pointer shadow-2xs"
                       >
-                        <div className="w-9 h-9 rounded-xl bg-[#2d5a3d]/15 text-[#2d5a3d] text-xs font-bold flex items-center justify-center shrink-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#2d5a3d]/15 text-[#2d5a3d] dark:text-emerald-400 text-xs font-bold flex items-center justify-center shrink-0">
                           {f.avatar_url ? (
                             <img src={f.avatar_url} alt={f.name} className="w-full h-full object-cover rounded-xl" />
                           ) : (
@@ -787,19 +811,19 @@ export default function UserProfile() {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-gray-800 truncate group-hover:text-[#1a2e1c]">{f.name}</p>
-                          <p className="text-[10px] text-gray-400 font-medium mt-0.5">{f.education || 'Học viên'} · {f.streak || 0} ngày streak</p>
+                          <p className="text-xs font-bold text-gray-800 dark:text-zinc-200 truncate group-hover:text-[#1a2e1c] dark:group-hover:text-emerald-400">{f.name}</p>
+                          <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium mt-0.5">{f.education || 'Học viên'} · {f.streak || 0} ngày streak</p>
                         </div>
-                        <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-white shadow-2xs hover:bg-[#eaf0eb] border border-gray-100">
-                          <MessageSquare className="w-3.5 h-3.5 text-[#4a7c59]" />
+                        <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-white dark:bg-zinc-700 shadow-2xs hover:bg-[#eaf0eb] dark:hover:bg-zinc-600 border border-gray-100 dark:border-zinc-600">
+                          <MessageSquare className="w-3.5 h-3.5 text-[#4a7c59] dark:text-emerald-400" />
                         </button>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-6 text-xs text-gray-400 font-medium">Chưa có bạn bè nào được kết nối.</div>
+                    <div className="text-center py-6 text-xs text-gray-400 dark:text-zinc-500 font-medium">Chưa có bạn bè nào được kết nối.</div>
                   )}
                 </div>
-                <Button variant="outline" size="sm" className="w-full mt-3 border-2 border-dashed border-[#2d5a3d]/20 text-[#2d5a3d] hover:bg-[#2d5a3d]/5 hover:border-[#2d5a3d]/40 rounded-xl py-2 font-semibold text-xs">
+                <Button variant="outline" size="sm" className="w-full mt-3 border-2 border-dashed border-[#2d5a3d]/20 dark:border-zinc-700 text-[#2d5a3d] dark:text-emerald-400 hover:bg-[#2d5a3d]/5 dark:hover:bg-zinc-800 rounded-xl py-2 font-semibold text-xs">
                   Xem tất cả bạn bè →
                 </Button>
               </CardContent>
@@ -811,18 +835,20 @@ export default function UserProfile() {
 
             {/* Tabs */}
             <div className="space-y-4">
-              <div className="bg-white border border-gray-200 p-1 rounded-xl shadow-sm grid grid-cols-5">
+              <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 p-1 rounded-xl shadow-sm grid grid-cols-4 sm:grid-cols-7 gap-1">
                 {[
                   { val: "overview", label: "Tổng quan" },
                   { val: "profile", label: "Hồ sơ" },
                   { val: "flashcards", label: "Flashcards" },
-                  { val: "achievements", label: "Thành tích" },
                   { val: "documents", label: "Tài liệu" },
+                  { val: "saved", label: "Đã lưu" },
+                  { val: "liked", label: "Đã thích" },
+                  { val: "achievements", label: "Thành tích" },
                 ].map(t => (
                   <button 
                     key={t.val} 
                     onClick={() => setActiveTab(t.val)}
-                    className={`rounded-lg py-1.5 text-xs sm:text-sm font-medium transition-colors ${activeTab === t.val ? "bg-[#1a2e1c] text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                    className={`rounded-lg py-1.5 text-xs sm:text-sm font-medium transition-colors ${activeTab === t.val ? "bg-[#1a2e1c] dark:bg-emerald-700 text-white" : "text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800"}`}
                   >
                     {t.label}
                   </button>
@@ -836,12 +862,12 @@ export default function UserProfile() {
                   <Card className="border-0 shadow-sm">
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
-                          <TrendingUp className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                        <CardTitle className="flex items-center gap-2 text-gray-800 dark:text-zinc-100 text-base">
+                          <TrendingUp className="w-4.5 h-4.5 text-[#2d5a3d] dark:text-emerald-400" />
                           Hoạt động 7 ngày qua
                         </CardTitle>
-                        <div className="flex items-center gap-3 text-xs text-gray-400">
-                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#2d5a3d] inline-block" />Phút học</span>
+                        <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-zinc-500">
+                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#2d5a3d] dark:bg-emerald-400 inline-block" />Phút học</span>
                         </div>
                       </div>
                     </CardHeader>
@@ -865,22 +891,22 @@ export default function UserProfile() {
                                     <stop offset="95%" stopColor="#2d5a3d" stopOpacity={0} />
                                   </linearGradient>
                                 </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" className="dark:opacity-10" />
                                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} />
                                 <YAxis tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} unit=" ph" />
                                 <Tooltip formatter={(v: any) => [`${v} phút`, ""]} contentStyle={{ borderRadius: 10, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", fontSize: 12 }} />
                                 <Area type="monotone" dataKey="minutes" stroke="#2d5a3d" strokeWidth={2.5} fill="url(#grad1)" dot={{ fill: "#2d5a3d", r: 3.5 }} activeDot={{ r: 5 }} />
                               </AreaChart>
                             </ResponsiveContainer>
-                            <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
+                            <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100 dark:border-zinc-800">
                               {[
-                                { label: "Tổng tuần này", value: `${totalWeeklyMinutes} phút`, bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/20" },
-                                { label: "Trung bình / ngày", value: `${avgWeeklyMinutes} phút`, bg: "bg-[#edf4fc]", border: "border-blue-200" },
-                                { label: "Nhiều nhất", value: maxDayItem.minutes > 0 ? `${maxDayItem.day} (${maxDayItem.minutes} ph)` : "-", bg: "bg-[#fcf3eb]", border: "border-orange-200" },
+                                { label: "Tổng tuần này", value: `${totalWeeklyMinutes} phút`, bg: "bg-[#eef8f0] dark:bg-zinc-800", border: "border-[#2d5a3d]/20 dark:border-zinc-700" },
+                                { label: "Trung bình / ngày", value: `${avgWeeklyMinutes} phút`, bg: "bg-[#edf4fc] dark:bg-zinc-800", border: "border-blue-200 dark:border-zinc-700" },
+                                { label: "Nhiều nhất", value: maxDayItem.minutes > 0 ? `${maxDayItem.day} (${maxDayItem.minutes} ph)` : "-", bg: "bg-[#fcf3eb] dark:bg-zinc-800", border: "border-orange-200 dark:border-zinc-700" },
                               ].map(s => (
                                 <div key={s.label} className={`text-center p-2 rounded-xl ${s.bg} border ${s.border} shadow-2xs`}>
-                                  <p className="text-xs font-bold text-gray-800">{s.value}</p>
-                                  <p className="text-[10px] text-gray-400 font-medium mt-0.5">{s.label}</p>
+                                  <p className="text-xs font-bold text-gray-800 dark:text-zinc-200">{s.value}</p>
+                                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium mt-0.5">{s.label}</p>
                                 </div>
                               ))}
                             </div>
@@ -893,8 +919,8 @@ export default function UserProfile() {
                   {/* Skill levels */}
                   <Card className="border-0 shadow-sm">
                     <CardHeader className="pb-2">
-                      <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
-                        <Award className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                      <CardTitle className="flex items-center gap-2 text-gray-800 dark:text-zinc-100 text-base">
+                        <Award className="w-4.5 h-4.5 text-[#2d5a3d] dark:text-emerald-400" />
                         Trình độ môn học
                       </CardTitle>
                     </CardHeader>
@@ -904,18 +930,18 @@ export default function UserProfile() {
                           const computedSubjects = computeSubjects(documents, deckCounts, decks);
                           if (computedSubjects.length === 0) {
                             return (
-                              <div className="col-span-2 text-center py-8 text-sm text-gray-400 font-medium">
+                              <div className="col-span-2 text-center py-8 text-sm text-gray-400 dark:text-zinc-500 font-medium">
                                 Chưa có dữ liệu để tính toán. Hãy thêm tài liệu hoặc tạo bộ flashcard!
                               </div>
                             );
                           }
                           return computedSubjects.map((s) => (
-                            <div key={s.name} className="p-3.5 bg-[#f4f7f4] border border-[#2d5a3d]/20 rounded-xl hover:border-[#2d5a3d]/40 transition-all shadow-2xs">
-                              <div className="flex justify-between items-center text-xs font-bold text-gray-700 mb-1.5">
+                            <div key={s.name} className="p-3.5 bg-[#f4f7f4] dark:bg-zinc-800/60 border border-[#2d5a3d]/20 dark:border-zinc-700 rounded-xl hover:border-[#2d5a3d]/40 transition-all shadow-2xs">
+                              <div className="flex justify-between items-center text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1.5">
                                 <span>{s.name}</span>
-                                <span className="text-[#2d5a3d]">{s.xp}</span>
+                                <span className="text-[#2d5a3d] dark:text-emerald-400">{s.xp}</span>
                               </div>
-                              <div className="h-2 bg-gray-200/80 rounded-full overflow-hidden border border-gray-200/40">
+                              <div className="h-2 bg-gray-200/80 dark:bg-zinc-700 rounded-full overflow-hidden border border-gray-200/40 dark:border-zinc-700">
                                 <div className="h-full rounded-full transition-all" style={{ width: `${s.level}%`, backgroundColor: s.color }} />
                               </div>
                             </div>
@@ -929,11 +955,11 @@ export default function UserProfile() {
                   <Card className="border-0 shadow-sm">
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
-                          <Lightbulb className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                        <CardTitle className="flex items-center gap-2 text-gray-800 dark:text-zinc-100 text-base">
+                          <Lightbulb className="w-4.5 h-4.5 text-[#2d5a3d] dark:text-emerald-400" />
                           Nhiệm vụ hôm nay
                         </CardTitle>
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-gray-400 dark:text-zinc-500">
                           {tasks.filter(t => t.is_completed).length}/{tasks.length} hoàn thành
                         </span>
                       </div>
@@ -941,14 +967,16 @@ export default function UserProfile() {
                     <CardContent className="pt-0 space-y-2.5">
                       {tasks.map((t) => {
                         const isDone = t.is_completed;
-                        const bg = isDone ? "bg-[#eaf8f0] border-[#2d5a3d]/20 text-[#2d5a3d]" : "bg-[#fafaf9] border-gray-300 text-gray-700";
+                        const bg = isDone 
+                          ? "bg-[#eaf8f0] dark:bg-emerald-950/40 border-[#2d5a3d]/20 dark:border-emerald-800/50 text-[#2d5a3d] dark:text-emerald-400" 
+                          : "bg-[#fafaf9] dark:bg-zinc-800/80 border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-zinc-300";
                         const formatVal = t.task_type === 'study_time' 
                           ? `${Math.round(t.current_value / 60)}/${Math.round(t.target_value / 60)} phút` 
                           : `${t.current_value}/${t.target_value}`;
                         return (
                           <div key={t.id} className={`flex items-center justify-between p-3 rounded-xl border shadow-2xs ${bg} transition-all duration-200 hover:translate-x-0.5`}>
                             <div className="flex items-center gap-3">
-                              <CheckCircle2 className={`w-5 h-5 shrink-0 ${isDone ? "text-[#2d5a3d]" : "text-gray-300"}`} />
+                              <CheckCircle2 className={`w-5 h-5 shrink-0 ${isDone ? "text-[#2d5a3d] dark:text-emerald-400" : "text-gray-300 dark:text-zinc-600"}`} />
                               <span className={`text-sm font-semibold ${isDone ? "line-through opacity-75" : ""}`}>{t.title}</span>
                             </div>
                             <span className="text-xs font-black shrink-0">{formatVal}</span>
@@ -964,16 +992,16 @@ export default function UserProfile() {
               {activeTab === "profile" && (
                 <div className="space-y-6">
                   {/* Card 1: Thông tin cá nhân */}
-                  <Card className="bg-white border-0 shadow-sm rounded-2xl">
-                    <CardHeader className="pb-4 border-b border-gray-100">
+                  <Card className="bg-white dark:bg-zinc-900 border-0 shadow-sm rounded-2xl">
+                    <CardHeader className="pb-4 border-b border-gray-100 dark:border-zinc-800">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-[#2d5a3d]">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#2d5a3d] dark:text-emerald-400">
                             <User className="w-5 h-5" />
                           </div>
                           <div>
-                            <CardTitle className="text-gray-900 text-base font-bold">Thông tin cá nhân</CardTitle>
-                            <p className="text-xs text-gray-400">Chi tiết thông tin tài khoản của bạn</p>
+                            <CardTitle className="text-gray-900 dark:text-zinc-100 text-base font-bold">Thông tin cá nhân</CardTitle>
+                            <p className="text-xs text-gray-400 dark:text-zinc-500">Chi tiết thông tin tài khoản của bạn</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -983,7 +1011,7 @@ export default function UserProfile() {
                               disabled={savingProfile}
                               size="sm" 
                               variant="ghost"
-                              className="text-gray-500 hover:bg-gray-100"
+                              className="text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800"
                             >
                               Hủy
                             </Button>
@@ -1035,6 +1063,9 @@ export default function UserProfile() {
                                 // Parse education
                                 const savedEducation = activeUser?.education || "";
                                 setEditEducation(savedEducation);
+                                setEditBio(activeUser?.bio || "");
+                                setEditHeadline(activeUser?.headline || "");
+                                setEditPrivacySetting(activeUser?.privacy_setting || "public");
                                 
                                 setIsEditing(true);
                               }
@@ -1042,7 +1073,7 @@ export default function UserProfile() {
                             disabled={savingProfile}
                             size="sm" 
                             variant={isEditing ? "default" : "outline"}
-                            className={isEditing ? "bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5" : "border-[#1a2e1c]/30 text-[#1a2e1c] hover:bg-[#1a2e1c]/5 gap-1.5"}
+                            className={isEditing ? "bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5" : "border-[#1a2e1c]/30 dark:border-zinc-700 text-[#1a2e1c] dark:text-emerald-400 hover:bg-[#1a2e1c]/5 dark:hover:bg-zinc-800 gap-1.5"}
                           >
                             {isEditing ? (
                               <>
@@ -1063,21 +1094,24 @@ export default function UserProfile() {
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="pt-4 divide-y divide-gray-100/70">
+                    <CardContent className="pt-4 divide-y divide-gray-100/70 dark:divide-zinc-800">
                       {[
                         { label: "Họ và tên", value: activeUser?.name || "", icon: User },
+                        { label: "Tiêu đề", value: activeUser?.headline || "Chưa cập nhật", icon: Edit3 },
+                        { label: "Tiểu sử (Bio)", value: activeUser?.bio || "Chưa cập nhật", icon: MessageSquare },
                         { label: "Học vấn", value: activeUser?.education || "", icon: GraduationCap },
                         { label: "Địa chỉ", value: activeUser?.address || "", icon: MapPin },
                         { label: "Ngày tham gia", value: activeUser?.created_at ? new Date(activeUser.created_at).toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' }) : "Chưa rõ", icon: Calendar, readOnly: true },
                         { label: "Email liên hệ", value: activeUser?.email || "", icon: Mail, readOnly: true },
-                        { label: "Số điện thoại", value: activeUser?.phone || "Chưa cập nhật", icon: Phone }
+                        { label: "Số điện thoại", value: activeUser?.phone || "Chưa cập nhật", icon: Phone },
+                        { label: "Quyền riêng tư hồ sơ", value: activeUser?.privacy_setting === 'private' ? "Riêng tư (Chỉ mình bạn)" : "Công khai (Mọi người có thể xem)", icon: Globe }
                       ].map((item, index) => {
                         const isEditMode = isEditing && !item.readOnly;
                         
                         return (
                           <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-2 first:pt-2 last:pb-2">
-                            <span className="text-sm font-semibold text-gray-500 flex items-center gap-3">
-                              <item.icon className="w-4.5 h-4.5 text-gray-400 shrink-0" />
+                            <span className="text-sm font-semibold text-gray-500 dark:text-zinc-400 flex items-center gap-3">
+                              <item.icon className="w-4.5 h-4.5 text-gray-400 dark:text-zinc-500 shrink-0" />
                               {item.label}
                             </span>
                             
@@ -1088,7 +1122,27 @@ export default function UserProfile() {
                                     type="text"
                                     value={editName}
                                     onChange={(e) => setEditName(e.target.value)}
-                                    className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] focus:border-[#2d5a3d] w-full text-right"
+                                    className="text-sm font-semibold text-gray-800 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] dark:focus:ring-emerald-500 focus:border-[#2d5a3d] w-full text-right"
+                                  />
+                                )}
+                                
+                                {item.label === "Tiêu đề" && (
+                                  <input 
+                                    type="text"
+                                    placeholder="Ví dụ: Sinh viên CNTT / Đam mê Khoa học máy tính"
+                                    value={editHeadline}
+                                    onChange={(e) => setEditHeadline(e.target.value)}
+                                    className="text-sm font-semibold text-gray-800 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] dark:focus:ring-emerald-500 focus:border-[#2d5a3d] w-full text-right"
+                                  />
+                                )}
+
+                                {item.label === "Tiểu sử (Bio)" && (
+                                  <textarea 
+                                    rows={2}
+                                    placeholder="Viết vài dòng giới thiệu về bản thân..."
+                                    value={editBio}
+                                    onChange={(e) => setEditBio(e.target.value)}
+                                    className="text-sm font-semibold text-gray-800 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] dark:focus:ring-emerald-500 focus:border-[#2d5a3d] w-full text-right resize-none"
                                   />
                                 )}
                                 
@@ -1097,7 +1151,7 @@ export default function UserProfile() {
                                     type="text"
                                     value={editPhone}
                                     onChange={(e) => setEditPhone(e.target.value)}
-                                    className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] focus:border-[#2d5a3d] w-full text-right"
+                                    className="text-sm font-semibold text-gray-800 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#2d5a3d] dark:focus:ring-emerald-500 focus:border-[#2d5a3d] w-full text-right"
                                   />
                                 )}
                                 
@@ -1105,7 +1159,7 @@ export default function UserProfile() {
                                   <div className="flex flex-col gap-2.5 w-full text-left max-w-sm sm:max-w-md ml-auto">
                                     {/* Province Selection */}
                                     <div className="relative w-full">
-                                      <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">Tỉnh / Thành phố</div>
+                                      <div className="text-[10px] uppercase font-bold text-gray-400 dark:text-zinc-500 mb-1">Tỉnh / Thành phố</div>
                                       <input
                                         type="text"
                                         placeholder="Nhập & tìm kiếm Tỉnh/Thành..."
@@ -1118,10 +1172,10 @@ export default function UserProfile() {
                                           setDistrictQuery("");
                                         }}
                                         onBlur={() => setTimeout(() => setIsProvinceDropdownOpen(false), 200)}
-                                        className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full transition-all text-left"
+                                        className="text-sm font-semibold text-gray-800 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 dark:focus:ring-emerald-500/20 focus:border-[#2d5a3d] w-full transition-all text-left"
                                       />
                                       {isProvinceDropdownOpen && (
-                                        <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-gray-100 rounded-xl shadow-lg py-1 text-sm scrollbar-thin scrollbar-thumb-gray-200">
+                                        <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-lg py-1 text-sm scrollbar-thin scrollbar-thumb-gray-200">
                                           {filteredProvinces.length > 0 ? (
                                             filteredProvinces.map(p => (
                                               <button
@@ -1135,7 +1189,7 @@ export default function UserProfile() {
                                                   setSelectedDistrict("");
                                                   setDistrictQuery("");
                                                 }}
-                                                className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] hover:text-[#2d5a3d] text-gray-700 font-medium cursor-pointer transition-colors"
+                                                className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] dark:hover:bg-zinc-700 hover:text-[#2d5a3d] dark:hover:text-emerald-400 text-gray-700 dark:text-zinc-200 font-medium cursor-pointer transition-colors"
                                               >
                                                 {p.name}
                                               </button>
@@ -1148,7 +1202,7 @@ export default function UserProfile() {
                                                 setEditAddress(provinceQuery);
                                                 setIsProvinceDropdownOpen(false);
                                               }}
-                                              className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] text-gray-700 font-medium cursor-pointer text-[#2d5a3d]"
+                                              className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 font-medium cursor-pointer text-[#2d5a3d] dark:text-emerald-400"
                                             >
                                               Sử dụng: "{provinceQuery}"
                                             </button>
@@ -1160,7 +1214,7 @@ export default function UserProfile() {
                                     {/* District Selection */}
                                     {selectedProvince && selectedProvince !== "custom" && (
                                       <div className="relative w-full">
-                                        <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">Quận / Huyện</div>
+                                        <div className="text-[10px] uppercase font-bold text-gray-400 dark:text-zinc-500 mb-1">Quận / Huyện</div>
                                         <input
                                           type="text"
                                           placeholder="Nhập & tìm kiếm Quận/Huyện..."
@@ -1171,10 +1225,10 @@ export default function UserProfile() {
                                             setSelectedDistrict("");
                                           }}
                                           onBlur={() => setTimeout(() => setIsDistrictDropdownOpen(false), 200)}
-                                          className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full transition-all text-left"
+                                          className="text-sm font-semibold text-gray-800 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 dark:focus:ring-emerald-500/20 focus:border-[#2d5a3d] w-full transition-all text-left"
                                         />
                                         {isDistrictDropdownOpen && (
-                                          <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-gray-100 rounded-xl shadow-lg py-1 text-sm scrollbar-thin scrollbar-thumb-gray-200">
+                                          <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-lg py-1 text-sm scrollbar-thin scrollbar-thumb-gray-200">
                                             {filteredDistricts.length > 0 ? (
                                               filteredDistricts.map(d => (
                                                 <button
@@ -1185,7 +1239,7 @@ export default function UserProfile() {
                                                     setDistrictQuery(d.name);
                                                     setIsDistrictDropdownOpen(false);
                                                   }}
-                                                  className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] hover:text-[#2d5a3d] text-gray-700 font-medium cursor-pointer transition-colors"
+                                                  className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] dark:hover:bg-zinc-700 hover:text-[#2d5a3d] dark:hover:text-emerald-400 text-gray-700 dark:text-zinc-200 font-medium cursor-pointer transition-colors"
                                                 >
                                                   {d.name}
                                                 </button>
@@ -1197,7 +1251,7 @@ export default function UserProfile() {
                                                   setSelectedDistrict(districtQuery);
                                                   setIsDistrictDropdownOpen(false);
                                                 }}
-                                                className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] text-gray-700 font-medium cursor-pointer text-[#2d5a3d]"
+                                                className="w-full text-left px-4 py-2 hover:bg-[#eef8f0] dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 font-medium cursor-pointer text-[#2d5a3d] dark:text-emerald-400"
                                               >
                                                 Sử dụng: "{districtQuery}"
                                               </button>
@@ -1210,13 +1264,13 @@ export default function UserProfile() {
                                     {/* Custom Address Input */}
                                     {selectedProvince === "custom" && (
                                       <div className="relative w-full">
-                                        <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">Địa chỉ chi tiết</div>
+                                        <div className="text-[10px] uppercase font-bold text-gray-400 dark:text-zinc-500 mb-1">Địa chỉ chi tiết</div>
                                         <input
                                           type="text"
                                           placeholder="Nhập địa chỉ của bạn..."
                                           value={editAddress}
                                           onChange={(e) => setEditAddress(e.target.value)}
-                                          className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full text-left transition-all"
+                                          className="text-sm font-semibold text-gray-800 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full text-left transition-all"
                                         />
                                       </div>
                                     )}
@@ -1225,14 +1279,28 @@ export default function UserProfile() {
                                 
                                 {item.label === "Học vấn" && (
                                   <div className="flex flex-col gap-1 w-full text-left max-w-sm sm:max-w-md ml-auto">
-                                    <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">Trường học</div>
+                                    <div className="text-[10px] uppercase font-bold text-gray-400 dark:text-zinc-500 mb-1">Trường học</div>
                                     <input 
                                       type="text"
                                       placeholder="Nhập tên trường học của bạn..."
                                       value={editEducation}
                                       onChange={(e) => setEditEducation(e.target.value)}
-                                      className="text-sm font-semibold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full text-left transition-all"
+                                      className="text-sm font-semibold text-gray-800 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full text-left transition-all"
                                     />
+                                  </div>
+                                )}
+
+                                {item.label === "Quyền riêng tư hồ sơ" && (
+                                  <div className="flex flex-col gap-1 w-full text-left max-w-sm sm:max-w-md ml-auto">
+                                    <div className="text-[10px] uppercase font-bold text-gray-400 dark:text-zinc-500 mb-1">Chế độ hiển thị</div>
+                                    <select
+                                      value={editPrivacySetting}
+                                      onChange={(e) => setEditPrivacySetting(e.target.value)}
+                                      className="text-sm font-semibold text-gray-800 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d5a3d]/20 focus:border-[#2d5a3d] w-full text-left transition-all cursor-pointer"
+                                    >
+                                      <option value="public">Công khai (Mọi người đều có thể xem)</option>
+                                      <option value="private">Riêng tư (Chỉ mình bạn xem được)</option>
+                                    </select>
                                   </div>
                                 )}
                               </div>
@@ -1240,27 +1308,27 @@ export default function UserProfile() {
                               <div className="flex items-center gap-3">
                                 {activeUser?.is_verified ? (
                                   <>
-                                    <Badge className="bg-green-50 hover:bg-green-50 text-green-700 border border-green-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
+                                    <Badge className="bg-green-50 dark:bg-green-950/50 hover:bg-green-50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
                                       Đã bật 2FA
                                     </Badge>
                                     <Button 
                                       size="sm" 
                                       variant="outline" 
                                       onClick={() => toggleVerification(false)}
-                                      className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 text-xs py-1 h-8"
+                                      className="text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-zinc-800 text-xs py-1 h-8"
                                     >
                                       Tắt bảo mật
                                     </Button>
                                   </>
                                 ) : (
                                   <>
-                                    <Badge className="bg-gray-50 hover:bg-gray-50 text-gray-500 border border-gray-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
+                                    <Badge className="bg-gray-50 dark:bg-zinc-800 hover:bg-gray-50 text-gray-500 dark:text-zinc-400 border border-gray-200 dark:border-zinc-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
                                       Chưa kích hoạt
                                     </Badge>
                                     <Button 
                                       size="sm" 
                                       onClick={() => toggleVerification(true)}
-                                      className="bg-[#2d5a3d] hover:bg-[#1f3f2a] text-white text-xs py-1 h-8"
+                                      className="bg-[#2d5a3d] dark:bg-emerald-700 hover:bg-[#1f3f2a] dark:hover:bg-emerald-600 text-white text-xs py-1 h-8"
                                     >
                                       Kích hoạt 2FA
                                     </Button>
@@ -1268,7 +1336,7 @@ export default function UserProfile() {
                                 )}
                               </div>
                             ) : (
-                              <span className="text-sm font-bold text-gray-800 truncate max-w-[220px] sm:max-w-[420px] text-right">{item.value}</span>
+                              <span className="text-sm font-bold text-gray-800 dark:text-zinc-200 truncate max-w-[220px] sm:max-w-[420px] text-right">{item.value}</span>
                             )}
                           </div>
                         );
@@ -1277,7 +1345,7 @@ export default function UserProfile() {
                   </Card>
 
                   {/* Card 2: Premium Account Status Card (Positioned below Card 1) */}
-                  <Card className="border-0 shadow-sm overflow-hidden bg-white rounded-2xl flex flex-col md:flex-row">
+                  <Card className="border-0 shadow-sm overflow-hidden bg-white dark:bg-zinc-900 rounded-2xl flex flex-col md:flex-row">
                   {/* Premium Gradient Header (Left block on md screens, top on small screens) */}
                   <div className="relative p-8 text-white bg-gradient-to-br from-[#7C3AED] via-[#6D28D9] to-[#4C1D95] overflow-hidden md:w-80 shrink-0 flex flex-col justify-between">
                     {/* Circle background decorations */}
@@ -1308,11 +1376,11 @@ export default function UserProfile() {
                       <div className="space-y-5">
                         {/* Recommended Upgrade Label */}
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-[#D97706]">
+                          <div className="flex items-center gap-2 text-[#D97706] dark:text-amber-400">
                             <span className="text-base">✨</span>
-                            <span className="text-sm font-bold text-gray-800">Nâng cấp PRO</span>
+                            <span className="text-sm font-bold text-gray-800 dark:text-zinc-200">Nâng cấp PRO</span>
                           </div>
-                          <span className="px-2 py-0.5 text-[10px] font-bold text-[#D97706] bg-[#FEF3C7] rounded-md border border-[#FDE68A]">
+                          <span className="px-2 py-0.5 text-[10px] font-bold text-[#D97706] dark:text-amber-300 bg-[#FEF3C7] dark:bg-amber-950/60 rounded-md border border-[#FDE68A] dark:border-amber-800">
                             Đề xuất
                           </span>
                         </div>
@@ -1326,10 +1394,10 @@ export default function UserProfile() {
                               "Ưu tiên hỗ trợ 24/7"
                             ].map((feat, idx) => (
                               <li key={idx} className="flex items-start gap-2.5">
-                                <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0 mt-0.5">
-                                  <span className="text-emerald-600 text-xs font-bold">✓</span>
+                                <div className="w-5 h-5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
+                                  <span className="text-emerald-600 dark:text-emerald-400 text-xs font-bold">✓</span>
                                 </div>
-                                <span className="text-sm font-medium text-gray-600 leading-tight">{feat}</span>
+                                <span className="text-sm font-medium text-gray-600 dark:text-zinc-400 leading-tight">{feat}</span>
                               </li>
                             ))}
                           </ul>
@@ -1338,15 +1406,15 @@ export default function UserProfile() {
                         {/* Price Tag Box and Actions */}
                         <div className="flex flex-col justify-between gap-4">
                           {/* Price Tag Box */}
-                          <div className="p-4 rounded-xl bg-[#F5F3FF] border border-[#DDD6FE]/40 flex items-center justify-between">
+                          <div className="p-4 rounded-xl bg-[#F5F3FF] dark:bg-purple-950/40 border border-[#DDD6FE]/40 dark:border-purple-800/40 flex items-center justify-between">
                             <div>
                               <p className="text-[10px] text-purple-400 line-through font-semibold">Giá đề xuất: 99K</p>
                               <div className="flex items-baseline gap-1 mt-0.5">
-                                <span className="text-xl font-extrabold text-[#6D28D9]">69K</span>
-                                <span className="text-xs font-bold text-[#6D28D9]/70">/tháng</span>
+                                <span className="text-xl font-extrabold text-[#6D28D9] dark:text-purple-300">69K</span>
+                                <span className="text-xs font-bold text-[#6D28D9]/70 dark:text-purple-400">/tháng</span>
                               </div>
                             </div>
-                            <span className="px-2 py-0.5 text-xs font-extrabold text-emerald-600 bg-emerald-50 rounded-md border border-emerald-100">
+                            <span className="px-2 py-0.5 text-xs font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 rounded-md border border-emerald-100 dark:border-emerald-900">
                               -30%
                             </span>
                           </div>
@@ -1357,7 +1425,7 @@ export default function UserProfile() {
                               <span>👑</span>
                               <span>Nâng cấp ngay</span>
                             </Button>
-                            <div className="flex items-center justify-center gap-1.5 text-[10px] font-semibold text-gray-400">
+                            <div className="flex items-center justify-center gap-1.5 text-[10px] font-semibold text-gray-400 dark:text-zinc-500">
                               <span className="text-xs">🕒</span>
                               <span>Ưu đãi kết thúc sau 2 ngày</span>
                             </div>
@@ -1381,17 +1449,17 @@ export default function UserProfile() {
                       <>
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm text-gray-700 font-medium">
+                            <p className="text-sm text-gray-700 dark:text-zinc-300 font-medium">
                               {decks.length} bộ · {totalCards} thẻ tổng
                             </p>
-                            <p className="text-xs text-gray-400">
+                            <p className="text-xs text-gray-400 dark:text-zinc-500">
                               {totalMastered} thẻ đã thành thạo ({totalPct}%)
                             </p>
                           </div>
                           <Button 
                             size="sm" 
                             onClick={() => router.push('/flashcards')}
-                            className="bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white gap-1.5"
+                            className="bg-[#1a2e1c] hover:bg-[#2d5a3d] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white gap-1.5"
                           >
                             <Zap className="w-3.5 h-3.5" />
                             Tạo bộ mới
@@ -1399,10 +1467,10 @@ export default function UserProfile() {
                         </div>
 
                         {decks.length === 0 ? (
-                          <div className="text-center py-10 bg-white rounded-2xl border-2 border-dashed border-gray-200">
-                            <Layers className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                            <p className="text-sm font-semibold text-gray-600">Bạn chưa có bộ thẻ flashcard nào.</p>
-                            <Button size="sm" onClick={() => router.push('/flashcards')} className="mt-3 bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white">
+                          <div className="text-center py-10 bg-white dark:bg-zinc-900 rounded-2xl border-2 border-dashed border-gray-200 dark:border-zinc-800">
+                            <Layers className="w-10 h-10 text-gray-300 dark:text-zinc-600 mx-auto mb-3" />
+                            <p className="text-sm font-semibold text-gray-600 dark:text-zinc-400">Bạn chưa có bộ thẻ flashcard nào.</p>
+                            <Button size="sm" onClick={() => router.push('/flashcards')} className="mt-3 bg-[#1a2e1c] hover:bg-[#2d5a3d] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white">
                               Tạo bộ thẻ đầu tiên
                             </Button>
                           </div>
@@ -1425,29 +1493,29 @@ export default function UserProfile() {
                                     <div className="flex items-start justify-between mb-3">
                                       <div className="flex-1 min-w-0 pr-2">
                                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                          <Badge variant="outline" className="text-xs border-[#2d5a3d]/30 text-[#2d5a3d] shrink-0">Học tập</Badge>
+                                          <Badge variant="outline" className="text-xs border-[#2d5a3d]/30 text-[#2d5a3d] dark:border-emerald-600/40 dark:text-emerald-400 shrink-0">Học tập</Badge>
                                           {counts.total > 0 && (
-                                            <Badge variant="outline" className="text-xs shrink-0 bg-emerald-50 text-emerald-700 border-emerald-200">
+                                            <Badge variant="outline" className="text-xs shrink-0 bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
                                               {counts.total} thẻ
                                             </Badge>
                                           )}
                                         </div>
-                                        <h3 className="text-sm font-bold text-gray-900 group-hover:text-[#1a2e1c] transition-colors leading-snug truncate">
+                                        <h3 className="text-sm font-bold text-gray-900 group-hover:text-[#1a2e1c] dark:text-zinc-100 dark:group-hover:text-emerald-400 transition-colors leading-snug truncate">
                                           {deck.name}
                                         </h3>
-                                        <p className="text-xs text-gray-400 truncate mt-1">
+                                        <p className="text-xs text-gray-400 dark:text-zinc-500 truncate mt-1">
                                           {deck.description || "Không có mô tả bộ thẻ này."}
                                         </p>
                                       </div>
-                                      <BookMarked className="w-4.5 h-4.5 text-gray-300 group-hover:text-[#2d5a3d] transition-colors shrink-0" />
+                                      <BookMarked className="w-4.5 h-4.5 text-gray-300 group-hover:text-[#2d5a3d] dark:text-zinc-600 dark:group-hover:text-emerald-400 transition-colors shrink-0" />
                                     </div>
                                     
                                     {counts.total > 0 ? (
                                       <>
-                                        <Progress value={pct} className="h-1.5 bg-gray-100 mb-2">
-                                           <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                        <Progress value={pct} className="h-1.5 bg-gray-100 dark:bg-zinc-800 mb-2">
+                                           <div className="h-full bg-[#2d5a3d] dark:bg-emerald-600 rounded-full transition-all" style={{ width: `${pct}%` }} />
                                         </Progress>
-                                        <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
+                                        <div className="flex items-center justify-between text-xs text-gray-400 dark:text-zinc-500 mt-2">
                                           <span>{counts.mastered}/{counts.total} thẻ thành thạo</span>
                                           <span className="flex items-center gap-1">
                                             <Clock className="w-3 h-3" />
@@ -1456,7 +1524,7 @@ export default function UserProfile() {
                                         </div>
                                       </>
                                     ) : (
-                                      <div className="text-xs text-gray-400 mt-4 flex items-center justify-between">
+                                      <div className="text-xs text-gray-400 dark:text-zinc-500 mt-4 flex items-center justify-between">
                                         <span>Chưa có thẻ ghi nhớ</span>
                                         <span className="flex items-center gap-1">
                                           <Clock className="w-3 h-3" />
@@ -1491,17 +1559,17 @@ export default function UserProfile() {
                       return dynAchievements.map((a, i) => (
                         <Card key={i} className={`border-0 shadow-sm transition-all ${a.earned ? "hover:shadow-md" : "opacity-50"}`}>
                           <CardContent className="p-4 flex flex-col items-center gap-3 text-center">
-                            <div className={`w-14 h-14 rounded-2xl ${a.earned ? a.bg : "bg-gray-100"} flex items-center justify-center`}>
-                              <a.icon className={`w-7 h-7 ${a.earned ? a.color : "text-gray-300"}`} />
+                            <div className={`w-14 h-14 rounded-2xl ${a.earned ? a.bg : "bg-gray-100 dark:bg-zinc-800"} flex items-center justify-center`}>
+                              <a.icon className={`w-7 h-7 ${a.earned ? a.color : "text-gray-300 dark:text-zinc-600"}`} />
                             </div>
                             <div>
-                              <p className="text-sm font-semibold text-gray-800">{a.label}</p>
-                              <p className="text-xs text-gray-400 mt-0.5">{a.desc}</p>
+                              <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">{a.label}</p>
+                              <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{a.desc}</p>
                               {a.earned && a.date && (
-                                <p className="text-xs text-[#4a7c59] mt-1 font-medium">{a.date}</p>
+                                <p className="text-xs text-[#4a7c59] dark:text-emerald-400 mt-1 font-medium">{a.date}</p>
                               )}
                               {!a.earned && (
-                                <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 mt-1">Chưa đạt</Badge>
+                                <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 dark:text-zinc-500 dark:border-zinc-700 mt-1">Chưa đạt</Badge>
                               )}
                             </div>
                           </CardContent>
@@ -1513,8 +1581,8 @@ export default function UserProfile() {
                   {/* Xếp hạng */}
                   <Card className="border-0 shadow-sm">
                     <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-gray-800 text-base">
-                        <Trophy className="w-4.5 h-4.5 text-[#2d5a3d]" />
+                      <CardTitle className="flex items-center gap-2 text-gray-800 dark:text-zinc-200 text-base">
+                        <Trophy className="w-4.5 h-4.5 text-[#2d5a3d] dark:text-emerald-400" />
                         Điểm XP của bạn
                       </CardTitle>
                     </CardHeader>
@@ -1530,14 +1598,14 @@ export default function UserProfile() {
                         return (
                           <div className="grid grid-cols-3 gap-3">
                             {[
-                              { label: "Tổng XP", rank: totalXP.toLocaleString(), unit: "XP", bg: "bg-[#eef8f0]", border: "border-[#2d5a3d]/20" },
-                              { label: "Cấp hiện tại", rank: `Cấp ${level}`, unit: "", bg: "bg-[#edf4fc]", border: "border-blue-200" },
-                              { label: "Tiến độ cấp", rank: `${pct}%`, unit: `${currentLevelXP}/${xpToNextLevel} XP`, bg: "bg-[#fcf3eb]", border: "border-orange-200" },
+                              { label: "Tổng XP", rank: totalXP.toLocaleString(), unit: "XP", bg: "bg-[#eef8f0] dark:bg-emerald-950/30", border: "border-[#2d5a3d]/20 dark:border-emerald-800/40" },
+                              { label: "Cấp hiện tại", rank: `Cấp ${level}`, unit: "", bg: "bg-[#edf4fc] dark:bg-blue-950/30", border: "border-blue-200 dark:border-blue-800/40" },
+                              { label: "Tiến độ cấp", rank: `${pct}%`, unit: `${currentLevelXP}/${xpToNextLevel} XP`, bg: "bg-[#fcf3eb] dark:bg-amber-950/30", border: "border-orange-200 dark:border-amber-800/40" },
                             ].map(r => (
                               <div key={r.label} className={`p-3 rounded-xl ${r.bg} border ${r.border} text-center shadow-2xs`}>
-                                <p className="text-xl font-bold text-[#1a2e1c]">{r.rank}</p>
-                                <p className="text-[10px] text-gray-400 font-medium mt-0.5">{r.label}</p>
-                                {r.unit && <p className="text-[10px] text-[#4a7c59] font-medium mt-1">{r.unit}</p>}
+                                <p className="text-xl font-bold text-[#1a2e1c] dark:text-zinc-100">{r.rank}</p>
+                                <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium mt-0.5">{r.label}</p>
+                                {r.unit && <p className="text-[10px] text-[#4a7c59] dark:text-emerald-400 font-medium mt-1">{r.unit}</p>}
                               </div>
                             ))}
                           </div>
@@ -1558,13 +1626,13 @@ export default function UserProfile() {
                     return (
                       <>
                         <div className="flex items-center justify-between">
-                          <p className="text-sm text-gray-700 font-medium">
+                          <p className="text-sm text-gray-700 dark:text-zinc-300 font-medium">
                             {documents.length} tài liệu học tập · {totalReadPagesAll.toLocaleString()} trang đã học
                           </p>
                           <Button 
                             size="sm" 
                             onClick={() => router.push('/library')}
-                            className="bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white gap-1.5"
+                            className="bg-[#1a2e1c] hover:bg-[#2d5a3d] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white gap-1.5"
                           >
                             <FileText className="w-3.5 h-3.5" />
                             Thêm tài liệu
@@ -1572,10 +1640,10 @@ export default function UserProfile() {
                         </div>
 
                         {documents.length === 0 ? (
-                          <div className="text-center py-10 bg-white rounded-2xl border-2 border-dashed border-gray-200">
-                            <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                            <p className="text-sm font-semibold text-gray-600">Bạn chưa có tài liệu nào trong thư viện.</p>
-                            <Button size="sm" onClick={() => router.push('/library')} className="mt-3 bg-[#1a2e1c] hover:bg-[#2d5a3d] text-white">
+                          <div className="text-center py-10 bg-white dark:bg-zinc-900 rounded-2xl border-2 border-dashed border-gray-200 dark:border-zinc-800">
+                            <FileText className="w-10 h-10 text-gray-300 dark:text-zinc-600 mx-auto mb-3" />
+                            <p className="text-sm font-semibold text-gray-600 dark:text-zinc-400">Bạn chưa có tài liệu nào trong thư viện.</p>
+                            <Button size="sm" onClick={() => router.push('/library')} className="mt-3 bg-[#1a2e1c] hover:bg-[#2d5a3d] dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white">
                               Thêm tài liệu đầu tiên
                             </Button>
                           </div>
@@ -1594,26 +1662,26 @@ export default function UserProfile() {
                                   onClick={() => router.push(`/viewer/${doc.id}`)}
                                 >
                                   <CardContent className="p-4 flex items-center gap-4">
-                                    <div className="w-10 h-12 rounded-lg bg-[#1a2e1c]/8 flex items-center justify-center shrink-0">
-                                      <FileText className="w-5 h-5 text-[#2d5a3d]" />
+                                    <div className="w-10 h-12 rounded-lg bg-[#1a2e1c]/8 dark:bg-emerald-950/50 flex items-center justify-center shrink-0">
+                                      <FileText className="w-5 h-5 text-[#2d5a3d] dark:text-emerald-400" />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                        <p className="text-sm font-bold text-gray-800 truncate group-hover:text-[#1a2e1c] max-w-[200px] sm:max-w-md">
+                                        <p className="text-sm font-bold text-gray-800 dark:text-zinc-200 truncate group-hover:text-[#1a2e1c] dark:group-hover:text-emerald-400 max-w-[200px] sm:max-w-md">
                                           {doc.title}
                                         </p>
-                                        <Badge variant="outline" className="text-xs border-gray-200 text-gray-500 shrink-0">
+                                        <Badge variant="outline" className="text-xs border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 shrink-0">
                                           {fileType}
                                         </Badge>
                                       </div>
-                                      <Progress value={pct} className="h-1.5 bg-gray-100 mb-1.5">
-                                        <div className="h-full bg-[#2d5a3d] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                      <Progress value={pct} className="h-1.5 bg-gray-100 dark:bg-zinc-800 mb-1.5">
+                                        <div className="h-full bg-[#2d5a3d] dark:bg-emerald-600 rounded-full transition-all" style={{ width: `${pct}%` }} />
                                       </Progress>
-                                      <p className="text-xs text-gray-400">
+                                      <p className="text-xs text-gray-400 dark:text-zinc-500">
                                         {readPages}/{totalPages} trang · {pct}% hoàn thành · {doc.category || "Chung"}
                                       </p>
                                     </div>
-                                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#2d5a3d] transition-colors shrink-0" />
+                                    <ChevronRight className="w-4 h-4 text-gray-300 dark:text-zinc-600 group-hover:text-[#2d5a3d] dark:group-hover:text-emerald-400 transition-colors shrink-0" />
                                   </CardContent>
                                 </Card>
                               );
@@ -1622,7 +1690,7 @@ export default function UserProfile() {
                             <Button 
                               variant="outline" 
                               onClick={() => router.push('/library')}
-                              className="w-full border-dashed border-[#2d5a3d]/30 text-[#2d5a3d] hover:bg-[#eaf0eb]"
+                              className="w-full border-dashed border-[#2d5a3d]/30 text-[#2d5a3d] hover:bg-[#eaf0eb] dark:border-emerald-600/40 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
                             >
                               Xem tất cả {documents.length} tài liệu trong thư viện →
                             </Button>
@@ -1632,6 +1700,16 @@ export default function UserProfile() {
                     );
                   })()}
                 </div>
+              )}
+
+              {/* ── SAVED DOCUMENTS ── */}
+              {activeTab === "saved" && (
+                <SavedAndLikedDocumentsTab type="saved" triggerMessage={triggerMessage} />
+              )}
+
+              {/* ── LIKED DOCUMENTS ── */}
+              {activeTab === "liked" && (
+                <SavedAndLikedDocumentsTab type="liked" triggerMessage={triggerMessage} />
               )}
             </div>
           </div>

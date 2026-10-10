@@ -15,7 +15,6 @@ import { Navbar } from "@/components/landing/Navbar";
 import RegisterModal from "@/components/auth/RegisterModal";
 import UploadDocumentModal from "@/components/documents/UploadDocumentModal";
 import ShareModal from "@/components/documents/ShareModal";
-import TeacherStudioSection from "@/components/teacher/TeacherStudioSection";
 import { Background, BackgroundStyle } from "@/components/flashcards/Background";
 
 // Category tag colors matching the mockup
@@ -47,16 +46,24 @@ const getDocType = (doc: any): "pdf" | "docx" | "txt" | "pptx" => {
   return "pdf";
 };
 
-// Helper for deterministic size
+// Helper for formatting real document file size
 const getDocSize = (doc: any): string => {
-  const sizes = ["2.3 MB", "1.1 MB", "856 KB", "3.2 MB", "1.8 MB", "124 KB", "4.7 MB", "512 KB"];
-  return sizes[(doc.id - 1) % sizes.length] || "1.2 MB";
+  if (doc?.file_size && typeof doc.file_size === 'number' && doc.file_size > 0) {
+    if (doc.file_size >= 1048576) {
+      return `${(doc.file_size / 1048576).toFixed(1)} MB`;
+    }
+    return `${Math.max(1, Math.round(doc.file_size / 1024))} KB`;
+  }
+  const type = getDocType(doc);
+  return type ? type.toUpperCase() : 'Tài liệu';
 };
 
-// Helper for deterministic page count
+// Helper for real document page count
 const getDocPages = (doc: any): number | undefined => {
-  const pages = [42, 28, 19, 64, 33, undefined, 38, 12];
-  return pages[(doc.id - 1) % pages.length];
+  if (doc?.page_count && typeof doc.page_count === 'number' && doc.page_count > 0) {
+    return doc.page_count;
+  }
+  return undefined;
 };
 
 // Helper for formatted date
@@ -486,17 +493,9 @@ export default function LibraryPage() {
   } = useStudy();
 
   const [mounted, setMounted] = useState(false);
-  const [libraryTab, setLibraryTab] = useState<'documents' | 'teacher_studio'>('documents');
 
   useEffect(() => {
     setMounted(true);
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const tab = params.get('tab');
-      if (tab === 'teacher' || tab === 'studio') {
-        setLibraryTab('teacher_studio');
-      }
-    }
   }, []);
 
   const [dark, setDark] = useState(false);
@@ -704,6 +703,13 @@ export default function LibraryPage() {
     const savedTheme = localStorage.getItem("app-theme") || "light";
     setDark(savedTheme === "dark");
 
+    const onThemeChange = (e: any) => {
+      if (e.detail?.theme) {
+        setDark(e.detail.theme === "dark");
+      }
+    };
+    window.addEventListener("cognito:theme_change", onThemeChange);
+
     const savedBg = (localStorage.getItem("library-bg") as BackgroundStyle) || "default";
     setBgStyle(savedBg);
 
@@ -728,12 +734,17 @@ export default function LibraryPage() {
         console.error(e);
       }
     }
+
+    return () => {
+      window.removeEventListener("cognito:theme_change", onThemeChange);
+    };
   }, [isAuthenticated, activeUser]);
 
   const handleToggleDark = () => {
     const nextDark = !dark;
     setDark(nextDark);
     localStorage.setItem("app-theme", nextDark ? "dark" : "light");
+    window.dispatchEvent(new CustomEvent("cognito:theme_change", { detail: { theme: nextDark ? "dark" : "light" } }));
     if (typeof window !== "undefined") {
       if (nextDark) {
         document.documentElement.classList.add("dark");
@@ -905,54 +916,8 @@ export default function LibraryPage() {
 
       <div className="max-w-5xl mx-auto w-full px-4 md:px-6 mt-6 flex-1 flex flex-col overflow-x-hidden relative z-10">
         <div className="flex-1 flex flex-col space-y-6 w-full">
-          
-          {/* Main Library View Tabs */}
-          <div 
-            className="flex items-center gap-1.5 p-1 rounded-2xl w-fit border shadow-xs"
-            style={{
-              background: dark ? "#1e1e1e" : "#eae7dd",
-              borderColor: sidebarBorder
-            }}
-          >
-            <button
-              onClick={() => setLibraryTab("documents")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                libraryTab === "documents"
-                  ? (dark ? "bg-[#2d5a3c] text-white shadow-sm" : "bg-[#1a3d28] text-white shadow-sm")
-                  : (dark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900")
-              }`}
-            >
-              <FileText size={15} />
-              Tài liệu học tập
-            </button>
-
-            <button
-              onClick={() => setLibraryTab("teacher_studio")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                libraryTab === "teacher_studio"
-                  ? (dark ? "bg-[#2d5a3c] text-white shadow-sm" : "bg-[#1a3d28] text-white shadow-sm")
-                  : (dark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900")
-              }`}
-            >
-              <Presentation size={15} />
-              Slide Giảng dạy (Teacher Studio)
-              <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-emerald-400 text-black font-extrabold uppercase">Mới</span>
-            </button>
-          </div>
-
-          {libraryTab === "teacher_studio" ? (
-            <TeacherStudioSection
-              dark={dark}
-              primaryColor={primaryColor}
-              textMain={textMain}
-              textSub={textSub}
-              sidebarBorder={sidebarBorder}
-              cardBorder={cardBorder}
-            />
-          ) : (
-            <>
-              {/* Page Heading Section */}
-              <div className="flex justify-between items-center" style={{ marginBottom: 4 }}>
+          {/* Page Heading Section */}
+          <div className="flex justify-between items-center" style={{ marginBottom: 4 }}>
                 <div>
                   <h1
                     style={{
@@ -970,7 +935,7 @@ export default function LibraryPage() {
                     Quản lý và ôn tập các tài liệu cá nhân của bạn
                   </p>
                 </div>
-                {isAuthenticated && (
+                {isAuthenticated ? (
                   <button
                     onClick={() => setIsUploadOpen(true)}
                     style={{
@@ -983,6 +948,20 @@ export default function LibraryPage() {
                   >
                     <Plus size={15} />
                     Tải tài liệu lên
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowLoginModal(true)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6, padding: "8px 16px",
+                      borderRadius: 12, border: "none",
+                      background: primaryColor, color: "#fff", fontWeight: 700, fontSize: 13,
+                      cursor: "pointer", fontFamily: "'Outfit', sans-serif",
+                      boxShadow: dark ? "3px 3px 0 rgba(255,255,255,0.03)" : "3px 3px 0 rgba(26,46,28,0.12)",
+                    }}
+                  >
+                    <Plus size={15} />
+                    Đăng nhập để tải tài liệu
                   </button>
                 )}
               </div>
@@ -1311,8 +1290,6 @@ export default function LibraryPage() {
               ))}
             </div>
           )}
-        </>
-      )}
     </div>
   </div>
 
