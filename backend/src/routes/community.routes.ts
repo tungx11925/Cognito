@@ -11,6 +11,8 @@ import {
   listComments,
   deleteComment,
   getUserPersonalResources,
+  getUserSavedCommunityResources,
+  getUserLikedCommunityResources,
 } from '../controllers/community.controller';
 import { authenticate, optionalAuthenticate } from '../middlewares/auth.middleware';
 
@@ -19,6 +21,8 @@ const router = Router();
 // Feed & Discovery
 router.get('/feed', optionalAuthenticate, getCommunityFeed);
 router.get('/my-resources', authenticate, getUserPersonalResources);
+router.get('/my-saved', authenticate, getUserSavedCommunityResources);
+router.get('/my-liked', authenticate, getUserLikedCommunityResources);
 
 // Detail & Direct Study Target
 router.get('/resources/:id', optionalAuthenticate, getResourceDetail);

@@ -33,6 +33,7 @@ import {
   UserX,
   ShieldCheck,
   ShieldAlert,
+  LogIn,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import dynamic from 'next/dynamic';
@@ -54,6 +55,7 @@ import {
   ReportReason,
   BlockedUserItem,
 } from '@/services/safety.service';
+import CardErrorBoundary from '@/components/common/CardErrorBoundary';
 import {
   getCommunityFeed,
   publishResource,
@@ -94,6 +96,11 @@ const RESOURCE_TYPES: Array<{ key: ResourceType | ''; label: string; icon: React
 
 export default function CommunityPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const {
     isAuthenticated,
     showLoginModal,
@@ -286,6 +293,12 @@ export default function CommunityPage() {
 
   // Fetch Community Feed
   const fetchFeed = useCallback(async () => {
+    if (activeTab === 'saved' && !isAuthenticated) {
+      setResources([]);
+      setTotalCount(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await getCommunityFeed({
@@ -310,7 +323,7 @@ export default function CommunityPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, selectedCategory, selectedType, debouncedSearch]);
+  }, [activeTab, selectedCategory, selectedType, debouncedSearch, isAuthenticated]);
 
   useEffect(() => {
     fetchFeed();
@@ -339,6 +352,14 @@ export default function CommunityPage() {
             title: data.documents[0].title,
             category: data.documents[0].category || 'Công nghệ thông tin',
           }));
+        } else if (data.flashcard_decks && data.flashcard_decks.length > 0) {
+          setPublishForm((prev) => ({
+            ...prev,
+            resourceType: 'flashcard_deck',
+            resourceId: data.flashcard_decks[0].id,
+            title: data.flashcard_decks[0].name,
+            category: 'Thẻ ghi nhớ',
+          }));
         }
       }
     } catch (err) {
@@ -363,9 +384,9 @@ export default function CommunityPage() {
     } else if (type === 'mindmap' && personalResources.mindmaps.length > 0) {
       initialId = personalResources.mindmaps[0].id;
       initialTitle = personalResources.mindmaps[0].title;
-    } else if (type === 'flashcard_deck' && personalResources.flashcardDecks.length > 0) {
-      initialId = personalResources.flashcardDecks[0].id;
-      initialTitle = personalResources.flashcardDecks[0].name;
+    } else if (type === 'flashcard_deck' && personalResources.flashcard_decks && personalResources.flashcard_decks.length > 0) {
+      initialId = personalResources.flashcard_decks[0].id;
+      initialTitle = personalResources.flashcard_decks[0].name;
     }
 
     setPublishForm((prev) => ({
@@ -556,7 +577,24 @@ export default function CommunityPage() {
         toast.error(res.error);
         setCommentsList([]);
       } else {
-        setCommentsList(res.comments || []);
+        const raw = res.comments || [];
+        const hasNested = raw.some((c) => c.replies && c.replies.length > 0);
+        if (hasNested || raw.every((c) => !c.parent_id)) {
+          setCommentsList(raw);
+        } else {
+          const map = new Map<number, CommunityCommentItem>();
+          const roots: CommunityCommentItem[] = [];
+          raw.forEach((c) => map.set(c.id, { ...c, replies: [] }));
+          raw.forEach((c) => {
+            const current = map.get(c.id)!;
+            if (c.parent_id && map.has(c.parent_id)) {
+              map.get(c.parent_id)!.replies!.push(current);
+            } else {
+              roots.push(current);
+            }
+          });
+          setCommentsList(roots);
+        }
       }
     } catch (error) {
       toast.error('Lỗi khi tải bình luận');
@@ -592,7 +630,24 @@ export default function CommunityPage() {
         // Refresh comments list
         const updated = await listResourceComments(commentsTarget.id);
         if (updated.comments) {
-          setCommentsList(updated.comments);
+          const raw = updated.comments;
+          const hasNested = raw.some((c) => c.replies && c.replies.length > 0);
+          if (hasNested || raw.every((c) => !c.parent_id)) {
+            setCommentsList(raw);
+          } else {
+            const map = new Map<number, CommunityCommentItem>();
+            const roots: CommunityCommentItem[] = [];
+            raw.forEach((c) => map.set(c.id, { ...c, replies: [] }));
+            raw.forEach((c) => {
+              const current = map.get(c.id)!;
+              if (c.parent_id && map.has(c.parent_id)) {
+                map.get(c.parent_id)!.replies!.push(current);
+              } else {
+                roots.push(current);
+              }
+            });
+            setCommentsList(roots);
+          }
         }
         // Update resource comment count in card
         setResources((prev) =>
@@ -622,7 +677,24 @@ export default function CommunityPage() {
         if (commentsTarget) {
           const updated = await listResourceComments(commentsTarget.id);
           if (updated.comments) {
-            setCommentsList(updated.comments);
+            const raw = updated.comments;
+            const hasNested = raw.some((c) => c.replies && c.replies.length > 0);
+            if (hasNested || raw.every((c) => !c.parent_id)) {
+              setCommentsList(raw);
+            } else {
+              const map = new Map<number, CommunityCommentItem>();
+              const roots: CommunityCommentItem[] = [];
+              raw.forEach((c) => map.set(c.id, { ...c, replies: [] }));
+              raw.forEach((c) => {
+                const current = map.get(c.id)!;
+                if (c.parent_id && map.has(c.parent_id)) {
+                  map.get(c.parent_id)!.replies!.push(current);
+                } else {
+                  roots.push(current);
+                }
+              });
+              setCommentsList(roots);
+            }
           }
           setResources((prev) =>
             prev.map((r) =>
@@ -640,7 +712,7 @@ export default function CommunityPage() {
 
   // Direct study navigation
   const handleStudy = (item: CommunityResourceItem) => {
-    if (!item.is_available) {
+    if (!item.is_available || !item.study_url) {
       toast.error('Tài nguyên gốc đã bị xóa hoặc không còn khả dụng!');
       return;
     }
@@ -834,6 +906,25 @@ export default function CommunityPage() {
             <div className="w-10 h-10 border-4 border-[#1a3a2a] dark:border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
             <p className="text-sm text-stone-500 dark:text-zinc-400 font-medium">Đang tải học liệu từ cộng đồng...</p>
           </div>
+        ) : activeTab === 'saved' && !isAuthenticated ? (
+          <div className="py-20 bg-white dark:bg-zinc-900 rounded-3xl border border-stone-200 dark:border-zinc-800 text-center px-4 max-w-xl mx-auto shadow-sm my-8">
+            <div className="w-16 h-16 bg-stone-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-4 text-stone-400 dark:text-zinc-500">
+              <Bookmark size={32} />
+            </div>
+            <h3 className="text-lg font-bold text-stone-900 dark:text-zinc-100">
+              Vui lòng đăng nhập để xem mục đã lưu
+            </h3>
+            <p className="text-sm text-stone-500 dark:text-zinc-400 mt-1 max-w-md mx-auto">
+              Bạn cần đăng nhập để xem và quản lý danh sách học liệu đã lưu từ cộng đồng.
+            </p>
+            <button
+              onClick={() => setShowLoginModal(true)}
+              className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a3a2a] dark:bg-emerald-700 text-white text-sm font-semibold hover:bg-[#12281d] dark:hover:bg-emerald-600 transition-all cursor-pointer"
+            >
+              <LogIn size={16} />
+              <span>Đăng nhập ngay</span>
+            </button>
+          </div>
         ) : resources.length === 0 ? (
           <div className="py-20 bg-white dark:bg-zinc-900 rounded-3xl border border-stone-200 dark:border-zinc-800 text-center px-4 max-w-xl mx-auto shadow-sm my-8">
             <div className="w-16 h-16 bg-stone-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-4 text-stone-400 dark:text-zinc-500">
@@ -864,235 +955,237 @@ export default function CommunityPage() {
               const TypeIcon = typeInfo.icon;
               const isOwner = activeUser && activeUser.id === item.user_id;
               const isAdmin = activeUser?.role === 'admin';
+              const authorDisplayName = item.author_name || 'Người dùng';
 
               return (
-                <motion.div
-                  key={item.id}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`bg-white dark:bg-zinc-900 rounded-2xl border transition-all duration-200 flex flex-col justify-between overflow-hidden shadow-xs hover:shadow-md ${
-                    item.is_available
-                      ? 'border-stone-200/90 dark:border-zinc-800 hover:border-stone-300 dark:hover:border-zinc-700'
-                      : 'border-red-200 dark:border-red-900/60 bg-stone-50/60 dark:bg-zinc-800/40 opacity-80'
-                  }`}
-                >
-                  <div>
-                    {/* Reshare Attribution Header */}
-                    {item.is_reshare && (
-                      <div className="bg-emerald-50/70 dark:bg-emerald-950/40 border-b border-emerald-100/70 dark:border-emerald-900/40 px-4 py-2 flex items-center justify-between text-xs text-emerald-900 dark:text-emerald-300">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <Share2 size={13} className="text-emerald-700 dark:text-emerald-400 shrink-0" />
-                          <span className="font-semibold truncate">{item.author_name}</span>
-                          <span className="text-emerald-700 dark:text-emerald-400">đã chia sẻ lại</span>
-                          {item.original_author_name && (
-                            <span className="text-stone-500 dark:text-zinc-400 truncate">
-                              từ <strong className="text-stone-700 dark:text-zinc-200">{item.original_author_name}</strong>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Reshare Note */}
-                    {item.is_reshare && item.reshare_note && (
-                      <div className="px-5 pt-3 pb-1 text-xs italic text-stone-700 dark:text-zinc-300 bg-stone-50/50 dark:bg-zinc-800/50 border-b border-stone-100 dark:border-zinc-800">
-                        "{item.reshare_note}"
-                      </div>
-                    )}
-
-                    {/* Card Header: Type Badge & Availability */}
-                    <div className="p-5 pb-3">
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <div
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${typeInfo.bg}`}
-                        >
-                          <TypeIcon size={13} />
-                          <span>{typeInfo.label}</span>
-                        </div>
-
-                        {item.category && (
-                          <span className="text-xs px-2.5 py-0.5 rounded-full bg-stone-100 dark:bg-zinc-800 text-stone-600 dark:text-zinc-400 font-medium">
-                            {item.category}
-                          </span>
-                        )}
-
-                        {!item.is_available && (
-                          <span className="text-xs px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400 font-semibold flex items-center gap-1">
-                            <AlertCircle size={12} /> Không khả dụng
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Title */}
-                      <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100 line-clamp-2 leading-snug group-hover:text-emerald-800 dark:group-hover:text-emerald-400 transition-colors">
-                        {item.title}
-                      </h3>
-
-                      {/* Description */}
-                      <p className="text-xs text-stone-600 dark:text-zinc-400 line-clamp-2 mt-1.5 leading-relaxed min-h-[32px]">
-                        {item.description || 'Tài nguyên học tập được đóng góp bởi thành viên cộng đồng Cognito.'}
-                      </p>
-
-                      {/* Tags */}
-                      {item.tags && item.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-3">
-                          {item.tags.slice(0, 3).map((tag, idx) => (
-                            <span
-                              key={idx}
-                              className="text-[11px] text-stone-500 dark:text-zinc-400 bg-stone-100/80 dark:bg-zinc-800 px-2 py-0.5 rounded-md flex items-center gap-1"
-                            >
-                              <Tag size={10} className="text-stone-400 dark:text-zinc-500" />
-                              {tag}
-                            </span>
-                          ))}
-                          {item.tags.length > 3 && (
-                            <span className="text-[11px] text-stone-400 dark:text-zinc-500 px-1 py-0.5">
-                              +{item.tags.length - 3}
-                            </span>
-                          )}
+                <CardErrorBoundary key={item.id} fallbackTitle="Không thể tải thẻ bài viết">
+                  <motion.div
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`bg-white dark:bg-zinc-900 rounded-2xl border transition-all duration-200 flex flex-col justify-between overflow-hidden shadow-xs hover:shadow-md ${
+                      item.is_available
+                        ? 'border-stone-200/90 dark:border-zinc-800 hover:border-stone-300 dark:hover:border-zinc-700'
+                        : 'border-red-200 dark:border-red-900/60 bg-stone-50/60 dark:bg-zinc-800/40 opacity-80'
+                    }`}
+                  >
+                    <div>
+                      {/* Reshare Attribution Header */}
+                      {item.is_reshare && (
+                        <div className="bg-emerald-50/70 dark:bg-emerald-950/40 border-b border-emerald-100/70 dark:border-emerald-900/40 px-4 py-2 flex items-center justify-between text-xs text-emerald-900 dark:text-emerald-300">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <Share2 size={13} className="text-emerald-700 dark:text-emerald-400 shrink-0" />
+                            <span className="font-semibold truncate">{authorDisplayName}</span>
+                            <span className="text-emerald-700 dark:text-emerald-400">đã chia sẻ lại</span>
+                            {item.original_author_name && (
+                              <span className="text-stone-500 dark:text-zinc-400 truncate">
+                                từ <strong className="text-stone-700 dark:text-zinc-200">{item.original_author_name || 'Người dùng'}</strong>
+                              </span>
+                            )}
+                          </div>
                         </div>
                       )}
 
-                      {/* Author Info & Date */}
-                      <div className="flex items-center justify-between pt-4 mt-4 border-t border-stone-100 dark:border-zinc-800 text-xs text-stone-500 dark:text-zinc-400">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => router.push(`/profile/${item.user_id}`)}
-                            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity text-left cursor-pointer"
-                            title="Xem hồ sơ người dùng"
+                      {/* Reshare Note */}
+                      {item.is_reshare && item.reshare_note && (
+                        <div className="px-5 pt-3 pb-1 text-xs italic text-stone-700 dark:text-zinc-300 bg-stone-50/50 dark:bg-zinc-800/50 border-b border-stone-100 dark:border-zinc-800">
+                          "{item.reshare_note}"
+                        </div>
+                      )}
+
+                      {/* Card Header: Type Badge & Availability */}
+                      <div className="p-5 pb-3">
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <div
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${typeInfo.bg}`}
                           >
-                            {item.author_avatar ? (
-                              <img
-                                src={item.author_avatar}
-                                alt={item.author_name}
-                                className="w-6 h-6 rounded-full object-cover border border-stone-200 dark:border-zinc-700"
-                              />
-                            ) : (
-                              <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center font-bold text-[10px]">
-                                {item.author_name.charAt(0).toUpperCase()}
-                              </div>
-                            )}
-                            <span className="font-medium text-stone-700 dark:text-zinc-300 hover:text-emerald-800 dark:hover:text-emerald-400 truncate max-w-[110px]">
-                              {item.author_name}
+                            <TypeIcon size={13} />
+                            <span>{typeInfo.label}</span>
+                          </div>
+
+                          {item.category && (
+                            <span className="text-xs px-2.5 py-0.5 rounded-full bg-stone-100 dark:bg-zinc-800 text-stone-600 dark:text-zinc-400 font-medium">
+                              {item.category}
                             </span>
+                          )}
+
+                          {!item.is_available && (
+                            <span className="text-xs px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400 font-semibold flex items-center gap-1">
+                              <AlertCircle size={12} /> Không khả dụng
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Title */}
+                        <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100 line-clamp-2 leading-snug group-hover:text-emerald-800 dark:group-hover:text-emerald-400 transition-colors">
+                          {item.title}
+                        </h3>
+
+                        {/* Description */}
+                        <p className="text-xs text-stone-600 dark:text-zinc-400 line-clamp-2 mt-1.5 leading-relaxed min-h-[32px]">
+                          {item.description || 'Tài nguyên học tập được đóng góp bởi thành viên cộng đồng Cognito.'}
+                        </p>
+
+                        {/* Tags */}
+                        {item.tags && item.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-3">
+                            {item.tags.slice(0, 3).map((tag, idx) => (
+                              <span
+                                key={`${item.id}-tag-${idx}-${tag}`}
+                                className="text-[11px] text-stone-500 dark:text-zinc-400 bg-stone-100/80 dark:bg-zinc-800 px-2 py-0.5 rounded-md flex items-center gap-1"
+                              >
+                                <Tag size={10} className="text-stone-400 dark:text-zinc-500" />
+                                {tag}
+                              </span>
+                            ))}
+                            {item.tags.length > 3 && (
+                              <span className="text-[11px] text-stone-400 dark:text-zinc-500 px-1 py-0.5">
+                                +{item.tags.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Author Info & Date */}
+                        <div className="flex items-center justify-between pt-4 mt-4 border-t border-stone-100 dark:border-zinc-800 text-xs text-stone-500 dark:text-zinc-400">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => router.push(`/profile/${item.user_id}`)}
+                              className="flex items-center gap-1.5 hover:opacity-80 transition-opacity text-left cursor-pointer"
+                              title="Xem hồ sơ người dùng"
+                            >
+                              {item.author_avatar ? (
+                                <img
+                                  src={item.author_avatar}
+                                  alt={authorDisplayName}
+                                  className="w-6 h-6 rounded-full object-cover border border-stone-200 dark:border-zinc-700"
+                                />
+                              ) : (
+                                <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center font-bold text-[10px]">
+                                  {authorDisplayName.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <span className="font-medium text-stone-700 dark:text-zinc-300 hover:text-emerald-800 dark:hover:text-emerald-400 truncate max-w-[110px]">
+                                {authorDisplayName}
+                              </span>
+                            </button>
+                            {!isOwner && (
+                              <button
+                                onClick={() => router.push(`/messages?user=${item.user_id}`)}
+                                className="text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors p-0.5 cursor-pointer"
+                                title="Nhắn tin cho tác giả"
+                              >
+                                <MessageSquare size={13} />
+                              </button>
+                            )}
+                          </div>
+
+                          <span className="text-stone-400 dark:text-zinc-500" suppressHydrationWarning>
+                            {new Date(item.created_at).toLocaleDateString('vi-VN')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Actions & Stats Footer */}
+                    <div className="bg-stone-50/70 dark:bg-zinc-800/60 border-t border-stone-100 dark:border-zinc-800 px-4 py-2.5">
+                      <div className="flex items-center justify-between text-xs mb-2.5">
+                        {/* Social Metrics & Toggles */}
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => handleToggleLike(item)}
+                            className={`flex items-center gap-1 transition-colors cursor-pointer ${
+                              item.is_liked ? 'text-red-600 dark:text-red-400 font-bold' : 'text-stone-500 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400'
+                            }`}
+                            title="Thích bài đăng"
+                          >
+                            <Heart size={15} className={item.is_liked ? 'fill-red-600 dark:fill-red-400' : ''} />
+                            <span>{item.likes}</span>
                           </button>
+
+                          <button
+                            onClick={() => handleToggleSave(item)}
+                            className={`flex items-center gap-1 transition-colors cursor-pointer ${
+                              item.is_saved ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-stone-500 dark:text-zinc-400 hover:text-blue-500 dark:hover:text-blue-400'
+                            }`}
+                            title="Lưu tham chiếu (Zero data duplication)"
+                          >
+                            <Bookmark size={15} className={item.is_saved ? 'fill-blue-600 dark:fill-blue-400' : ''} />
+                            <span>{item.save_count ?? item.forks ?? 0}</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleOpenComments(item)}
+                            className="flex items-center gap-1 text-stone-500 dark:text-zinc-400 hover:text-stone-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                            title="Bình luận"
+                          >
+                            <MessageSquare size={15} />
+                            <span>{item.comment_count || 0}</span>
+                          </button>
+
+                          <span className="flex items-center gap-1 text-stone-400 dark:text-zinc-500 pl-1" title="Lượt xem">
+                            <Eye size={14} />
+                            <span>{item.views}</span>
+                          </span>
+                        </div>
+
+                        {/* Safety & Reshare Actions */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenReport('resource', item.id, item.title)}
+                            className="p-1 text-stone-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer"
+                            title="Báo cáo vi phạm (Report)"
+                          >
+                            <Flag size={14} />
+                          </button>
+
                           {!isOwner && (
                             <button
-                              onClick={() => router.push(`/messages?user=${item.user_id}`)}
-                              className="text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors p-0.5 cursor-pointer"
-                              title="Nhắn tin cho tác giả"
+                              onClick={() => handleOpenBlock(item.user_id, authorDisplayName)}
+                              className="p-1 text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+                              title="Chặn tác giả này (Block user)"
                             >
-                              <MessageSquare size={13} />
+                              <UserX size={14} />
                             </button>
                           )}
-                        </div>
 
-                        <span className="text-stone-400 dark:text-zinc-500">
-                          {new Date(item.created_at).toLocaleDateString('vi-VN')}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card Actions & Stats Footer */}
-                  <div className="bg-stone-50/70 dark:bg-zinc-800/60 border-t border-stone-100 dark:border-zinc-800 px-4 py-2.5">
-                    <div className="flex items-center justify-between text-xs mb-2.5">
-                      {/* Social Metrics & Toggles */}
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => handleToggleLike(item)}
-                          className={`flex items-center gap-1 transition-colors ${
-                            item.is_liked ? 'text-red-600 dark:text-red-400 font-bold' : 'text-stone-500 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400'
-                          }`}
-                          title="Thích bài đăng"
-                        >
-                          <Heart size={15} className={item.is_liked ? 'fill-red-600 dark:fill-red-400' : ''} />
-                          <span>{item.likes}</span>
-                        </button>
-
-                        <button
-                          onClick={() => handleToggleSave(item)}
-                          className={`flex items-center gap-1 transition-colors ${
-                            item.is_saved ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-stone-500 dark:text-zinc-400 hover:text-blue-500 dark:hover:text-blue-400'
-                          }`}
-                          title="Lưu tham chiếu (Zero data duplication)"
-                        >
-                          <Bookmark size={15} className={item.is_saved ? 'fill-blue-600 dark:fill-blue-400' : ''} />
-                          <span>{item.save_count ?? item.forks ?? 0}</span>
-                        </button>
-
-                        <button
-                          onClick={() => handleOpenComments(item)}
-                          className="flex items-center gap-1 text-stone-500 dark:text-zinc-400 hover:text-stone-800 dark:hover:text-zinc-200 transition-colors"
-                          title="Bình luận"
-                        >
-                          <MessageSquare size={15} />
-                          <span>{item.comment_count || 0}</span>
-                        </button>
-
-                        <span className="flex items-center gap-1 text-stone-400 dark:text-zinc-500 pl-1" title="Lượt xem">
-                          <Eye size={14} />
-                          <span>{item.views}</span>
-                        </span>
-                      </div>
-
-                      {/* Safety & Reshare Actions */}
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => handleOpenReport('resource', item.id, item.title)}
-                          className="p-1 text-stone-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
-                          title="Báo cáo vi phạm (Report)"
-                        >
-                          <Flag size={14} />
-                        </button>
-
-                        {!isOwner && (
                           <button
-                            onClick={() => handleOpenBlock(item.user_id, item.author_name)}
-                            className="p-1 text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                            title="Chặn tác giả này (Block user)"
+                            onClick={() => handleOpenReshare(item)}
+                            className="p-1 text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors cursor-pointer"
+                            title="Chia sẻ lại (Reshare)"
                           >
-                            <UserX size={14} />
+                            <Share2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Bottom CTA Row: Study Button & Delete (if author) */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleStudy(item)}
+                          disabled={!item.is_available || !item.study_url}
+                          className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                            item.is_available && item.study_url
+                              ? 'bg-[#1a3a2a] dark:bg-emerald-700 text-white hover:bg-[#12281d] dark:hover:bg-emerald-600 active:scale-[0.98] cursor-pointer'
+                              : 'bg-stone-200 dark:bg-zinc-800 text-stone-400 dark:text-zinc-500 cursor-not-allowed'
+                          }`}
+                        >
+                          <span>Học ngay</span>
+                          <ExternalLink size={13} />
+                        </button>
+
+                        {(isOwner || isAdmin) && (
+                          <button
+                            onClick={() => handleUnpublish(item)}
+                            className="p-2 rounded-xl text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-stone-200 dark:border-zinc-700 transition-colors cursor-pointer"
+                            title="Gỡ khỏi cộng đồng"
+                          >
+                            <Trash2 size={14} />
                           </button>
                         )}
-
-                        <button
-                          onClick={() => handleOpenReshare(item)}
-                          className="p-1 text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
-                          title="Chia sẻ lại (Reshare)"
-                        >
-                          <Share2 size={15} />
-                        </button>
                       </div>
                     </div>
-
-                    {/* Bottom CTA Row: Study Button & Delete (if author) */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleStudy(item)}
-                        disabled={!item.is_available}
-                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
-                          item.is_available
-                            ? 'bg-[#1a3a2a] dark:bg-emerald-700 text-white hover:bg-[#12281d] dark:hover:bg-emerald-600 active:scale-[0.98]'
-                            : 'bg-stone-200 dark:bg-zinc-800 text-stone-400 dark:text-zinc-500 cursor-not-allowed'
-                        }`}
-                      >
-                        <span>Học ngay</span>
-                        <ExternalLink size={13} />
-                      </button>
-
-                      {(isOwner || isAdmin) && (
-                        <button
-                          onClick={() => handleUnpublish(item)}
-                          className="p-2 rounded-xl text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-stone-200 dark:border-zinc-700 transition-colors"
-                          title="Gỡ khỏi cộng đồng"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
+                  </motion.div>
+                </CardErrorBoundary>
               );
             })}
           </div>
@@ -1250,7 +1343,7 @@ export default function CommunityPage() {
                             value={publishForm.resourceId}
                             onChange={(e) => {
                               const id = Number(e.target.value);
-                              const item = personalResources.flashcardDecks.find((f) => f.id === id);
+                              const item = personalResources.flashcard_decks?.find((f) => f.id === id);
                               setPublishForm((prev) => ({
                                 ...prev,
                                 resourceId: id,
@@ -1259,10 +1352,10 @@ export default function CommunityPage() {
                             }}
                             className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-stone-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
                           >
-                            {personalResources.flashcardDecks.length === 0 ? (
+                            {!personalResources.flashcard_decks || personalResources.flashcard_decks.length === 0 ? (
                               <option value="">(Bạn chưa có bộ thẻ ghi nhớ nào)</option>
                             ) : (
-                              personalResources.flashcardDecks.map((f) => (
+                              personalResources.flashcard_decks.map((f) => (
                                 <option key={f.id} value={f.id}>
                                   🗂️ {f.name}
                                 </option>
@@ -1434,211 +1527,228 @@ export default function CommunityPage() {
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="bg-white dark:bg-zinc-900 w-full max-w-md h-full shadow-2xl flex flex-col justify-between border-l border-stone-200 dark:border-zinc-800"
             >
-              {/* Drawer Header */}
-              <div className="p-4 border-b border-stone-200 dark:border-zinc-800 flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100 flex items-center gap-2">
-                    <MessageSquare size={17} className="text-emerald-700 dark:text-emerald-400" />
-                    <span>Bình luận &amp; Thảo luận</span>
-                  </h3>
-                  <p className="text-xs text-stone-500 dark:text-zinc-400 truncate max-w-[280px]">
-                    {commentsTarget.title}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setCommentsTarget(null)}
-                  className="p-1.5 rounded-full text-stone-400 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Comments List */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {loadingComments ? (
-                  <div className="py-12 text-center text-xs text-stone-400 dark:text-zinc-500">
-                    <div className="w-6 h-6 border-2 border-[#1a3a2a] dark:border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                    Đang tải bình luận...
+              <CardErrorBoundary fallbackTitle="Không thể tải nội dung bình luận">
+                {/* Drawer Header */}
+                <div className="p-4 border-b border-stone-200 dark:border-zinc-800 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100 flex items-center gap-2">
+                      <MessageSquare size={17} className="text-emerald-700 dark:text-emerald-400" />
+                      <span>Bình luận &amp; Thảo luận</span>
+                    </h3>
+                    <p className="text-xs text-stone-500 dark:text-zinc-400 truncate max-w-[280px]">
+                      {commentsTarget.title}
+                    </p>
                   </div>
-                ) : commentsList.length === 0 ? (
-                  <div className="py-16 text-center text-stone-400 dark:text-zinc-500 text-xs">
-                    Chưa có bình luận nào. Hãy là người đầu tiên đặt câu hỏi hoặc nhận xét!
-                  </div>
-                ) : (
-                  commentsList.map((c) => {
-                    const isAuthor = activeUser && activeUser.id === c.user_id;
-                    return (
-                      <div key={c.id} className="space-y-2">
-                        {/* Parent Comment */}
-                        <div className="p-3 bg-stone-50 dark:bg-zinc-800/80 rounded-2xl border border-stone-200/80 dark:border-zinc-700 text-xs">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              {c.user_avatar ? (
-                                <img
-                                  src={c.user_avatar}
-                                  alt={c.user_name}
-                                  className="w-5 h-5 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center font-bold text-[9px]">
-                                  {c.user_name.charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <span className="font-bold text-stone-800 dark:text-zinc-200">{c.user_name}</span>
-                            </div>
-                            <span className="text-[10px] text-stone-400 dark:text-zinc-500">
-                              {new Date(c.created_at).toLocaleTimeString('vi-VN', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </span>
-                          </div>
-
-                          <p className="text-stone-700 dark:text-zinc-300 mt-1 whitespace-pre-wrap">{c.content}</p>
-
-                          <div className="flex items-center justify-end gap-3 mt-2 pt-1 border-t border-stone-100 dark:border-zinc-700/60">
-                            <button
-                              onClick={() => setReplyParent(c)}
-                              className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-400 hover:underline flex items-center gap-1"
-                            >
-                              <CornerDownRight size={12} /> Trả lời
-                            </button>
-                            {!isAuthor && (
-                              <button
-                                onClick={() => router.push(`/messages?user=${c.user_id}`)}
-                                className="text-[11px] text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 flex items-center gap-1 transition-colors cursor-pointer"
-                                title="Nhắn tin cho tác giả bình luận"
-                              >
-                                <MessageSquare size={11} /> Nhắn tin
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleOpenReport('comment', c.id, c.content)}
-                              className="text-[11px] text-stone-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-1 transition-colors"
-                              title="Báo cáo bình luận"
-                            >
-                              <Flag size={11} /> Báo cáo
-                            </button>
-                            {!isAuthor && (
-                              <button
-                                onClick={() => handleOpenBlock(c.user_id, c.user_name)}
-                                className="text-[11px] text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-1 transition-colors"
-                                title="Chặn người dùng này"
-                              >
-                                <UserX size={11} /> Chặn
-                              </button>
-                            )}
-                            {(isAuthor || activeUser?.role === 'admin') && (
-                              <button
-                                onClick={() => handleDeleteComment(c.id)}
-                                className="text-[11px] text-red-500 hover:text-red-700"
-                              >
-                                Xóa
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Nested Replies */}
-                        {c.replies && c.replies.length > 0 && (
-                          <div className="pl-6 space-y-2 border-l-2 border-emerald-100 dark:border-emerald-800">
-                            {c.replies.map((reply) => {
-                              const isReplyAuthor = activeUser && activeUser.id === reply.user_id;
-                              return (
-                                <div
-                                  key={reply.id}
-                                  className="p-2.5 bg-stone-100/70 dark:bg-zinc-800/60 rounded-xl border border-stone-200/60 dark:border-zinc-700 text-xs"
-                                >
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className="font-bold text-stone-800 dark:text-zinc-200">{reply.user_name}</span>
-                                    <span className="text-[10px] text-stone-400 dark:text-zinc-500">
-                                      {new Date(reply.created_at).toLocaleTimeString('vi-VN', {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })}
-                                    </span>
-                                  </div>
-                                  <p className="text-stone-700 dark:text-zinc-300 whitespace-pre-wrap">{reply.content}</p>
-                                  <div className="flex items-center justify-end gap-2 mt-1">
-                                    <button
-                                      onClick={() => handleOpenReport('comment', reply.id, reply.content)}
-                                      className="text-[10px] text-stone-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-0.5 transition-colors"
-                                      title="Báo cáo câu trả lời"
-                                    >
-                                      <Flag size={10} /> Báo cáo
-                                    </button>
-                                    {!isReplyAuthor && (
-                                      <button
-                                        onClick={() => router.push(`/messages?user=${reply.user_id}`)}
-                                        className="text-[10px] text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 flex items-center gap-0.5 transition-colors cursor-pointer"
-                                        title="Nhắn tin cho người trả lời"
-                                      >
-                                        <MessageSquare size={10} /> Nhắn tin
-                                      </button>
-                                    )}
-                                    {!isReplyAuthor && (
-                                      <button
-                                        onClick={() => handleOpenBlock(reply.user_id, reply.user_name)}
-                                        className="text-[10px] text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-0.5 transition-colors"
-                                        title="Chặn người này"
-                                      >
-                                        <UserX size={10} /> Chặn
-                                      </button>
-                                    )}
-                                    {(isReplyAuthor || activeUser?.role === 'admin') && (
-                                      <button
-                                        onClick={() => handleDeleteComment(reply.id)}
-                                        className="text-[10px] text-red-500 hover:text-red-700"
-                                      >
-                                        Xóa
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Comment Input Footer */}
-              <div className="p-3 border-t border-stone-200 dark:border-zinc-800 bg-stone-50 dark:bg-zinc-900">
-                {replyParent && (
-                  <div className="flex items-center justify-between px-2 py-1 mb-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg text-xs text-emerald-800 dark:text-emerald-300">
-                    <span className="truncate">Đang trả lời <strong>@{replyParent.user_name}</strong></span>
-                    <button onClick={() => setReplyParent(null)} className="text-emerald-700 dark:text-emerald-400 hover:text-emerald-900">
-                      <X size={14} />
-                    </button>
-                  </div>
-                )}
-                <form onSubmit={handleCommentSubmit} className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder={
-                      isAuthenticated
-                        ? replyParent
-                          ? 'Nhập nội dung trả lời...'
-                          : 'Viết bình luận của bạn...'
-                        : 'Đăng nhập để bình luận...'
-                    }
-                    disabled={!isAuthenticated || isSubmittingComment}
-                    value={commentInput}
-                    onChange={(e) => setCommentInput(e.target.value)}
-                    className="flex-1 px-3 py-2 text-xs bg-white dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 text-stone-900 dark:text-zinc-100 placeholder:text-stone-400 dark:placeholder:text-zinc-500 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
-                  />
                   <button
-                    type="submit"
-                    disabled={!isAuthenticated || !commentInput.trim() || isSubmittingComment}
-                    className="p-2 bg-[#1a3a2a] dark:bg-emerald-700 text-white rounded-xl hover:bg-[#12281d] dark:hover:bg-emerald-600 disabled:opacity-40 transition-colors"
+                    onClick={() => setCommentsTarget(null)}
+                    className="p-1.5 rounded-full text-stone-400 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800 cursor-pointer"
                   >
-                    <Send size={15} />
+                    <X size={18} />
                   </button>
-                </form>
-              </div>
+                </div>
+
+                {/* Comments List */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {loadingComments ? (
+                    <div className="py-12 text-center text-xs text-stone-400 dark:text-zinc-500">
+                      <div className="w-6 h-6 border-2 border-[#1a3a2a] dark:border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      Đang tải bình luận...
+                    </div>
+                  ) : commentsList.length === 0 ? (
+                    <div className="py-16 text-center text-stone-400 dark:text-zinc-500 text-xs">
+                      Chưa có bình luận nào. Hãy là người đầu tiên đặt câu hỏi hoặc nhận xét!
+                    </div>
+                  ) : (
+                    commentsList.map((c) => {
+                      const isAuthor = activeUser && activeUser.id === c.user_id;
+                      const authorDisplayName = c.author_name || 'Người dùng';
+                      return (
+                        <div key={c.id} className="space-y-2">
+                          {/* Parent Comment */}
+                          <div className="p-3 bg-stone-50 dark:bg-zinc-800/80 rounded-2xl border border-stone-200/80 dark:border-zinc-700 text-xs">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                {c.author_avatar ? (
+                                  <img
+                                    src={c.author_avatar}
+                                    alt={authorDisplayName}
+                                    className="w-5 h-5 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center font-bold text-[9px]">
+                                    {authorDisplayName.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <span className="font-bold text-stone-800 dark:text-zinc-200">{authorDisplayName}</span>
+                              </div>
+                              <span className="text-[10px] text-stone-400 dark:text-zinc-500" suppressHydrationWarning>
+                                {new Date(c.created_at).toLocaleTimeString('vi-VN', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </span>
+                            </div>
+
+                            <p className="text-stone-700 dark:text-zinc-300 mt-1 whitespace-pre-wrap">{c.content}</p>
+
+                            <div className="flex items-center justify-end gap-3 mt-2 pt-1 border-t border-stone-100 dark:border-zinc-700/60">
+                              <button
+                                onClick={() => setReplyParent(c)}
+                                className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <CornerDownRight size={12} /> Trả lời
+                              </button>
+                              {!isAuthor && (
+                                <button
+                                  onClick={() => router.push(`/messages?user=${c.user_id}`)}
+                                  className="text-[11px] text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 flex items-center gap-1 transition-colors cursor-pointer"
+                                  title="Nhắn tin cho tác giả bình luận"
+                                >
+                                  <MessageSquare size={11} /> Nhắn tin
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleOpenReport('comment', c.id, c.content)}
+                                className="text-[11px] text-stone-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-1 transition-colors cursor-pointer"
+                                title="Báo cáo bình luận"
+                              >
+                                <Flag size={11} /> Báo cáo
+                              </button>
+                              {!isAuthor && (
+                                <button
+                                  onClick={() => handleOpenBlock(c.user_id, authorDisplayName)}
+                                  className="text-[11px] text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-1 transition-colors cursor-pointer"
+                                  title="Chặn người dùng này"
+                                >
+                                  <UserX size={11} /> Chặn
+                                </button>
+                              )}
+                              {(isAuthor || activeUser?.role === 'admin') && (
+                                <button
+                                  onClick={() => handleDeleteComment(c.id)}
+                                  className="text-[11px] text-red-500 hover:text-red-700 cursor-pointer"
+                                >
+                                  Xóa
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Nested Replies */}
+                          {c.replies && c.replies.length > 0 && (
+                            <div className="pl-6 space-y-2 border-l-2 border-emerald-100 dark:border-emerald-800">
+                              {c.replies.map((reply) => {
+                                const isReplyAuthor = activeUser && activeUser.id === reply.user_id;
+                                const replyAuthorDisplayName = reply.author_name || 'Người dùng';
+                                return (
+                                  <div
+                                    key={reply.id}
+                                    className="p-2.5 bg-stone-100/70 dark:bg-zinc-800/60 rounded-xl border border-stone-200/60 dark:border-zinc-700 text-xs"
+                                  >
+                                    <div className="flex items-center justify-between mb-1">
+                                      <div className="flex items-center gap-1.5">
+                                        {reply.author_avatar ? (
+                                          <img
+                                            src={reply.author_avatar}
+                                            alt={replyAuthorDisplayName}
+                                            className="w-4 h-4 rounded-full object-cover"
+                                          />
+                                        ) : (
+                                          <div className="w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center font-bold text-[8px]">
+                                            {replyAuthorDisplayName.charAt(0).toUpperCase()}
+                                          </div>
+                                        )}
+                                        <span className="font-bold text-stone-800 dark:text-zinc-200">{replyAuthorDisplayName}</span>
+                                      </div>
+                                      <span className="text-[10px] text-stone-400 dark:text-zinc-500" suppressHydrationWarning>
+                                        {new Date(reply.created_at).toLocaleTimeString('vi-VN', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </span>
+                                    </div>
+                                    <p className="text-stone-700 dark:text-zinc-300 whitespace-pre-wrap">{reply.content}</p>
+                                    <div className="flex items-center justify-end gap-2 mt-1">
+                                      <button
+                                        onClick={() => handleOpenReport('comment', reply.id, reply.content)}
+                                        className="text-[10px] text-stone-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-0.5 transition-colors cursor-pointer"
+                                        title="Báo cáo câu trả lời"
+                                      >
+                                        <Flag size={10} /> Báo cáo
+                                      </button>
+                                      {!isReplyAuthor && (
+                                        <button
+                                          onClick={() => router.push(`/messages?user=${reply.user_id}`)}
+                                          className="text-[10px] text-stone-400 dark:text-zinc-500 hover:text-emerald-700 dark:hover:text-emerald-400 flex items-center gap-0.5 transition-colors cursor-pointer"
+                                          title="Nhắn tin cho người trả lời"
+                                        >
+                                          <MessageSquare size={10} /> Nhắn tin
+                                        </button>
+                                      )}
+                                      {!isReplyAuthor && (
+                                        <button
+                                          onClick={() => handleOpenBlock(reply.user_id, replyAuthorDisplayName)}
+                                          className="text-[10px] text-stone-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-0.5 transition-colors cursor-pointer"
+                                          title="Chặn người này"
+                                        >
+                                          <UserX size={10} /> Chặn
+                                        </button>
+                                      )}
+                                      {(isReplyAuthor || activeUser?.role === 'admin') && (
+                                        <button
+                                          onClick={() => handleDeleteComment(reply.id)}
+                                          className="text-[10px] text-red-500 hover:text-red-700 cursor-pointer"
+                                        >
+                                          Xóa
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Comment Input Footer */}
+                <div className="p-3 border-t border-stone-200 dark:border-zinc-800 bg-stone-50 dark:bg-zinc-900">
+                  {replyParent && (
+                    <div className="flex items-center justify-between px-2 py-1 mb-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg text-xs text-emerald-800 dark:text-emerald-300">
+                      <span className="truncate">Đang trả lời <strong>@{replyParent.author_name || 'Người dùng'}</strong></span>
+                      <button onClick={() => setReplyParent(null)} className="text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 cursor-pointer">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+                  <form onSubmit={handleCommentSubmit} className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder={
+                        isAuthenticated
+                          ? replyParent
+                            ? 'Nhập nội dung trả lời...'
+                            : 'Viết bình luận của bạn...'
+                          : 'Đăng nhập để bình luận...'
+                      }
+                      disabled={!isAuthenticated || isSubmittingComment}
+                      value={commentInput}
+                      onChange={(e) => setCommentInput(e.target.value)}
+                      className="flex-1 px-3 py-2 text-xs bg-white dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 text-stone-900 dark:text-zinc-100 placeholder:text-stone-400 dark:placeholder:text-zinc-500 rounded-xl focus:ring-2 focus:ring-[#1a3a2a] dark:focus:ring-emerald-600 outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!isAuthenticated || !commentInput.trim() || isSubmittingComment}
+                      className="p-2 bg-[#1a3a2a] dark:bg-emerald-700 text-white rounded-xl hover:bg-[#12281d] dark:hover:bg-emerald-600 disabled:opacity-40 transition-colors cursor-pointer"
+                    >
+                      <Send size={15} />
+                    </button>
+                  </form>
+                </div>
+              </CardErrorBoundary>
             </motion.div>
           </div>
         )}

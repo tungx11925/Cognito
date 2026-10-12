@@ -176,3 +176,27 @@ export const getUserPersonalResources = async (req: AuthRequest, res: Response) 
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi lấy tài nguyên cá nhân' });
   }
 };
+
+export const getUserSavedCommunityResources = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
+    const limit = req.query.limit ? Math.max(1, Math.min(50, Number(req.query.limit))) : 20;
+    const result = await communityService.getUserSavedCommunityResources(userId, { page, limit });
+    return res.status(200).json(result);
+  } catch (error: any) {
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi lấy tài nguyên cộng đồng đã lưu' });
+  }
+};
+
+export const getUserLikedCommunityResources = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
+    const limit = req.query.limit ? Math.max(1, Math.min(50, Number(req.query.limit))) : 20;
+    const result = await communityService.getUserLikedCommunityResources(userId, { page, limit });
+    return res.status(200).json(result);
+  } catch (error: any) {
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi lấy tài nguyên cộng đồng đã thích' });
+  }
+};

@@ -34,9 +34,10 @@ export interface CommunityResourceItem {
   original_author_avatar?: string | null;
   is_liked: boolean;
   is_saved: boolean;
-  study_url: string;
+  study_url: string | null;
   is_available: boolean;
-  availability_status: 'AVAILABLE' | 'UNAVAILABLE';
+  availability_status?: 'AVAILABLE' | 'UNAVAILABLE';
+  unavailable_reason?: string | null;
   comment_count?: number;
 }
 
@@ -47,8 +48,8 @@ export interface CommunityCommentItem {
   parent_id: number | null;
   content: string;
   created_at: string;
-  user_name: string;
-  user_avatar: string | null;
+  author_name: string;
+  author_avatar: string | null;
   replies?: CommunityCommentItem[];
 }
 
@@ -67,7 +68,7 @@ export interface PersonalResourcesResponse {
   documents: Array<{ id: number; title: string; category?: string; created_at: string }>;
   quizzes: Array<{ id: number; name: string; created_at: string }>;
   mindmaps: Array<{ id: number; title: string; created_at: string }>;
-  flashcardDecks: Array<{ id: number; name: string; created_at: string }>;
+  flashcard_decks: Array<{ id: number; name: string; created_at: string }>;
 }
 
 export const getCommunityFeed = async (params: {
@@ -182,6 +183,26 @@ export const deleteResourceComment = async (commentId: number): Promise<{ succes
 
 export const getUserPersonalResources = async (): Promise<PersonalResourcesResponse | { error: string }> => {
   return apiFetch('/community/my-resources', {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+};
+
+export const getMySavedCommunityResources = async (
+  page: number = 1,
+  limit: number = 20
+): Promise<{ resources: CommunityResourceItem[]; total: number; page: number; limit: number; totalPages: number; error?: string }> => {
+  return apiFetch(`/community/my-saved?page=${page}&limit=${limit}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+};
+
+export const getMyLikedCommunityResources = async (
+  page: number = 1,
+  limit: number = 20
+): Promise<{ resources: CommunityResourceItem[]; total: number; page: number; limit: number; totalPages: number; error?: string }> => {
+  return apiFetch(`/community/my-liked?page=${page}&limit=${limit}`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });

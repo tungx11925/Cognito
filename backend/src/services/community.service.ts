@@ -4,6 +4,25 @@ import { PublishResourceInput, CommunityFeedQuery } from '../schemas/community.s
 import { safetyService } from './safety.service';
 import { notificationService } from './notification.service';
 
+/**
+ * Shared helper: Build direct study URL according to resource type & availability
+ */
+export function buildStudyUrl(resourceType: string, resourceId: number, isAvailable: boolean = true): string | null {
+  if (!isAvailable) return null;
+  switch (resourceType) {
+    case 'document':
+      return `/viewer/${resourceId}`;
+    case 'test_set':
+      return `/quiz/${resourceId}`;
+    case 'mindmap':
+      return `/mindmap?id=${resourceId}`;
+    case 'flashcard_deck':
+      return `/flashcards/${resourceId}`;
+    default:
+      return null;
+  }
+}
+
 export class CommunityService {
   /**
    * Helper: Check if underlying resource exists and user is owner
@@ -260,13 +279,16 @@ export class CommunityService {
     const items = await Promise.all(
       result.rows.map(async (row) => {
         const isAvailable = await this.checkUnderlyingAvailability(row.resource_type, row.resource_id);
+        const studyUrl = buildStudyUrl(row.resource_type, row.resource_id, isAvailable);
         const saveCount = Number(row.save_count ?? 0);
         return {
           ...row,
+          study_url: studyUrl,
           has_liked: !!row.has_liked,
           has_saved: !!row.has_saved,
           is_available: isAvailable,
           status: isAvailable ? 'AVAILABLE' : 'UNAVAILABLE',
+          unavailable_reason: isAvailable ? undefined : 'Tài nguyên gốc đã bị xóa hoặc không còn khả dụng',
           likes: Number(row.like_count ?? 0),
           saves: saveCount,
           save_count: saveCount,
@@ -336,19 +358,8 @@ export class CommunityService {
     const isAvailable = await this.checkUnderlyingAvailability(resource.resource_type, resource.resource_id);
     resource.is_available = isAvailable;
     resource.status = isAvailable ? 'AVAILABLE' : 'UNAVAILABLE';
-
-    if (isAvailable) {
-      if (resource.resource_type === 'document') {
-        resource.study_url = `/viewer/${resource.resource_id}`;
-      } else if (resource.resource_type === 'test_set') {
-        resource.study_url = `/quiz/${resource.resource_id}`;
-      } else if (resource.resource_type === 'mindmap') {
-        resource.study_url = `/mindmap?id=${resource.resource_id}`;
-      } else if (resource.resource_type === 'flashcard_deck') {
-        resource.study_url = `/flashcards/${resource.resource_id}`;
-      }
-    } else {
-      resource.study_url = null;
+    resource.study_url = buildStudyUrl(resource.resource_type, resource.resource_id, isAvailable);
+    if (!isAvailable) {
       resource.unavailable_reason = 'Tài liệu gốc đã bị xóa hoặc ngừng chia sẻ bởi tác giả';
     }
 
@@ -589,10 +600,17 @@ export class CommunityService {
       [resourceId, userId, content.trim(), parentId || null]
     );
 
-    await db.query('UPDATE community_resources SET comment_count = comment_count + 1 WHERE id = $1', [resourceId]);
+    // Recalculate true comment count
+    const countRes = await db.query(
+      'SELECT COUNT(*)::int as count FROM community_comments WHERE resource_id = $1 AND is_hidden = false',
+      [resourceId]
+    );
+    const trueCount = countRes.rows[0]?.count || 0;
+    await db.query('UPDATE community_resources SET comment_count = $1 WHERE id = $2', [trueCount, resourceId]);
 
     const userRes = await db.query('SELECT name as author_name, avatar_url as author_avatar FROM users WHERE id = $1', [userId]);
-    const authorName = userRes.rows[0]?.author_name || 'Một người dùng';
+    const authorName = userRes.rows[0]?.author_name || 'Người dùng';
+    const authorAvatar = userRes.rows[0]?.author_avatar || null;
 
     // Trigger Notifications
     try {
@@ -630,8 +648,8 @@ export class CommunityService {
 
     return {
       ...insertRes.rows[0],
-      author_name: userRes.rows[0]?.author_name,
-      author_avatar: userRes.rows[0]?.author_avatar,
+      author_name: authorName,
+      author_avatar: authorAvatar,
     };
   }
 
@@ -660,16 +678,17 @@ export class CommunityService {
     const res = await db.query(
       `SELECT 
         cc.*,
-        u.name as author_name,
+        COALESCE(u.name, 'Người dùng') as author_name,
         u.avatar_url as author_avatar
        FROM community_comments cc
-       JOIN users u ON u.id = cc.user_id
+       LEFT JOIN users u ON u.id = cc.user_id
        WHERE cc.resource_id = $1 AND cc.is_hidden = false
        ${blockFilter}
        ORDER BY cc.created_at ASC
        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       params
     );
+
     return res.rows;
   }
 
@@ -687,10 +706,22 @@ export class CommunityService {
       throw new AppError('Bạn không có quyền xóa bình luận này', 403);
     }
 
-    await db.query('DELETE FROM community_comments WHERE id = $1', [commentId]);
-    await db.query('UPDATE community_resources SET comment_count = GREATEST(0, comment_count - 1) WHERE id = $1', [comment.resource_id]);
+    return await withTransaction(async (client) => {
+      await client.query('DELETE FROM community_comments WHERE id = $1', [commentId]);
+      
+      // Recalculate true comment count inside same transaction
+      const countRes = await client.query(
+        'SELECT COUNT(*)::int as count FROM community_comments WHERE resource_id = $1 AND is_hidden = false',
+        [comment.resource_id]
+      );
+      const trueCount = countRes.rows[0]?.count || 0;
+      await client.query(
+        'UPDATE community_resources SET comment_count = $1 WHERE id = $2',
+        [trueCount, comment.resource_id]
+      );
 
-    return { success: true, message: 'Đã xóa bình luận' };
+      return { success: true, message: 'Đã xóa bình luận', comment_count: trueCount };
+    });
   }
 
   /**
@@ -709,6 +740,150 @@ export class CommunityService {
       quizzes: quizzes.rows,
       mindmaps: mindmaps.rows,
       flashcard_decks: decks.rows,
+    };
+  }
+
+  /**
+   * 10. Get User Saved Community Resources (Strict Ownership, Pagination, Block-safe, Unavailable-safe)
+   */
+  async getUserSavedCommunityResources(userId: number, query: { page?: number; limit?: number }) {
+    const page = Math.max(1, query.page || 1);
+    const limit = Math.min(50, Math.max(1, query.limit || 20));
+    const offset = (page - 1) * limit;
+
+    const blockFilter = `AND NOT EXISTS (
+      SELECT 1 FROM user_blocks ub 
+      WHERE (ub.blocker_id = $1 AND ub.blocked_id = cr.user_id)
+         OR (ub.blocker_id = cr.user_id AND ub.blocked_id = $1)
+    )`;
+
+    const countSql = `
+      SELECT COUNT(*)::int as total
+      FROM community_saves cs
+      JOIN community_resources cr ON cr.id = cs.resource_id
+      WHERE cs.user_id = $1 AND cr.is_hidden = false
+      ${blockFilter}
+    `;
+    const countRes = await db.query(countSql, [userId]);
+    const total = countRes.rows[0]?.total || 0;
+
+    const dataSql = `
+      SELECT 
+        cr.*,
+        cs.created_at as saved_at,
+        COALESCE(u.name, 'Người dùng') as author_name,
+        u.avatar_url as author_avatar,
+        true as has_saved,
+        EXISTS(SELECT 1 FROM community_likes cl WHERE cl.resource_id = cr.id AND cl.user_id = $1) as has_liked
+      FROM community_saves cs
+      JOIN community_resources cr ON cr.id = cs.resource_id
+      LEFT JOIN users u ON u.id = cr.user_id
+      WHERE cs.user_id = $1 AND cr.is_hidden = false
+      ${blockFilter}
+      ORDER BY cs.created_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+
+    const result = await db.query(dataSql, [userId, limit, offset]);
+
+    const items = await Promise.all(
+      result.rows.map(async (row) => {
+        const isAvailable = await this.checkUnderlyingAvailability(row.resource_type, row.resource_id);
+        const studyUrl = buildStudyUrl(row.resource_type, row.resource_id, isAvailable);
+        const saveCount = Number(row.save_count ?? 0);
+        return {
+          ...row,
+          study_url: studyUrl,
+          is_available: isAvailable,
+          status: isAvailable ? 'AVAILABLE' : 'UNAVAILABLE',
+          unavailable_reason: isAvailable ? undefined : 'Tài nguyên gốc đã bị xóa hoặc không còn khả dụng',
+          likes: Number(row.like_count ?? 0),
+          saves: saveCount,
+          save_count: saveCount,
+          forks: saveCount,
+          views: Number(row.view_count ?? 0),
+        };
+      })
+    );
+
+    return {
+      resources: items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+  }
+
+  /**
+   * 11. Get User Liked Community Resources (Strict Ownership, Pagination, Block-safe, Unavailable-safe)
+   */
+  async getUserLikedCommunityResources(userId: number, query: { page?: number; limit?: number }) {
+    const page = Math.max(1, query.page || 1);
+    const limit = Math.min(50, Math.max(1, query.limit || 20));
+    const offset = (page - 1) * limit;
+
+    const blockFilter = `AND NOT EXISTS (
+      SELECT 1 FROM user_blocks ub 
+      WHERE (ub.blocker_id = $1 AND ub.blocked_id = cr.user_id)
+         OR (ub.blocker_id = cr.user_id AND ub.blocked_id = $1)
+    )`;
+
+    const countSql = `
+      SELECT COUNT(*)::int as total
+      FROM community_likes cl
+      JOIN community_resources cr ON cr.id = cl.resource_id
+      WHERE cl.user_id = $1 AND cr.is_hidden = false
+      ${blockFilter}
+    `;
+    const countRes = await db.query(countSql, [userId]);
+    const total = countRes.rows[0]?.total || 0;
+
+    const dataSql = `
+      SELECT 
+        cr.*,
+        cl.created_at as liked_at,
+        COALESCE(u.name, 'Người dùng') as author_name,
+        u.avatar_url as author_avatar,
+        true as has_liked,
+        EXISTS(SELECT 1 FROM community_saves cs WHERE cs.resource_id = cr.id AND cs.user_id = $1) as has_saved
+      FROM community_likes cl
+      JOIN community_resources cr ON cr.id = cl.resource_id
+      LEFT JOIN users u ON u.id = cr.user_id
+      WHERE cl.user_id = $1 AND cr.is_hidden = false
+      ${blockFilter}
+      ORDER BY cl.created_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+
+    const result = await db.query(dataSql, [userId, limit, offset]);
+
+    const items = await Promise.all(
+      result.rows.map(async (row) => {
+        const isAvailable = await this.checkUnderlyingAvailability(row.resource_type, row.resource_id);
+        const studyUrl = buildStudyUrl(row.resource_type, row.resource_id, isAvailable);
+        const saveCount = Number(row.save_count ?? 0);
+        return {
+          ...row,
+          study_url: studyUrl,
+          is_available: isAvailable,
+          status: isAvailable ? 'AVAILABLE' : 'UNAVAILABLE',
+          unavailable_reason: isAvailable ? undefined : 'Tài nguyên gốc đã bị xóa hoặc không còn khả dụng',
+          likes: Number(row.like_count ?? 0),
+          saves: saveCount,
+          save_count: saveCount,
+          forks: saveCount,
+          views: Number(row.view_count ?? 0),
+        };
+      })
+    );
+
+    return {
+      resources: items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
     };
   }
 }
