@@ -41,8 +41,10 @@ export default function FeedbackWidget() {
   const [hasSubmitted, setHasSubmitted] = useState<boolean>(false);
   const [submittedData, setSubmittedData] = useState<any>(null);
 
-  // Kiểm tra trạng thái đã đánh giá hay chưa
+  // Kiểm tra trạng thái đã đánh giá hay chưa (chỉ kiểm tra khi ở trang Home)
   useEffect(() => {
+    if (pathname !== '/' && pathname !== '/home') return;
+
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('cognito_feedback_submitted');
       if (stored === 'true') {
@@ -65,7 +67,13 @@ export default function FeedbackWidget() {
         })
         .catch(() => {});
     }
-  }, [activeUser]);
+  }, [activeUser, pathname]);
+
+  // Chỉ hiển thị widget đánh giá ở trang chủ ('/' hoặc '/home')
+  const isHomePage = pathname === '/' || pathname === '/home';
+  if (!isHomePage) {
+    return null;
+  }
 
   // Ẩn hoàn toàn nếu người dùng là Admin hoặc đang ở trong trang quản trị /admin
   if (activeUser?.role === 'admin' || pathname?.startsWith('/admin')) {
