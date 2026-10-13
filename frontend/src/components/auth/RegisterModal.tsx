@@ -173,7 +173,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         setIsAuthenticated(true);
         onClose();
         triggerMessage("Đăng nhập bằng Google thành công!", "success");
-        const target = getSafeReturnUrl('/home');
+        const target = getSafeReturnUrl('/library');
         router.push(target);
       } else {
         triggerMessage(res.error || "Không thể đăng nhập bằng Google", "error");
@@ -431,7 +431,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
           if (result.role === 'admin') {
             router.push('/admin');
           } else {
-            const target = getSafeReturnUrl('/home');
+            const target = getSafeReturnUrl('/library');
             router.push(target);
           }
         }
@@ -449,7 +449,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     const success = await verify2FA(twoFAEmail, twoFACode);
     if (success) {
       onClose();
-      const target = getSafeReturnUrl('/home');
+      const target = getSafeReturnUrl('/library');
       router.push(target);
     } else {
       setTwoFAError('Mã xác nhận không hợp lệ');
@@ -466,7 +466,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     const success = await verify2FA(twoFAEmail, twoFACode);
     if (success) {
       onClose();
-      const target = getSafeReturnUrl('/home');
+      const target = getSafeReturnUrl('/library');
       router.push(target);
     } else {
       setTwoFAError("Mã xác thực không chính xác hoặc đã hết hạn");

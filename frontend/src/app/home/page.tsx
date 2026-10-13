@@ -29,7 +29,14 @@ function LandingPageContent() {
 
   useEffect(() => {
     setIsMounted(true);
-  }, []);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const returnUrl = params.get('returnUrl');
+      if (returnUrl && !isAuthenticated) {
+        setShowLoginModal(true);
+      }
+    }
+  }, [isAuthenticated, setShowLoginModal]);
 
   useEffect(() => {
     if (isAuthenticated && activeUser) {
@@ -68,6 +75,7 @@ function LandingPageContent() {
       />
 
       <HeroSection 
+        isLoggedIn={isAuthenticated}
         onStartClick={() => {
           if (!isAuthenticated) setShowLoginModal(true);
           else router.push('/library');
