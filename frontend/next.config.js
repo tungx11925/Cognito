@@ -14,7 +14,6 @@ const nextConfig = {
 
   experimental: {
     optimizeCss: false,
-    optimizePackageImports: ['lucide-react', 'framer-motion', 'recharts', 'katex'],
     proxyTimeout: 180000,
   },
 

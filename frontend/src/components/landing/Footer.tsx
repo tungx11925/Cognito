@@ -15,15 +15,17 @@ export function Footer() {
           <div className="lg:col-span-2 space-y-4">
             <Link href="/" className="inline-flex items-center gap-2.5 group">
               {/* Cognito Brand SVG Logo */}
-              <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-900/40 group-hover:scale-105 transition-transform">
+              <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-900/40 group-hover:scale-105 transition-transform shrink-0 overflow-hidden">
                 <svg
+                  width="20"
+                  height="20"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="w-5 h-5 text-[#0d2116]"
+                  className="w-5 h-5 text-[#0d2116] shrink-0"
                 >
                   <path d="M12 2a10 10 0 1 0 10 10" />
                   <path d="M12 12 19 5" />
