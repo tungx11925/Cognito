@@ -2,34 +2,26 @@ const DEFAULT_API_BASE_URL = '/api';
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
 
 /**
- * Migrate xóa key 'token' cũ trong localStorage khi khởi động (Spec 3.4)
- * Cookie HttpOnly là nguồn sự thật duy nhất cho phiên người dùng.
- */
-if (typeof window !== 'undefined') {
-  try {
-    if (localStorage.getItem('token')) {
-      console.log('[AUTH_FE] Migrated: removed legacy localStorage token in favor of HttpOnly cookie');
-      localStorage.removeItem('token');
-    }
-  } catch (e) {
-    // Ignore storage errors in restricted contexts
-  }
-}
-
-/**
- * Backward-compatible helper for test scripts / external headers.
- * Trả về empty object vì HttpOnly cookie tự động đính kèm qua credentials: 'include'.
+ * Helper lấy Authorization header khi chạy cross-site (Vercel <-> Render)
+ * Đảm bảo xác thực hoạt động ổn định kể cả khi trình duyệt chặn cookie bên thứ 3 (Third-party cookie phaseout).
  */
 export const getAuthHeaders = (): Record<string, string> => {
-  return {};
+  if (typeof window === 'undefined') return {};
+  try {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch (e) {
+    return {};
+  }
 };
 
-/**
- * Backward-compatible helper for legacy components checking token existence.
- * Returns non-null when running in browser since authentication uses HttpOnly cookie.
- */
 export const getValidToken = (): string | null => {
-  return typeof window !== 'undefined' ? 'cookie-session' : null;
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem('token') || 'cookie-session';
+  } catch (e) {
+    return 'cookie-session';
+  }
 };
 
 // Single-flight refresh token lock (Spec 3.2)
@@ -38,16 +30,24 @@ let refreshPromise: Promise<boolean> | null = null;
 
 async function executeRefreshToken(): Promise<boolean> {
   try {
+    const authHeaders = getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders,
       },
     });
 
     if (res.ok) {
-      console.log('[AUTH_FE] Session refreshed successfully via HttpOnly cookie');
+      try {
+        const data = await res.json();
+        if (data?.token && typeof window !== 'undefined') {
+          localStorage.setItem('token', data.token);
+        }
+      } catch (e) {}
+      console.log('[AUTH_FE] Session refreshed successfully');
       return true;
     }
 
@@ -94,9 +94,14 @@ export const apiFetch = async (endpoint: string, options?: RequestInit): Promise
     ? `${baseUrl.replace(/\/api$/, '')}${normalizedEndpoint}`
     : `${baseUrl}${normalizedEndpoint}`;
 
+  const authHeaders = getAuthHeaders();
   const fetchOptions: RequestInit = {
     ...options,
     credentials: 'include', // Luôn gửi cookie HttpOnly phiên làm việc
+    headers: {
+      ...authHeaders,
+      ...(options?.headers || {}),
+    },
   };
 
   // Đảm bảo FormData không bị set cứng Content-Type

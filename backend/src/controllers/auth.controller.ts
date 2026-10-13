@@ -24,6 +24,13 @@ const authLog = (msg: string) => {
   if (isAuthDebug) console.log(`[AUTH_BE_DEBUG] ${msg}`);
 };
 
+const getAuthCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
+  maxAge: 24 * 60 * 60 * 1000,
+});
+
 export const register = async (req: Request, res: Response) => {
   try {
     const { name, phone, email, password } = req.body;
@@ -51,12 +58,7 @@ export const register = async (req: Request, res: Response) => {
 
     const { user, token } = await authService.register({ name, phone, email, password });
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000
-    });
+    res.cookie('token', token, getAuthCookieOptions());
 
     res.status(201).json({ message: 'Đăng ký thành công', token, user: { ...user, study_dates: [] } });
   } catch (error: any) {
@@ -86,12 +88,7 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    res.cookie('token', result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000
-    });
+    res.cookie('token', result.token, getAuthCookieOptions());
     
     res.status(200).json({ 
       message: 'Đăng nhập thành công', 
@@ -116,12 +113,7 @@ export const verify2FA = async (req: Request, res: Response) => {
 
     const result = await authService.verify2FA({ email, code });
 
-    res.cookie('token', result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000
-    });
+    res.cookie('token', result.token, getAuthCookieOptions());
 
     res.status(200).json({
       message: 'Đăng nhập thành công',
@@ -176,12 +168,7 @@ export const googleLogin = async (req: Request, res: Response) => {
     
     const result = await authService.googleLogin({ email, name, googleId });
 
-    res.cookie('token', result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000
-    });
+    res.cookie('token', result.token, getAuthCookieOptions());
 
     res.status(200).json({
       message: 'Đăng nhập Google thành công',
@@ -231,7 +218,11 @@ export const logout = async (req: Request, res: Response) => {
         tokenBlacklistService.add(token);
       }
     }
-    res.clearCookie('token');
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
+    });
     res.status(200).json({ message: 'Đăng xuất thành công' });
   } catch (error: any) {
     console.error('Logout error:', error);
@@ -258,12 +249,7 @@ export const refresh = async (req: Request, res: Response) => {
 
     const result = await authService.refreshToken(token);
 
-    res.cookie('token', result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000
-    });
+    res.cookie('token', result.token, getAuthCookieOptions());
 
     return res.status(200).json({
       message: 'Token làm mới thành công',

@@ -9,7 +9,7 @@ import {
   markAllNotificationsAsRead,
   getNotificationStreamTicket,
 } from '@/services/notification.service';
-import { apiFetch, getValidToken } from '@/services/api';
+import { apiFetch, getValidToken, getAuthHeaders } from '@/services/api';
 export interface DocumentItem {
   id: number;
   user_id: number;
@@ -237,10 +237,6 @@ interface StudyContextType {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-const getAuthHeaders = (): Record<string, string> => {
-  return {};
-};
-
 const EMPTY_ANALYTICS = {
   total_study_minutes: 0,
   total_sessions: 0,
@@ -362,7 +358,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
           triggerMessage(data.message || 'Vui lòng đổi mật khẩu để kích hoạt', 'success');
           return { success: true, requiresPasswordChange: true, email: data.email };
         }
-        try { localStorage.removeItem('token'); } catch (e) {}
+        if (data.token) {
+          try { localStorage.setItem('token', data.token); } catch (e) {}
+        }
         setActiveUser(data.user);
         setIsAuthenticated(true);
         setShowDailyRecommendModal(true);
@@ -388,7 +386,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       const data = await res.json();
       if (res.ok) {
-        try { localStorage.removeItem('token'); } catch (e) {}
+        if (data.token) {
+          try { localStorage.setItem('token', data.token); } catch (e) {}
+        }
         setActiveUser(data.user);
         setIsAuthenticated(true);
         setShowDailyRecommendModal(true);
@@ -418,7 +418,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
           await fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
             method: 'POST',
             credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
             body: JSON.stringify({ seconds: totalToSend })
           });
         } catch (e) {
@@ -430,7 +433,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
-        credentials: 'include'
+        credentials: 'include',
+        headers: getAuthHeaders(),
       });
     } catch (e) {}
     try { localStorage.removeItem('token'); } catch (e) {}
@@ -463,6 +467,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const res = await fetch(`${API_BASE_URL}/auth/avatar`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeaders(),
         body: formData
       });
 
@@ -493,6 +498,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify(fields)
       });
@@ -524,6 +530,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ enable })
       });
@@ -555,6 +562,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ currentPassword, newPassword })
       });
@@ -583,7 +591,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       const data = await res.json();
       if (res.ok) {
-        try { localStorage.removeItem('token'); } catch (e) {}
+        if (data.token) {
+          try { localStorage.setItem('token', data.token); } catch (e) {}
+        }
         setActiveUser(data.user);
         setIsAuthenticated(true);
         setShowDailyRecommendModal(true);
@@ -610,6 +620,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         }
       });
       const data = await res.json();
@@ -661,7 +672,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const fetchMe = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/auth/me`, {
-          credentials: 'include'
+          credentials: 'include',
+          headers: getAuthHeaders(),
         });
         if (res.ok) {
           const data = await res.json();
@@ -1520,7 +1532,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
           method: 'POST',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify({ seconds }),
           keepalive: true
         }).catch(() => {});
