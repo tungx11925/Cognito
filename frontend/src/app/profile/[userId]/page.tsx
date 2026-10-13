@@ -86,7 +86,10 @@ export default function TargetUserProfilePage() {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      const res = await fetch(`${API_BASE_URL}/users/${userId}/profile`, { headers });
+      const res = await fetch(`${API_BASE_URL}/users/${userId}/profile`, { 
+        headers,
+        credentials: "include"
+      });
       const data = await res.json();
 
       if (res.ok) {

@@ -36,6 +36,7 @@ function SandboxCheckoutContent() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        credentials: 'include',
         body: JSON.stringify({ orderCode }),
       });
 

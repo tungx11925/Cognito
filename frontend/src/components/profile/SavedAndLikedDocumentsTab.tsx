@@ -61,7 +61,8 @@ export default function SavedAndLikedDocumentsTab({ type, triggerMessage }: Save
 
       const endpoint = type === 'saved' ? '/documents/user/saved' : '/documents/user/liked';
       const res = await fetch(`${API_BASE_URL}${endpoint}?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
 
       if (res.ok) {
@@ -132,7 +133,8 @@ export default function SavedAndLikedDocumentsTab({ type, triggerMessage }: Save
 
       const res = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
 
       if (res.ok) {

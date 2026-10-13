@@ -152,6 +152,7 @@ export default function UploadDocumentModal({
     };
 
     xhr.open('POST', `${API_BASE}/documents/upload`);
+    xhr.withCredentials = true;
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.send(formData);
   };

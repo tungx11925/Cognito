@@ -57,6 +57,7 @@ export default function LeaderboardPage() {
 
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
       const res = await fetch(`${API_BASE}/leaderboard?category=${category}&period=${period}&limit=50`, {
+        credentials: 'include',
         headers
       });
 

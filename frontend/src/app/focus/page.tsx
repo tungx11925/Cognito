@@ -397,6 +397,7 @@ function FocusContent() {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
+          credentials: 'include',
           body: payload,
           keepalive: true,
         }).catch(() => {});

@@ -38,7 +38,8 @@ export default function ShareModal({
       try {
         const token = localStorage.getItem('token');
         const res = await fetch(`${API_BASE_URL}/shares/status/${resourceType}/${resourceId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          credentials: 'include'
         });
         if (res.ok) {
           const data = await res.json();
@@ -75,8 +76,9 @@ export default function ShareModal({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
+        credentials: 'include',
         body: JSON.stringify(body)
       });
 

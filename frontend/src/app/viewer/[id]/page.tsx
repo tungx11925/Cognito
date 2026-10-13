@@ -10,6 +10,7 @@ import { Panel, Group, Separator } from 'react-resizable-panels';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import ShareModal from '@/components/documents/ShareModal';
+import { useStudy } from '@/context/StudyContext';
 
 const PomodoroWidget = dynamic(() => import('@/components/documents/PomodoroWidget'), { ssr: false });
 const SmartNotesWorkspace = dynamic(() => import('@/components/documents/SmartNotesWorkspace'), { ssr: false });
@@ -48,10 +49,13 @@ export default function DocumentViewerPage() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
+  const { activeUser } = useStudy();
+
   const fetchEngagement = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const res = await fetch(`${API_BASE_URL}/documents/${docId}/engagement`, {
+        credentials: 'include',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (res.ok) {
@@ -67,8 +71,7 @@ export default function DocumentViewerPage() {
   };
 
   const handleToggleLike = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!activeUser) {
       toast.error('Vui lòng đăng nhập để thích tài liệu');
       return;
     }
@@ -80,9 +83,11 @@ export default function DocumentViewerPage() {
     setLikeCount(prevLiked ? Math.max(0, prevCount - 1) : prevCount + 1);
 
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const res = await fetch(`${API_BASE_URL}/documents/${docId}/like`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (res.ok) {
         const data = await res.json();
@@ -102,8 +107,7 @@ export default function DocumentViewerPage() {
   };
 
   const handleToggleSave = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!activeUser) {
       toast.error('Vui lòng đăng nhập để lưu tài liệu');
       return;
     }
@@ -115,9 +119,11 @@ export default function DocumentViewerPage() {
     setSaveCount(prevSaved ? Math.max(0, prevCount - 1) : prevCount + 1);
 
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const res = await fetch(`${API_BASE_URL}/documents/${docId}/save`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (res.ok) {
         const data = await res.json();
