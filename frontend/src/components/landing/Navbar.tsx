@@ -297,7 +297,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
       }}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14">
+        <div className="flex items-center justify-between h-14 gap-2 xl:gap-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 cursor-pointer shrink-0 group text-[#0d1a14] dark:text-zinc-100">
             <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1a3d28] to-[#2d5a3d] flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform shrink-0 overflow-hidden">
@@ -465,17 +465,6 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
               <span>Tìm kiếm</span>
             </Link>
 
-            {/* Admin (Only if role === 'admin') */}
-            {isMounted && activeUser?.role === 'admin' && (
-              <Link
-                href="/admin"
-                prefetch={true}
-                className={getNavItemClass(Boolean(pathname?.startsWith('/admin')))}
-              >
-                <Shield size={14} className={getNavIconClass(Boolean(pathname?.startsWith('/admin')))} />
-                <span>Admin</span>
-              </Link>
-            )}
           </nav>
 
           {/* Actions */}
@@ -486,9 +475,9 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link
                     href="/admin"
                     prefetch={true}
-                    className="px-3.5 py-1.5 rounded-xl text-xs xl:text-sm font-bold transition-all flex items-center gap-1.5 text-white bg-[#1a3d28] hover:bg-[#153422] shadow-sm hover:shadow active:scale-95"
+                    className="px-3.5 py-1.5 rounded-xl text-xs xl:text-sm font-bold transition-all flex items-center gap-1.5 text-white bg-[#1a3d28] hover:bg-[#153422] shadow-sm hover:shadow active:scale-95 shrink-0"
                   >
-                    <Shield size={14} className="text-emerald-300" />
+                    <Shield size={14} className="text-emerald-300 shrink-0" />
                     <span>Bảng điều khiển Admin</span>
                   </Link>
                 ) : activeUser?.role === 'premium' ? (
