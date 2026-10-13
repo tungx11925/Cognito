@@ -53,6 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <StudyContextProvider>
             <Toaster position="top-center" reverseOrder={false} 
+              containerStyle={{ zIndex: 999999 }}
               toastOptions={{
                 className: 'font-sans',
                 style: {
