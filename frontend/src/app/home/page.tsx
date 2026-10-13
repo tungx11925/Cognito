@@ -38,14 +38,6 @@ function LandingPageContent() {
     }
   }, [isAuthenticated, setShowLoginModal]);
 
-  useEffect(() => {
-    if (isAuthenticated && activeUser) {
-      if (activeUser.role === 'admin') {
-        router.push('/admin');
-      }
-    }
-  }, [isAuthenticated, activeUser, router]);
-
   const handleDemoScroll = () => {
     const element = document.getElementById('features');
     element?.scrollIntoView({ behavior: 'smooth' });
