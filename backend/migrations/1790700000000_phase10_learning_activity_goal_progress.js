@@ -45,7 +45,7 @@ exports.up = async (pgm) => {
       'take_quiz',
       'test_set',
       qa.test_set_id,
-      COALESCE(qa.duration_seconds, qa.time_spent_seconds, 0),
+      COALESCE(qa.duration_seconds, 0),
       jsonb_build_object(
         'attemptId', qa.id,
         'score', qa.score,
@@ -55,7 +55,7 @@ exports.up = async (pgm) => {
         'source', 'backfill'
       ),
       'quiz_attempt:' || qa.id,
-      COALESCE(qa.completed_at, qa.created_at, CURRENT_TIMESTAMP)
+      COALESCE(qa.completed_at, CURRENT_TIMESTAMP)
     FROM quiz_attempts qa
     WHERE (qa.status = 'SUBMITTED' OR qa.completed_at IS NOT NULL)
     ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
