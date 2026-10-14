@@ -23,8 +23,11 @@ export interface QuizAttempt {
   testSetId: number;
   testSetName?: string;
   score: number;
+  score10?: number;
   totalScore: number;
   percentage?: number;
+  accuracyPercent?: number;
+  evaluationLabel?: string;
   correctCount: number;
   totalQuestions: number;
   durationSeconds?: number;

@@ -71,15 +71,16 @@ export interface GenerateQuestionsPayload {
   sourceIds?: number[];
   textContent?: string;
   focusKeywords?: string[];
-  audienceLevel: 'weak' | 'medium' | 'advanced';
-  questionType: 'MULTIPLE_CHOICE' | 'FILL_BLANK' | 'ESSAY' | 'TRUE_FALSE' | 'mixed';
-  difficulty: 'easy' | 'medium' | 'hard';
-  quantity: number;
-  templateId: string;
+  audienceLevel?: 'weak' | 'medium' | 'advanced';
+  questionType?: 'MULTIPLE_CHOICE' | 'FILL_BLANK' | 'ESSAY' | 'TRUE_FALSE' | 'mixed';
+  difficulty?: 'easy' | 'medium' | 'hard';
+  quantity?: number;
+  templateId?: string;
   modelId?: number;
   customInstruction?: string;
+  customPrompt?: string;
   topic?: string;
-  mode: 'practice' | 'exam';
+  mode?: 'practice' | 'exam';
   name?: string;
   configKey?: string;
 }

@@ -334,18 +334,31 @@ export default function QuizPage() {
               {/* Circular / Badge Score */}
               <div className="flex flex-col items-center">
                 <div
-                  className={`w-32 h-32 rounded-3xl flex flex-col items-center justify-center border-4 shadow-lg ${
-                    pct >= 80
+                  className={`min-w-[130px] px-4 py-3 rounded-3xl flex flex-col items-center justify-center border-4 shadow-lg ${
+                    (resAttempt.accuracyPercent ?? pct) >= 80
                       ? "bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-emerald-500/10"
-                      : pct >= 50
+                      : (resAttempt.accuracyPercent ?? pct) >= 50
                       ? "bg-amber-50 dark:bg-amber-950/50 border-amber-500 text-amber-700 dark:text-amber-300 shadow-amber-500/10"
                       : "bg-rose-50 dark:bg-rose-950/50 border-rose-500 text-rose-700 dark:text-rose-300 shadow-rose-500/10"
                   }`}
                 >
-                  <span className="text-3xl font-black">{resAttempt.score}</span>
-                  <span className="text-xs font-semibold opacity-75">/ {resAttempt.totalScore} Điểm</span>
-                  <span className="text-xs font-bold mt-1 px-2 py-0.5 rounded-full bg-white/70 dark:bg-zinc-800/80">
-                    {pct}%
+                  <span className="text-3xl font-black">
+                    {resAttempt.score10 !== undefined ? resAttempt.score10 : (resAttempt.totalQuestions > 0 ? Math.round((resAttempt.correctCount / resAttempt.totalQuestions) * 100) / 10 : resAttempt.score)}
+                  </span>
+                  <span className="text-xs font-semibold opacity-75">/ 10 Điểm</span>
+                  <span className="text-xs font-bold mt-1 px-2.5 py-0.5 rounded-full bg-white/70 dark:bg-zinc-800/80">
+                    {resAttempt.accuracyPercent ?? pct}%
+                  </span>
+                  <span className="text-[11px] font-bold mt-1.5 text-center px-2 py-0.5 rounded-md bg-white/50 dark:bg-zinc-800/50">
+                    {resAttempt.evaluationLabel || (
+                      (resAttempt.accuracyPercent ?? pct) >= 90
+                        ? "Nắm tốt nội dung trong bài"
+                        : (resAttempt.accuracyPercent ?? pct) >= 70
+                        ? "Khá vững"
+                        : (resAttempt.accuracyPercent ?? pct) >= 50
+                        ? "Cần ôn thêm"
+                        : "Cần ôn lại"
+                    )}
                   </span>
                 </div>
               </div>
@@ -365,9 +378,19 @@ export default function QuizPage() {
                 <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">Câu làm sai</p>
                 <p className="text-xl font-bold text-rose-700 dark:text-rose-300 mt-1">{mistakesCount}</p>
               </div>
-              <div className="bg-amber-50/70 dark:bg-amber-950/40 p-3.5 rounded-2xl text-center">
-                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Chưa làm</p>
-                <p className="text-xl font-bold text-amber-700 dark:text-amber-300 mt-1">{resAttempt.totalQuestions - answeredCount}</p>
+              <div className="bg-blue-50/70 dark:bg-blue-950/40 p-3.5 rounded-2xl text-center">
+                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">Đánh giá kết quả</p>
+                <p className="text-sm font-bold text-blue-800 dark:text-blue-300 mt-1.5 truncate">
+                  {resAttempt.evaluationLabel || (
+                    (resAttempt.accuracyPercent ?? pct) >= 90
+                      ? "Nắm tốt nội dung"
+                      : (resAttempt.accuracyPercent ?? pct) >= 70
+                      ? "Khá vững"
+                      : (resAttempt.accuracyPercent ?? pct) >= 50
+                      ? "Cần ôn thêm"
+                      : "Cần ôn lại"
+                  )}
+                </p>
               </div>
             </div>
 
