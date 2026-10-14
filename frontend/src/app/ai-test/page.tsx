@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Navbar } from "@/components/landing/Navbar";
+import { Background } from "@/components/flashcards/Background";
 import { useStudy } from "@/context/StudyContext";
 import dynamic from "next/dynamic";
 import {
@@ -479,8 +480,8 @@ export default function AITestPage() {
 
   if (loading) return (
     <div
-      className="min-h-screen bg-[#FDFCFB] dark:bg-[#0B0F17] flex flex-col font-sans transition-colors duration-200"
-      style={{ fontFamily: "'Outfit', sans-serif" }}
+      className="min-h-screen flex flex-col transition-colors duration-300 relative overflow-x-hidden"
+      style={{ background: dark ? "#121212" : "#FDFCFB", fontFamily: "'Outfit', sans-serif" }}
     >
       <Navbar
         isLoggedIn={isAuthenticated}
@@ -499,9 +500,14 @@ export default function AITestPage() {
 
   return (
     <div
-      className="min-h-screen bg-[#FDFCFB] dark:bg-[#0B0F17] flex flex-col font-sans transition-colors duration-200"
-      style={{ fontFamily: "'Outfit', sans-serif" }}
+      className="min-h-screen flex flex-col transition-colors duration-300 pb-12 relative overflow-x-hidden"
+      style={{
+        background: bgStyle === "default" ? (dark ? "#121212" : "#FDFCFB") : "transparent",
+        fontFamily: "'Outfit', sans-serif",
+      }}
     >
+      <Background styleType={bgStyle} dark={dark} />
+
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}

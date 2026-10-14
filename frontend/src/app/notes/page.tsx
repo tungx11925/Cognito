@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Navbar } from '@/components/landing/Navbar';
+import { Background } from '@/components/flashcards/Background';
 import { useStudy } from '@/context/StudyContext';
 import RegisterModal from '@/components/auth/RegisterModal';
 import PremiumModal from '@/components/layout/PremiumModal';
@@ -269,9 +270,14 @@ export default function NotesPage() {
 
   return (
     <div
-      className="min-h-screen bg-[#FDFCFB] dark:bg-[#0B0F17] text-gray-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200"
-      style={{ fontFamily: "'Outfit', sans-serif" }}
+      className="min-h-screen flex flex-col transition-colors duration-300 pb-12 relative overflow-x-hidden"
+      style={{
+        background: bgStyle === "default" ? (dark ? "#121212" : "#FDFCFB") : "transparent",
+        fontFamily: "'Outfit', sans-serif",
+      }}
     >
+      <Background styleType={bgStyle} dark={dark} />
+
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}

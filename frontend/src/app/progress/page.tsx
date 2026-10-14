@@ -7,7 +7,8 @@ import {
   Flame, Target, Clock, BookOpen, Layers, HelpCircle,
   Plus, Trash2, CheckCircle2, TrendingUp, Calendar, Award,
   Sparkles, RefreshCw, AlertCircle, X, ChevronRight, Activity,
-  BarChart3, CheckCircle, FileText
+  BarChart3, CheckCircle, FileText, ArrowLeft, EyeOff, Palette,
+  Sun, Moon
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -15,7 +16,9 @@ import {
 } from 'recharts';
 import { useStudy } from '@/context/StudyContext';
 import { Navbar } from '@/components/landing/Navbar';
+import { Background } from '@/components/flashcards/Background';
 import RegisterModal from '@/components/auth/RegisterModal';
+import Link from 'next/link';
 import { progressService, ProgressSummary, LearningGoal } from '@/services/progress.service';
 
 const TARGET_TYPE_LABELS: Record<string, { label: string; unit: string; icon: any; color: string }> = {
@@ -60,6 +63,39 @@ export default function ProgressPage() {
 
   // Filter for activities
   const [activityFilter, setActivityFilter] = useState<'all' | 'take_quiz' | 'read_doc' | 'study_flashcards'>('all');
+
+  const [dark, setDark] = useState(false);
+  const [bgStyle, setBgStyle] = useState<"default" | "nebula" | "geometry">("default");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("app-theme") || "light";
+    setDark(savedTheme === "dark");
+    const savedBg = localStorage.getItem("flashcard-bg") as "default" | "nebula" | "geometry" | null;
+    if (savedBg) setBgStyle(savedBg);
+    const onThemeChange = (e: any) => {
+      if (e.detail?.theme) setDark(e.detail.theme === "dark");
+    };
+    window.addEventListener("cognito:theme_change", onThemeChange);
+    return () => window.removeEventListener("cognito:theme_change", onThemeChange);
+  }, []);
+
+  const handleToggleDark = () => {
+    const nextDark = !dark;
+    setDark(nextDark);
+    localStorage.setItem("app-theme", nextDark ? "dark" : "light");
+    window.dispatchEvent(new CustomEvent("cognito:theme_change", { detail: { theme: nextDark ? "dark" : "light" } }));
+    if (nextDark) document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
+  };
+
+  const handleCycleBg = () => {
+    const styles: ("default" | "nebula" | "geometry")[] = ["default", "nebula", "geometry"];
+    const next = styles[(styles.indexOf(bgStyle) + 1) % styles.length];
+    setBgStyle(next);
+    localStorage.setItem("flashcard-bg", next);
+  };
+
+  const primaryColor = dark ? "#10b981" : "#1a2e1c";
 
   const fetchProgress = async () => {
     try {
@@ -225,7 +261,15 @@ export default function ProgressPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#f5f3ee] dark:bg-[#0B0F17] text-[#0d1a14] dark:text-zinc-100 flex flex-col font-sans transition-colors duration-300">
+    <div
+      className="min-h-screen flex flex-col transition-colors duration-300 pb-12 relative overflow-x-hidden"
+      style={{
+        background: bgStyle === "default" ? (dark ? "#121212" : "#f5f3ee") : "transparent",
+        fontFamily: "'Outfit', sans-serif",
+      }}
+    >
+      <Background styleType={bgStyle} dark={dark} />
+
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
@@ -233,7 +277,50 @@ export default function ProgressPage() {
         activeUser={activeUser}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+      {/* Sub-toolbar */}
+      <div className="pt-20">
+        <div
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center border-b"
+          style={{ borderColor: dark ? "#222" : "rgba(26,46,28,0.08)" }}
+        >
+          <div className="flex items-center gap-2">
+            <Link
+              href="/library"
+              className="flex items-center gap-1 text-xs font-bold transition-opacity hover:opacity-80"
+              style={{ color: primaryColor }}
+            >
+              <ArrowLeft size={14} /> Thư viện của tôi
+            </Link>
+          </div>
+          <div className="flex items-center gap-3 z-10">
+            <div className="flex items-center gap-1.5">
+              <Flame size={16} color="#f97316" className="animate-pulse" strokeWidth={2.75} />
+              <span style={{ fontWeight: 700, color: dark ? "#d1d5db" : "#374151", fontSize: 13 }}>
+                {activeUser?.streak || 0} ngày Streak
+              </span>
+            </div>
+            <button
+              onClick={handleCycleBg}
+              className="px-3 h-9 rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-95 hover:opacity-80 text-xs font-bold"
+              style={{ background: dark ? "#2a2a2a" : "#f3f3f0", border: `2px solid ${dark ? "#3a3a3a" : "rgba(26,46,28,0.18)"}`, color: dark ? "#f0f0f0" : "#1a2e1c" }}
+              title="Đổi kiểu hình nền"
+            >
+              {bgStyle === "default" && <><EyeOff size={14} strokeWidth={2.75} /> Tối giản</>}
+              {bgStyle === "nebula" && <><Palette size={14} className="text-emerald-500" strokeWidth={2.75} /> Tinh vân</>}
+              {bgStyle === "geometry" && <><Activity size={14} className="text-blue-500" strokeWidth={2.75} /> Hình học</>}
+            </button>
+            <button
+              onClick={handleToggleDark}
+              className="w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-95"
+              style={{ background: dark ? "#2a2a2a" : "#f3f3f0", border: `2px solid ${dark ? "#3a3a3a" : "rgba(26,46,28,0.18)"}` }}
+            >
+              {dark ? <Sun size={15} color="#10b981" strokeWidth={2.75} /> : <Moon size={15} color="#1a2e1c" strokeWidth={2.75} />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-16">
         {/* Header Banner */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border-2 border-[#1a2e1c]/20 dark:border-zinc-800 shadow-[4px_4px_0px_0px_rgba(26,46,28,0.12)] dark:shadow-none">
           <div>
