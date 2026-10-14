@@ -897,6 +897,7 @@ export default function FlashcardsPage() {
         resourceId={shareDeck?.id || 0} 
         resourceType="deck" 
         triggerMessage={triggerMessage} 
+        onShareUpdated={fetchDecks}
       />
     </div>
   );

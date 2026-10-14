@@ -336,6 +336,11 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Toast message trigger helper
   const triggerMessage = (text: string, type: 'success' | 'error' = 'success') => {
     setGlobalMessage({ text, type });
+    if (type === 'error') {
+      toast.error(text);
+    } else {
+      toast.success(text);
+    }
     setTimeout(() => {
       setGlobalMessage({ text: '', type: 'success' });
     }, 4000);
