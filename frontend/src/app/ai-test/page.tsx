@@ -3,9 +3,15 @@ import React, { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { Sparkles, Loader2, Plus, Trash2, Edit3, ToggleLeft, ToggleRight, FileText, BookOpen, Upload, ChevronDown, Settings2, Save, X, Cpu, Target, GraduationCap, Play } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { 
+  Sparkles, Loader2, Plus, Trash2, Edit3, ToggleLeft, ToggleRight, 
+  FileText, BookOpen, Upload, ChevronDown, Settings2, Save, X, Cpu, 
+  Target, GraduationCap, Play, Flame, Volume2, VolumeX, EyeOff, 
+  Palette, Activity, Sun, Moon, ArrowLeft, Trophy, FileQuestion, Layers 
+} from "lucide-react";
 import toast from "react-hot-toast";
-import { MainLayout } from "@/components/layout/MainLayout";
+import { Navbar } from "@/components/landing/Navbar";
 import { useStudy } from "@/context/StudyContext";
 import dynamic from "next/dynamic";
 import {
@@ -75,8 +81,44 @@ const SCORE_ROWS = [
   { label: "Đúng / Sai",  ck: "true_false_count",        sk: "true_false_score" },
 ];
 
+function StatBadge({
+  icon,
+  label,
+  value,
+  dark,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  dark: boolean;
+}) {
+  return (
+    <div
+      className="flex items-center gap-2 px-4 py-2.5 rounded-xl flex-1 min-w-[140px]"
+      style={{
+        background: dark ? "#1e1e1e" : "#ffffff",
+        border: `2px solid ${dark ? "#2a2a2a" : "rgba(26,46,28,0.2)"}`,
+        boxShadow: dark
+          ? "3px 3px 0 rgba(255,255,255,0.03)"
+          : "3px 3px 0 rgba(26,46,28,0.1)",
+        fontFamily: "'Outfit', sans-serif",
+      }}
+    >
+      {icon}
+      <div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{label}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: dark ? "#f3f4f6" : "#111827" }}>{value}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AITestPage() {
-  const { isAuthenticated, setShowLoginModal } = useStudy();
+  const router = useRouter();
+  const { isAuthenticated, setShowLoginModal, activeUser } = useStudy();
+  const [dark, setDark]           = useState(false);
+  const [muted, setMuted]         = useState(false);
+  const [bgStyle, setBgStyle]     = useState<"default" | "nebula" | "geometry">("default");
   const [config, setConfig]       = useState<AIConfig | null>(null);
   const [testSets, setTestSets]   = useState<TestSet[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -124,6 +166,53 @@ export default function AITestPage() {
     (Number(w.fill_blank_count)||0)*(Number(w.fill_blank_score)||0) +
     (Number(w.essay_count)||0)*(Number(w.essay_score)||0) +
     (Number(w.true_false_count)||0)*(Number(w.true_false_score)||0);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("app-theme") || "light";
+    setDark(savedTheme === "dark");
+
+    const onThemeChange = (e: any) => {
+      if (e.detail?.theme) {
+        setDark(e.detail.theme === "dark");
+      }
+    };
+    window.addEventListener("cognito:theme_change", onThemeChange);
+    return () => {
+      window.removeEventListener("cognito:theme_change", onThemeChange);
+    };
+  }, []);
+
+  const handleToggleDark = () => {
+    const nextDark = !dark;
+    setDark(nextDark);
+    localStorage.setItem("app-theme", nextDark ? "dark" : "light");
+    window.dispatchEvent(new CustomEvent("cognito:theme_change", { detail: { theme: nextDark ? "dark" : "light" } }));
+    if (typeof window !== "undefined") {
+      if (nextDark) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    }
+  };
+
+  const handleToggleMute = () => {
+    const nextMuted = !muted;
+    setMuted(nextMuted);
+    localStorage.setItem("flashcard-muted", String(nextMuted));
+  };
+
+  const handleCycleBg = () => {
+    const bgStyles: ("default" | "nebula" | "geometry")[] = ["default", "nebula", "geometry"];
+    const nextIdx = (bgStyles.indexOf(bgStyle) + 1) % bgStyles.length;
+    const nextBg = bgStyles[nextIdx];
+    setBgStyle(nextBg);
+    localStorage.setItem("flashcard-bg", nextBg);
+  };
+
+  const primaryColor = dark ? "#10b981" : "#1a2e1c";
+  const textMain = dark ? "#f0f0f0" : "#1a2e1c";
+  const textSub = dark ? "#9ca3af" : "#6b7280";
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -389,45 +478,172 @@ export default function AITestPage() {
   };
 
   if (loading) return (
-    <MainLayout>
-      <div className="flex items-center justify-center min-h-[60vh]">
+    <div
+      className="min-h-screen bg-[#FDFCFB] dark:bg-[#0B0F17] flex flex-col font-sans transition-colors duration-200"
+      style={{ fontFamily: "'Outfit', sans-serif" }}
+    >
+      <Navbar
+        isLoggedIn={isAuthenticated}
+        onSignInClick={() => setShowLoginModal(true)}
+        onDashboardClick={() => router.push('/library')}
+        activeUser={activeUser!}
+      />
+      <div className="flex items-center justify-center min-h-[60vh] pt-20">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 border-4 border-[#1a3a2a]/20 border-t-[#1a3a2a] dark:border-emerald-500/20 dark:border-t-emerald-400 rounded-full animate-spin" />
           <p className="text-sm text-gray-500 dark:text-zinc-400">Đang tải...</p>
         </div>
       </div>
-    </MainLayout>
+    </div>
   );
 
   return (
-    <MainLayout>
-      <div className="w-full space-y-6 text-gray-900 dark:text-zinc-100 transition-colors duration-200">
-        {/* HEADER */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100 flex items-center gap-3">
-              <div className="w-9 h-9 bg-[#1a3a2a] dark:bg-emerald-800 rounded-xl flex items-center justify-center">
-                <Sparkles size={18} className="text-white" />
-              </div>
-              Bài tập AI
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-zinc-400 mt-1">Tự động tạo bộ đề từ tài liệu, flashcard hoặc nội dung bất kỳ.</p>
+    <div
+      className="min-h-screen bg-[#FDFCFB] dark:bg-[#0B0F17] flex flex-col font-sans transition-colors duration-200"
+      style={{ fontFamily: "'Outfit', sans-serif" }}
+    >
+      <Navbar
+        isLoggedIn={isAuthenticated}
+        onSignInClick={() => setShowLoginModal(true)}
+        onDashboardClick={() => router.push('/library')}
+        activeUser={activeUser!}
+      />
+
+      {/* Secondary Custom Toolbar Sub-navbar */}
+      <div className="pt-20">
+        <div
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center border-b"
+          style={{ borderColor: dark ? "#222" : "rgba(26,46,28,0.08)" }}
+        >
+          <div className="flex items-center gap-2">
+            <Link
+              href="/library"
+              className="flex items-center gap-1 text-xs font-bold transition-opacity hover:opacity-80"
+              style={{ color: primaryColor }}
+            >
+              <ArrowLeft size={14} /> Thư viện của tôi
+            </Link>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button onClick={() => setShowConfig(p => !p)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-gray-600 dark:text-zinc-300 border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors">
-              <Settings2 size={14} /> Cấu hình
+
+          <div className="flex items-center gap-4 z-10">
+            <div className="flex items-center gap-1.5 font-sans">
+              <Flame size={16} color="#f97316" className="animate-pulse" />
+              <span
+                style={{
+                  fontWeight: 700,
+                  color: dark ? "#d1d5db" : "#374151",
+                  fontSize: 13,
+                }}
+              >
+                {activeUser?.streak || 0} ngày Streak
+              </span>
+            </div>
+
+            <button
+              onClick={handleToggleMute}
+              className="w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-95 hover:opacity-80"
+              style={{
+                background: dark ? "#2a2a2a" : "#f3f3f0",
+                border: `2px solid ${dark ? "#3a3a3a" : "rgba(26,46,28,0.18)"}`,
+                color: dark ? "#f0f0f0" : "#1a2e1c",
+              }}
+              title={muted ? "Bật âm thanh" : "Tắt âm thanh"}
+            >
+              {muted ? <VolumeX size={15} strokeWidth={2.75} /> : <Volume2 size={15} strokeWidth={2.75} />}
             </button>
-            <button onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors shadow-sm">
-              <Upload size={14} /> Nhập đề có sẵn (Word/PDF/Excel)
+
+            <button
+              onClick={handleCycleBg}
+              className="px-3 h-9 rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-95 hover:opacity-80 text-xs font-bold font-sans"
+              style={{
+                background: dark ? "#2a2a2a" : "#f3f3f0",
+                border: `2px solid ${dark ? "#3a3a3a" : "rgba(26,46,28,0.18)"}`,
+                color: dark ? "#f0f0f0" : "#1a2e1c",
+              }}
+              title="Đổi kiểu hình nền"
+            >
+              {bgStyle === "default" && <><EyeOff size={14} strokeWidth={2.75} /> Tối giản</>}
+              {bgStyle === "nebula" && <><Palette size={14} className="text-emerald-500" strokeWidth={2.75} /> Tinh vân</>}
+              {bgStyle === "geometry" && <><Activity size={14} className="text-blue-500" strokeWidth={2.75} /> Hình học</>}
             </button>
-            <button onClick={() => setShowGenPanel(p => !p)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#1a3a2a] dark:bg-emerald-700 text-white text-sm font-bold rounded-xl hover:bg-[#234b37] dark:hover:bg-emerald-600 transition-colors shadow-lg shadow-[#1a3a2a]/20">
-              <Plus size={15} /> Tạo đề mới
+
+            <button
+              onClick={handleToggleDark}
+              className="w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-95"
+              style={{
+                background: dark ? "#2a2a2a" : "#f3f3f0",
+                border: `2px solid ${dark ? "#3a3a3a" : "rgba(26,46,28,0.18)"}`,
+              }}
+            >
+              {dark ? <Sun size={15} color="#10b981" strokeWidth={2.75} /> : <Moon size={15} color="#1a2e1c" strokeWidth={2.75} />}
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-6 flex-1 flex flex-col overflow-x-hidden relative">
+        <div className="flex-1 flex flex-col space-y-6 w-full">
+          {/* Header section with Create New Button */}
+          <div className="flex justify-between items-end">
+            <div>
+              <h1
+                style={{
+                  fontWeight: 800,
+                  color: textMain,
+                  fontSize: 26,
+                  letterSpacing: "-0.5px",
+                }}
+              >
+                Đề thi & Trắc nghiệm AI
+              </h1>
+              <p style={{ color: textSub, fontSize: 13 }}>
+                Tự động tạo bộ đề từ tài liệu, flashcard hoặc nội dung bất kỳ
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowConfig(p => !p)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-600 dark:text-zinc-300 border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors shadow-xs"
+              >
+                <Settings2 size={13} /> Cấu hình
+              </button>
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors shadow-xs"
+              >
+                <Upload size={13} /> Nhập đề có sẵn
+              </button>
+              <button
+                onClick={() => setShowGenPanel(p => !p)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#1a2e1c] text-white text-xs font-bold rounded-xl hover:opacity-90 transition-all shadow-sm active:scale-95"
+                style={{ background: primaryColor }}
+              >
+                <Plus size={14} /> Tạo đề mới
+              </button>
+            </div>
+          </div>
+
+          {/* Stats badges Row */}
+          <div className="flex flex-wrap gap-3">
+            <StatBadge
+              dark={dark}
+              icon={<FileQuestion size={16} color={primaryColor} />}
+              label="Tổng bộ đề"
+              value={`${testSets.length} bộ`}
+            />
+            <StatBadge
+              dark={dark}
+              icon={<Trophy size={16} color="#f59e0b" />}
+              label="Đã duyệt"
+              value={`${testSets.filter(t => t.status === "APPROVED").length} bộ đề`}
+            />
+            <StatBadge
+              dark={dark}
+              icon={<Sparkles size={16} color="#10b981" />}
+              label="Đang kích hoạt"
+              value={`${testSets.filter(t => t.is_active).length} bộ đề`}
+            />
+          </div>
 
         {/* CONFIG MODAL */}
         <AnimatePresence>
@@ -912,13 +1128,29 @@ export default function AITestPage() {
         </AnimatePresence>
 
         {/* TEST SETS GRID */}
-        <div>
-          <h2 className="text-sm font-bold text-gray-600 dark:text-zinc-400 mb-3">Bộ đề của tôi ({testSets.length})</h2>
+        <div className="space-y-3">
+          <h2
+            style={{
+              fontWeight: 700,
+              color: textMain,
+              fontSize: 16,
+            }}
+          >
+            Bộ đề trắc nghiệm của bạn
+          </h2>
           {testSets.length === 0 ? (
-            <div className="flex flex-col items-center justify-center bg-white dark:bg-zinc-900 rounded-2xl border border-dashed border-gray-200 dark:border-zinc-800 py-20 text-gray-400 dark:text-zinc-500">
-              <Sparkles size={32} className="mb-3 opacity-40" />
-              <p className="text-sm font-medium">Chưa có bộ đề nào</p>
-              <p className="text-xs mt-1">Nhấn "+ Tạo đề mới" và chọn nguồn nội dung</p>
+            <div className="text-center py-16 bg-white dark:bg-zinc-900 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-800">
+              <FileQuestion className="w-12 h-12 text-gray-300 dark:text-zinc-600 mx-auto mb-3" />
+              <h3 className="text-sm font-bold text-gray-700 dark:text-zinc-300">Chưa có bộ đề nào</h3>
+              <p className="text-xs text-gray-500 mt-1 mb-4">Nhấn "+ Tạo đề mới" hoặc "Nhập đề có sẵn" để bắt đầu luyện tập.</p>
+              <button
+                onClick={() => setShowGenPanel(true)}
+                className="px-4 py-2 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 transition-all shadow-sm"
+                style={{ background: primaryColor }}
+              >
+                <Plus size={14} />
+                Tạo đề mới ngay
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -983,6 +1215,7 @@ export default function AITestPage() {
           )}
         </div>
       </div>
+      </div>
 
       <AnimatePresence>
         {editTarget && (
@@ -998,6 +1231,6 @@ export default function AITestPage() {
           setEditTarget(newSet);
         }}
       />
-    </MainLayout>
+    </div>
   );
 }
