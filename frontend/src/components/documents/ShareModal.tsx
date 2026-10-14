@@ -58,14 +58,7 @@ export default function ShareModal({
   if (!isOpen) return null;
 
   const notify = (msg: string, type: 'success' | 'error' = 'success') => {
-    if (type === 'error') {
-      toast.error(msg);
-    } else {
-      toast.success(msg);
-    }
-    if (triggerMessage) {
-      triggerMessage(msg, type);
-    }
+    toast[type === 'error' ? 'error' : 'success'](msg, { id: 'share-modal-toast' });
   };
 
   const handleSaveShareSettings = async (targetVisibility?: 'private' | 'restricted' | 'public') => {
@@ -129,7 +122,7 @@ export default function ShareModal({
     if (!shareUrl) return;
     navigator.clipboard.writeText(shareUrl);
     setCopied(true);
-    toast.success("Đã sao chép liên kết vào bộ nhớ tạm!");
+    toast.success("Đã sao chép liên kết vào bộ nhớ tạm!", { id: 'share-copy-toast' });
     setTimeout(() => setCopied(false), 2000);
   };
 

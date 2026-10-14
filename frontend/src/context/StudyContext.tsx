@@ -337,9 +337,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const triggerMessage = (text: string, type: 'success' | 'error' = 'success') => {
     setGlobalMessage({ text, type });
     if (type === 'error') {
-      toast.error(text);
+      toast.error(text, { id: text });
     } else {
-      toast.success(text);
+      toast.success(text, { id: text });
     }
     setTimeout(() => {
       setGlobalMessage({ text: '', type: 'success' });
