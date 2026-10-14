@@ -486,7 +486,9 @@ export default function LibraryPage() {
     globalMessage,
     triggerMessage,
     documents,
+    setDocuments,
     fetchDocuments,
+    invalidateCache,
     handleDeleteDocument,
     handleEditDocument,
     handleOpenWorkspace
@@ -1299,7 +1301,16 @@ export default function LibraryPage() {
           <UploadDocumentModal
             isOpen={isUploadOpen}
             onClose={() => setIsUploadOpen(false)}
-            onSuccess={fetchDocuments}
+            onSuccess={async (newDoc?: any) => {
+              if (newDoc && newDoc.id) {
+                setDocuments((prev: any[]) => {
+                  if (prev.some((d: any) => d.id === newDoc.id)) return prev;
+                  return [newDoc, ...prev];
+                });
+              }
+              await invalidateCache('documents');
+              await fetchDocuments(true);
+            }}
             defaultCategory={selectedFolder || ""}
             existingCategories={folderCategories}
           />

@@ -104,7 +104,8 @@ interface StudyContextType {
 
   // Documents
   documents: DocumentItem[];
-  fetchDocuments: () => Promise<void>;
+  setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>>;
+  fetchDocuments: (force?: boolean) => Promise<void>;
   activeDoc: DocumentItem | null;
   setActiveDoc: (doc: DocumentItem | null) => void;
   handleOpenWorkspace: (doc: DocumentItem) => void;
@@ -133,6 +134,7 @@ interface StudyContextType {
 
   // Decks & Flashcards
   decks: FlashcardDeck[];
+  setDecks: React.Dispatch<React.SetStateAction<FlashcardDeck[]>>;
   fetchFlashcardDecks: (force?: boolean) => Promise<void>;
   invalidateCache: (type?: 'documents' | 'decks' | 'tasks' | 'friends' | 'all') => Promise<void>;
   activeDeck: FlashcardDeck | null;
@@ -215,8 +217,8 @@ interface StudyContextType {
   tasks: any[];
   setTasks: React.Dispatch<React.SetStateAction<any[]>>;
   friends: any[];
-  fetchTasks: () => Promise<void>;
-  fetchFriends: () => Promise<void>;
+  fetchTasks: (force?: boolean) => Promise<void>;
+  fetchFriends: (force?: boolean) => Promise<void>;
   triggerTaskProgress: (taskType: string, increment?: number) => Promise<void>;
   taskCompletionToast: { type: string; title: string } | null;
   setTaskCompletionToast: (toast: { type: string; title: string } | null) => void;
@@ -700,7 +702,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch Documents
   const fetchDocuments = async (force: boolean = false) => {
     const now = Date.now();
-    if (!force && documents.length > 0 && (now - lastDocsFetchRef.current < 25000)) {
+    if (!force && documents.length > 0 && (now - lastDocsFetchRef.current < 3000)) {
       return;
     }
     lastDocsFetchRef.current = now;
@@ -720,7 +722,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch Decks
   const fetchFlashcardDecks = async (force: boolean = false) => {
     const now = Date.now();
-    if (!force && decks.length > 0 && (now - lastDecksFetchRef.current < 25000)) {
+    if (!force && decks.length > 0 && (now - lastDecksFetchRef.current < 3000)) {
       return;
     }
     lastDecksFetchRef.current = now;
@@ -819,7 +821,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const fetchTasks = async (force: boolean = false) => {
     const now = Date.now();
-    if (!force && tasks.length > 0 && (now - lastTasksFetchRef.current < 25000)) {
+    if (!force && tasks.length > 0 && (now - lastTasksFetchRef.current < 3000)) {
       return;
     }
     lastTasksFetchRef.current = now;
@@ -835,7 +837,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const fetchFriends = async (force: boolean = false) => {
     const now = Date.now();
-    if (!force && friends.length > 0 && (now - lastFriendsFetchRef.current < 25000)) {
+    if (!force && friends.length > 0 && (now - lastFriendsFetchRef.current < 3000)) {
       return;
     }
     lastFriendsFetchRef.current = now;
@@ -1672,6 +1674,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       triggerMessage,
 
       documents,
+      setDocuments,
       fetchDocuments,
       activeDoc,
       setActiveDoc,
@@ -1693,6 +1696,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       handleEditDocument,
 
       decks,
+      setDecks,
       fetchFlashcardDecks,
       invalidateCache,
       activeDeck,
