@@ -532,6 +532,38 @@ class AIProviderService {
     if (lastError?.message === 'AI_REQUEST_TIMEOUT') {
       throw new AppError('AI phản hồi quá thời gian cho phép (timeout). Vui lòng thử lại hoặc chọn model khác.', 504);
     }
+
+    const lastErrMsg = String(lastError?.message || '');
+    const lastErrStatus = lastError?.status || lastError?.statusCode;
+
+    if (
+      lastErrStatus === 429 ||
+      lastErrMsg.includes('429') ||
+      lastErrMsg.toLowerCase().includes('rate limit') ||
+      lastErrMsg.toLowerCase().includes('quota') ||
+      lastErrMsg.includes('RESOURCE_EXHAUSTED')
+    ) {
+      throw new AppError(
+        'Hệ thống AI đang tạm thời vượt quá hạn mức yêu cầu (Rate Limit / Quota). Vui lòng đợi trong giây lát rồi thử lại.',
+        429,
+        'AI_RATE_LIMIT'
+      );
+    }
+
+    if (
+      lastErrStatus === 401 ||
+      lastErrStatus === 403 ||
+      lastErrMsg.includes('401') ||
+      lastErrMsg.includes('API_KEY_INVALID') ||
+      lastErrMsg.includes('PERMISSION_DENIED')
+    ) {
+      throw new AppError(
+        'Lỗi xác thực dịch vụ AI hoặc API key chưa được cấu hình hợp lệ.',
+        401,
+        'AI_AUTH_ERROR'
+      );
+    }
+
     throw new AppError(
       'Dịch vụ AI hiện không khả dụng hoặc chưa được cấu hình. Vui lòng liên hệ quản trị viên.',
       503

@@ -46,6 +46,7 @@ export const generateQuestions = async (req: AuthRequest, res: Response, next: N
       templateId: body.templateId,
       modelId: body.modelId,
       customInstruction: body.customInstruction,
+      customPrompt: body.customPrompt || body.customInstruction,
       topic: body.topic,
       mode: body.mode,
       name: body.name,

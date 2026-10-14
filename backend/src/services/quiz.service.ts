@@ -11,6 +11,35 @@ export interface StartQuizOptions {
   previousAttemptId?: number;
 }
 
+export function calculateQuizEvaluation(correctCount: number, totalGradable: number) {
+  if (totalGradable <= 0) {
+    return {
+      score10: 0,
+      accuracyPercent: 0,
+      evaluationLabel: 'Chưa đủ dữ liệu chấm',
+    };
+  }
+  const score10 = Math.round((correctCount / totalGradable) * 100) / 10;
+  const accuracyPercent = Math.round((correctCount / totalGradable) * 100);
+
+  let evaluationLabel = 'Cần ôn lại';
+  if (accuracyPercent >= 90) {
+    evaluationLabel = 'Nắm tốt nội dung trong bài';
+  } else if (accuracyPercent >= 70) {
+    evaluationLabel = 'Khá vững';
+  } else if (accuracyPercent >= 50) {
+    evaluationLabel = 'Cần ôn thêm';
+  } else {
+    evaluationLabel = 'Cần ôn lại';
+  }
+
+  return {
+    score10,
+    accuracyPercent,
+    evaluationLabel,
+  };
+}
+
 export class QuizService {
   /**
    * Bắt đầu một lượt làm bài thi cá nhân (Start Quiz)
@@ -193,6 +222,7 @@ export class QuizService {
       let totalAwardedScore = 0;
       let correctCount = 0;
       let gradableTotalScore = 0;
+      let gradableCount = 0;
       const detailedAnswers: any[] = [];
 
       // 3. Duyệt và chấm điểm từng câu hỏi
@@ -214,6 +244,7 @@ export class QuizService {
         const isGradable = Boolean(targetAns && q.type !== 'ESSAY');
         if (isGradable) {
           gradableTotalScore += qScore;
+          gradableCount++;
         }
 
         if (!targetAns) {
@@ -326,9 +357,9 @@ export class QuizService {
 
       await client.query('COMMIT');
 
-      // Mẫu số chuẩn để tính tỷ lệ chính xác (percentage): Chỉ tính trên tổng điểm các câu hỏi khách quan có thể chấm được
-      const maxPossibleScore = gradableTotalScore > 0 ? gradableTotalScore : (Number(finalAttempt.total_score) || 1);
-      const percentage = Math.round((totalAwardedScore / maxPossibleScore) * 100);
+      // Mẫu số chuẩn để tính tỷ lệ chính xác (percentage) & Điểm thang 10 (score10)
+      const { score10, accuracyPercent, evaluationLabel } = calculateQuizEvaluation(correctCount, gradableCount);
+      const percentage = accuracyPercent;
 
       return {
         attempt: {
@@ -336,9 +367,13 @@ export class QuizService {
           testSetId: finalAttempt.test_set_id,
           testSetName: attempt.test_set_name,
           score: Number(finalAttempt.score),
+          score10,
           totalScore: Number(finalAttempt.total_score),
           gradableTotalScore,
+          gradableCount,
           percentage,
+          accuracyPercent,
+          evaluationLabel,
           correctCount: finalAttempt.correct_count,
           totalQuestions: finalAttempt.total_questions,
           durationSeconds: finalAttempt.duration_seconds,
@@ -395,13 +430,16 @@ export class QuizService {
     );
 
     let gradableScore = 0;
+    let gradableCount = 0;
     for (const ans of ansRes.rows) {
       if (ans.question_type !== 'ESSAY' && ans.question_correct_answer) {
         gradableScore += Number(ans.question_max_score) || 0;
+        gradableCount++;
       }
     }
-    const maxScore = gradableScore > 0 ? gradableScore : (Number(attempt.total_score) || 1);
-    const percentage = Math.round((Number(attempt.score) / maxScore) * 100);
+    const correctCount = Number(attempt.correct_count) || 0;
+    const { score10, accuracyPercent, evaluationLabel } = calculateQuizEvaluation(correctCount, gradableCount);
+    const percentage = accuracyPercent;
 
     return {
       attempt: {
@@ -409,9 +447,13 @@ export class QuizService {
         testSetId: attempt.test_set_id,
         testSetName: attempt.test_set_name,
         score: Number(attempt.score),
+        score10,
         totalScore: Number(attempt.total_score),
         gradableTotalScore: gradableScore,
+        gradableCount,
         percentage,
+        accuracyPercent,
+        evaluationLabel,
         correctCount: attempt.correct_count,
         totalQuestions: attempt.total_questions,
         durationSeconds: attempt.duration_seconds,

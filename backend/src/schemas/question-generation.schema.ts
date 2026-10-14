@@ -22,18 +22,19 @@ export const generateQuestionsSchema = z.object({
     textContent: z.string().min(20, 'Nội dung quá ngắn (tối thiểu 20 ký tự)').max(60_000).optional(),
     /** Trọng tâm từ khoá (chips bật/tắt ở FE) */
     focusKeywords: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
-    /** Đối tượng học sinh */
-    audienceLevel: z.enum(['weak', 'medium', 'advanced']).default('medium'),
-    /** Loại câu hỏi ('mixed' → dùng cấu hình theo từng loại như luồng cũ) */
-    questionType: z.enum([...QUESTION_TYPES, 'mixed']).default('mixed'),
+    /** Đối tượng học sinh (legacy) */
+    audienceLevel: z.enum(['weak', 'medium', 'advanced']).default('medium').optional(),
+    /** Loại câu hỏi ('mixed' hoặc 'MULTIPLE_CHOICE') */
+    questionType: z.enum([...QUESTION_TYPES, 'mixed']).default('MULTIPLE_CHOICE').optional(),
     difficulty: z.enum(['easy', 'medium', 'hard']).default('medium'),
     quantity: z.number().int().min(1, 'Số câu tối thiểu 1').max(50, 'Số câu tối đa 50').default(10),
-    /** Prompt template có sẵn (xem PROMPT_TEMPLATES) */
-    templateId: z.enum(TEMPLATE_IDS).default('basic_quiz'),
-    /** Model AI chọn từ dropdown GET /api/ai/models */
+    /** Prompt template có sẵn (legacy) */
+    templateId: z.string().default('basic_quiz').optional(),
+    /** Model AI (tuỳ chọn, server-configured) */
     modelId: z.number().int().positive().optional(),
-    /** Hướng dẫn thêm của người dùng (đã sanitize chống prompt injection) */
-    customInstruction: z.string().max(500, 'Hướng dẫn thêm tối đa 500 ký tự').optional(),
+    /** Hướng dẫn thêm của người dùng / Prompt nâng cao (tối đa 1000 ký tự) */
+    customInstruction: z.string().max(1000, 'Hướng dẫn thêm tối đa 1000 ký tự').optional(),
+    customPrompt: z.string().max(1000, 'Prompt tùy chỉnh tối đa 1000 ký tự').optional(),
     mode: z.enum(['practice', 'exam']).default('practice'),
     name: z.string().trim().max(200).optional(),
     /** Nguồn chủ đề / yêu cầu tùy chỉnh (Source 3) — dùng khi không chọn file hoặc text */
