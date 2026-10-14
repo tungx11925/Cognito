@@ -78,8 +78,9 @@ function FocusContent() {
   const breakTimerRef = useRef<NodeJS.Timeout | null>(null);
   const breathingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastHiddenTimeRef = useRef<number | null>(null);
-  const isBlurActiveRef = useRef<boolean>(false);
+  const isAwayRef = useRef<boolean>(false);
+  const lastAwayTimeRef = useRef<number | null>(null);
+  const lastDistractionRecordedAtRef = useRef<number>(0);
 
   // 1. Initial Load: Check for existing active session & resources
   useEffect(() => {
@@ -172,6 +173,10 @@ function FocusContent() {
       setSecondsRemaining(targetSeconds);
       setSecondsElapsed(0);
       setLiveDistractionCount(0);
+      isAwayRef.current = false;
+      lastAwayTimeRef.current = null;
+      lastDistractionRecordedAtRef.current = 0;
+      pendingDistractionsQueueRef.current = [];
       setIsPaused(false);
       setModeState('ACTIVE');
     } catch (err: any) {
@@ -327,33 +332,48 @@ function FocusContent() {
   useEffect(() => {
     if (modeState !== 'ACTIVE' || !activeSession || isPaused) return;
 
+    // Hàm đánh dấu người dùng rời khỏi trang (khử trùng lặp giữa window.blur và visibilitychange)
+    const markUserAway = (source: 'PAGE_HIDDEN' | 'PAGE_BLUR') => {
+      const now = Date.now();
+      // Nếu đã ở trạng thái rời trang hoặc vừa mới ghi nhận trong vòng 1.5 giây thì bỏ qua trùng lặp
+      if (isAwayRef.current || now - lastDistractionRecordedAtRef.current < 1500) {
+        return;
+      }
+      isAwayRef.current = true;
+      lastAwayTimeRef.current = now;
+      lastDistractionRecordedAtRef.current = now;
+      recordDistraction(source);
+    };
+
+    // Hàm đánh dấu người dùng đã quay lại trang
+    const markUserReturned = () => {
+      if (!isAwayRef.current) return;
+      isAwayRef.current = false;
+      const awayDurationSecs = lastAwayTimeRef.current
+        ? Math.max(1, Math.round((Date.now() - lastAwayTimeRef.current) / 1000))
+        : undefined;
+      lastAwayTimeRef.current = null;
+      recordDistraction('RETURNED', awayDurationSecs);
+    };
+
     // Visibility change handler (tab switch or browser minimize)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        lastHiddenTimeRef.current = Date.now();
-        recordDistraction('PAGE_HIDDEN');
+        markUserAway('PAGE_HIDDEN');
       } else if (document.visibilityState === 'visible') {
-        const awayDurationSecs = lastHiddenTimeRef.current
-          ? Math.max(1, Math.round((Date.now() - lastHiddenTimeRef.current) / 1000))
-          : undefined;
-        lastHiddenTimeRef.current = null;
-        recordDistraction('RETURNED', awayDurationSecs);
+        markUserReturned();
       }
     };
 
     // Window blur handler (user clicks outside browser or switches apps)
     const handleWindowBlur = () => {
-      if (!isBlurActiveRef.current) {
-        isBlurActiveRef.current = true;
-        recordDistraction('PAGE_BLUR');
-      }
+      markUserAway('PAGE_BLUR');
     };
 
     // Window focus handler
     const handleWindowFocus = () => {
-      if (isBlurActiveRef.current) {
-        isBlurActiveRef.current = false;
-        recordDistraction('RETURNED');
+      if (document.visibilityState === 'visible') {
+        markUserReturned();
       }
     };
 
@@ -361,7 +381,10 @@ function FocusContent() {
     const resetIdleTimer = () => {
       if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
       idleTimeoutRef.current = setTimeout(() => {
-        recordDistraction('IDLE', 60);
+        // Chỉ ghi nhận IDLE khi người dùng vẫn đang ở trên trang
+        if (!isAwayRef.current) {
+          recordDistraction('IDLE', 60);
+        }
       }, 60000);
     };
 
