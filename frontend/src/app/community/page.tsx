@@ -329,6 +329,65 @@ export default function CommunityPage() {
     fetchFeed();
   }, [fetchFeed]);
 
+  // Listen for Escape key to close any active modal or drawer
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (commentsTarget) {
+          setCommentsTarget(null);
+        } else if (reportModalOpen) {
+          setReportModalOpen(false);
+        } else if (blockModalOpen) {
+          setBlockModalOpen(false);
+        } else if (blockedUsersModalOpen) {
+          setBlockedUsersModalOpen(false);
+        } else if (reshareTarget) {
+          setReshareTarget(null);
+        } else if (isPublishModalOpen) {
+          setIsPublishModalOpen(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    commentsTarget,
+    reportModalOpen,
+    blockModalOpen,
+    blockedUsersModalOpen,
+    reshareTarget,
+    isPublishModalOpen,
+  ]);
+
+  // Lock body scroll when any modal or drawer is open
+  useEffect(() => {
+    const isAnyModalOpen =
+      Boolean(commentsTarget) ||
+      reportModalOpen ||
+      blockModalOpen ||
+      blockedUsersModalOpen ||
+      Boolean(reshareTarget) ||
+      isPublishModalOpen;
+
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [
+    commentsTarget,
+    reportModalOpen,
+    blockModalOpen,
+    blockedUsersModalOpen,
+    reshareTarget,
+    isPublishModalOpen,
+  ]);
+
   // Open Publish Modal & fetch personal resources
   const handleOpenPublishModal = async () => {
     if (!isAuthenticated) {
@@ -1195,12 +1254,19 @@ export default function CommunityPage() {
       {/* PUBLISH MODAL */}
       <AnimatePresence>
         {isPublishModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsPublishModalOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+            />
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden max-h-[90vh] flex flex-col"
+              className="relative z-10 bg-white dark:bg-zinc-900 rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden max-h-[90vh] flex flex-col"
             >
               <div className="flex items-center justify-between pb-4 border-b border-stone-100 dark:border-zinc-800">
                 <div>
@@ -1453,12 +1519,19 @@ export default function CommunityPage() {
       {/* RESHARE MODAL */}
       <AnimatePresence>
         {reshareTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setReshareTarget(null)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+            />
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800"
+              className="relative z-10 bg-white dark:bg-zinc-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800"
             >
               <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-zinc-800">
                 <div className="flex items-center gap-2">
@@ -1519,31 +1592,43 @@ export default function CommunityPage() {
       {/* COMMENTS DRAWER / MODAL */}
       <AnimatePresence>
         {commentsTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/40 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[150] flex items-center justify-end">
+            {/* Backdrop overlay - click to close */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setCommentsTarget(null)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+              title="Nhấn vào vùng tối để đóng bình luận"
+            />
             <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="bg-white dark:bg-zinc-900 w-full max-w-md h-full shadow-2xl flex flex-col justify-between border-l border-stone-200 dark:border-zinc-800"
+              className="relative z-10 bg-white dark:bg-zinc-900 w-full max-w-md h-full shadow-2xl flex flex-col justify-between border-l border-stone-200 dark:border-zinc-800"
             >
               <CardErrorBoundary fallbackTitle="Không thể tải nội dung bình luận">
                 {/* Drawer Header */}
-                <div className="p-4 border-b border-stone-200 dark:border-zinc-800 flex items-center justify-between">
-                  <div>
+                <div className="p-4 border-b border-stone-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 shrink-0">
+                  <div className="min-w-0 pr-2">
                     <h3 className="text-base font-bold text-stone-900 dark:text-zinc-100 flex items-center gap-2">
-                      <MessageSquare size={17} className="text-emerald-700 dark:text-emerald-400" />
-                      <span>Bình luận &amp; Thảo luận</span>
+                      <MessageSquare size={17} className="text-emerald-700 dark:text-emerald-400 shrink-0" />
+                      <span className="truncate">Bình luận &amp; Thảo luận</span>
                     </h3>
-                    <p className="text-xs text-stone-500 dark:text-zinc-400 truncate max-w-[280px]">
+                    <p className="text-xs text-stone-500 dark:text-zinc-400 truncate max-w-[260px]">
                       {commentsTarget.title}
                     </p>
                   </div>
                   <button
                     onClick={() => setCommentsTarget(null)}
-                    className="p-1.5 rounded-full text-stone-400 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800 cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-stone-700 dark:text-zinc-200 font-semibold text-xs transition-colors cursor-pointer shrink-0 shadow-2xs"
+                    title="Đóng bảng bình luận (Esc)"
+                    aria-label="Đóng bảng bình luận"
                   >
-                    <X size={18} />
+                    <X size={15} />
+                    <span>Đóng</span>
                   </button>
                 </div>
 
@@ -1757,12 +1842,19 @@ export default function CommunityPage() {
       {/* ─── Safety: Report Content Modal ─── */}
       <AnimatePresence>
         {reportModalOpen && reportTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setReportModalOpen(false)}
+              className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs cursor-pointer"
+            />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800"
+              className="relative z-10 bg-white dark:bg-zinc-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800"
             >
               <div className="flex items-center justify-between pb-4 border-b border-stone-100 dark:border-zinc-800">
                 <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
@@ -1846,12 +1938,19 @@ export default function CommunityPage() {
       {/* ─── Safety: Block User Confirmation Modal ─── */}
       <AnimatePresence>
         {blockModalOpen && blockTargetUser && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setBlockModalOpen(false)}
+              className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs cursor-pointer"
+            />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800"
+              className="relative z-10 bg-white dark:bg-zinc-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800"
             >
               <div className="flex items-center justify-between pb-4 border-b border-stone-100 dark:border-zinc-800">
                 <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
@@ -1914,12 +2013,19 @@ export default function CommunityPage() {
       {/* ─── Safety: Blocked Users List Modal ─── */}
       <AnimatePresence>
         {blockedUsersModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setBlockedUsersModalOpen(false)}
+              className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs cursor-pointer"
+            />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-zinc-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800 flex flex-col max-h-[85vh]"
+              className="relative z-10 bg-white dark:bg-zinc-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 dark:border-zinc-800 flex flex-col max-h-[85vh]"
             >
               <div className="flex items-center justify-between pb-4 border-b border-stone-100 dark:border-zinc-800">
                 <div className="flex items-center gap-2 text-stone-800 dark:text-zinc-200">
