@@ -481,7 +481,7 @@ export default function AITestPage() {
   if (loading) return (
     <div
       className="min-h-screen flex flex-col transition-colors duration-300 relative overflow-x-hidden"
-      style={{ background: dark ? "#121212" : "#FDFCFB", fontFamily: "'Outfit', sans-serif" }}
+      style={{ background: dark ? "#121212" : "#ebe8e0", fontFamily: "'Outfit', sans-serif" }}
     >
       <Navbar
         isLoggedIn={isAuthenticated}
@@ -502,7 +502,7 @@ export default function AITestPage() {
     <div
       className="min-h-screen flex flex-col transition-colors duration-300 pb-12 relative overflow-x-hidden"
       style={{
-        background: bgStyle === "default" ? (dark ? "#121212" : "#FDFCFB") : "transparent",
+        background: bgStyle === "default" ? (dark ? "#121212" : "#ebe8e0") : "transparent",
         fontFamily: "'Outfit', sans-serif",
       }}
     >

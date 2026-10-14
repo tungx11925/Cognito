@@ -272,7 +272,7 @@ export default function NotesPage() {
     <div
       className="min-h-screen flex flex-col transition-colors duration-300 pb-12 relative overflow-x-hidden"
       style={{
-        background: bgStyle === "default" ? (dark ? "#121212" : "#FDFCFB") : "transparent",
+        background: bgStyle === "default" ? (dark ? "#121212" : "#ebe8e0") : "transparent",
         fontFamily: "'Outfit', sans-serif",
       }}
     >
