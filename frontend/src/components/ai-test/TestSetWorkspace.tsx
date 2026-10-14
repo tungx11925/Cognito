@@ -152,31 +152,44 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
     }
   }, [chatMessages, chatLoading]);
 
-  const sendChatMessage = async (msg: string) => {
+  // Compact context prefix — chỉ ~30 tokens
+  const buildCtx = (qs: Question[]) => {
+    const counts: Record<string, number> = {};
+    qs.forEach(q => { counts[q.type] = (counts[q.type] || 0) + 1; });
+    const typeStr = Object.entries(counts)
+      .map(([t, n]) => `${t==='MULTIPLE_CHOICE'?'MC':t==='FILL_BLANK'?'FB':t==='ESSAY'?'ES':'TF'}:${n}`)
+      .join(',');
+    return `[Đề:"${testSetName.slice(0,30)}"|${qs.length}câu|${typeStr}]`;
+  };
+
+  // withQs=true: đính kèm preview 3 câu đầu (cho quick actions cần biết nội dung)
+  const sendChatMessage = async (msg: string, withQs = false) => {
     if (!msg.trim() || chatLoading) return;
     setChatMessages(prev => [...prev, { role: "user", content: msg }]);
     setChatLoading(true);
 
-    const currentQs = getValues().questions || [];
-    const qSummary = currentQs.slice(0, 5).map((q, i) =>
-      `Câu ${i+1}: ${q.content?.slice(0, 80)}... [${q.type}, đáp án: ${q.correct_answer || "?"}]`
-    ).join("\n");
+    const qs = getValues().questions || [];
+    const ctx = buildCtx(qs);
 
-    const contextualMessage = `[Bộ đề: "${testSetName}" — ${currentQs.length} câu hỏi]\n${qSummary.length > 0 ? `Ví dụ câu hỏi:\n${qSummary}\n\n` : ""}Yêu cầu: ${msg}`;
+    let payload: string;
+    if (withQs && qs.length > 0) {
+      const preview = qs.slice(0, 3)
+        .map((q, i) => `Q${i+1}[${q.type[0]}]:${(q.content||'').slice(0,45)}|ans:${q.correct_answer||'?'}`)
+        .join(';');
+      payload = `${ctx}\n${preview}\n${msg}`;
+    } else {
+      payload = `${ctx} ${msg}`;
+    }
 
     try {
       const res = await apiFetch('/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: contextualMessage,
-          context_mode: 'GENERAL',
-        })
+        body: JSON.stringify({ message: payload, context_mode: 'GENERAL' })
       });
-
-      const aiReply = res?.reply || "Tôi đã ghi nhận yêu cầu. Vui lòng thử lại hoặc mô tả rõ hơn!";
+      const aiReply = res?.reply || "Vui lòng mô tả rõ hơn để tôi hỗ trợ!";
       setChatMessages(prev => [...prev, { role: "ai", content: aiReply }]);
-    } catch (err) {
+    } catch {
       setChatMessages(prev => [...prev, { role: "ai", content: "⚠️ Lỗi kết nối. Vui lòng thử lại." }]);
     } finally {
       setChatLoading(false);
@@ -191,8 +204,8 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
     await sendChatMessage(msg);
   };
 
-  const handleQuickAction = (text: string) => {
-    sendChatMessage(text);
+  const handleQuickAction = (text: string, withQs = false) => {
+    sendChatMessage(text, withQs);
   };
 
   return (
@@ -509,25 +522,25 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
           <div className="p-4 bg-white border-t border-[rgba(26,46,28,0.08)] flex-shrink-0">
             <div className="flex gap-1.5 overflow-x-auto pb-2.5 mb-2 no-scrollbar flex-wrap">
               <button
-                onClick={() => handleQuickAction(`Kiểm tra toàn bộ ${getValues().questions?.length || 0} câu trong bộ đề "${testSetName}": phát hiện câu mơ hồ, đáp án sai, câu thiếu giải thích. Liệt kê cụ thể từng vấn đề.`)}
+                onClick={() => handleQuickAction("Liệt kê lỗi: câu mơ hồ, đáp án sai, thiếu giải thích.", true)}
                 disabled={chatLoading}
                 className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-700 text-[11px] font-bold rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors disabled:opacity-50"
               >
-                <AlertTriangle size={11} /> Kiểm tra lỗi sai
+                <AlertTriangle size={11} /> Kiểm tra lỗi
               </button>
               <button
-                onClick={() => handleQuickAction(`Tạo thêm 5 câu trắc nghiệm khó về chủ đề "${testSetName}". Mỗi câu có 4 đáp án A/B/C/D, ghi rõ đáp án đúng và giải thích ngắn. Trình bày dạng markdown.`)}
+                onClick={() => handleQuickAction("Tạo 5 câu TN khó, 4 đáp án A-D, kèm đáp án+giải thích 1 dòng.")}
                 disabled={chatLoading}
                 className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-50"
               >
-                <PlusCircle size={11} /> Thêm 5 câu khó
+                <PlusCircle size={11} /> Thêm 5 câu
               </button>
               <button
-                onClick={() => handleQuickAction(`Phân tích bộ đề "${testSetName}" (${getValues().questions?.length || 0} câu): phân bố độ khó, chủ đề trọng tâm, tỷ lệ các loại câu hỏi. Đưa ra nhận xét và gợi ý cải thiện.`)}
+                onClick={() => handleQuickAction("Tóm tắt: độ khó, chủ đề trọng tâm, gợi ý cải thiện.")}
                 disabled={chatLoading}
                 className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-[#f0fdf4] text-[#1a3a2a] text-[11px] font-bold rounded-lg border border-[#d1fae5] hover:bg-emerald-100 transition-colors disabled:opacity-50"
               >
-                <BarChart2 size={11} /> Phân tích đề
+                <BarChart2 size={11} /> Phân tích
               </button>
             </div>
             <form onSubmit={handleChatSubmit} className="flex items-center gap-2">
