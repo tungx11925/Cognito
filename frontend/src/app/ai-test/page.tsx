@@ -110,7 +110,7 @@ export default function AITestPage() {
   const [audienceLevel, setAudienceLevel]     = useState<"weak" | "medium" | "advanced">("medium");
   const [questionType, setQuestionType]       = useState<"mixed" | "MULTIPLE_CHOICE" | "FILL_BLANK" | "ESSAY" | "TRUE_FALSE">("mixed");
   const [difficulty, setDifficulty]           = useState<"easy" | "medium" | "hard">("medium");
-  const [quantity, setQuantity]               = useState(10);
+  const [quantity, setQuantity]               = useState<number | string>(10);
   const [templateId, setTemplateId]           = useState("basic_quiz");
   const [modelId, setModelId]                 = useState<number | null>(null);
   const [customInstruction, setCustomInstruction] = useState("");
@@ -306,13 +306,13 @@ export default function AITestPage() {
     setGenerating(true);
     const tid = toast.loading("AI đang tạo bộ đề...");
     try {
-      // ── Luồng MỚI: POST /api/questions/generate (chọn model, từ khoá, đối tượng) ──
+      const effectiveQuantity = Math.max(1, Math.min(50, Number(quantity) || 10));
       const payload: Record<string, any> = {
         focusKeywords,
         audienceLevel,
         questionType,
         difficulty,
-        quantity,
+        quantity: effectiveQuantity,
         templateId,
         mode,
         configKey: CONFIG_KEY,
@@ -821,9 +821,39 @@ export default function AITestPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Số câu</label>
-                      <input type="number" min={1} max={50} value={quantity} onChange={e => setQuantity(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-                        className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600" />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400">Số câu</label>
+                        <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">(1 - 50)</span>
+                      </div>
+                      <input 
+                        type="number" 
+                        min={1} 
+                        max={50} 
+                        value={quantity} 
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === '') {
+                            setQuantity('');
+                            return;
+                          }
+                          const num = parseInt(val, 10);
+                          if (!isNaN(num)) {
+                            if (num > 50) setQuantity(50);
+                            else if (num < 0) setQuantity(1);
+                            else setQuantity(num);
+                          }
+                        }}
+                        onBlur={() => {
+                          const num = Number(quantity);
+                          if (!quantity || isNaN(num) || num < 1) {
+                            setQuantity(1);
+                          } else if (num > 50) {
+                            setQuantity(50);
+                          }
+                        }}
+                        placeholder="10"
+                        className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600 font-semibold" 
+                      />
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Chế độ</label>
@@ -834,8 +864,28 @@ export default function AITestPage() {
                       </select>
                     </div>
                   </div>
+
+                  {/* Preset gợi ý chọn nhanh số câu */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-[11px] text-gray-500 dark:text-zinc-400 font-medium">Chọn nhanh số câu:</span>
+                    {[5, 10, 15, 20, 25, 30, 40, 50].map(cnt => (
+                      <button
+                        key={cnt}
+                        type="button"
+                        onClick={() => setQuantity(cnt)}
+                        className={`px-2.5 py-1 text-xs rounded-lg border font-semibold transition-all ${
+                          Number(quantity) === cnt
+                            ? "bg-[#1a3a2a] dark:bg-emerald-700 text-white border-[#1a3a2a] dark:border-emerald-700 shadow-sm"
+                            : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-gray-400 dark:hover:border-zinc-500 hover:bg-gray-50 dark:hover:bg-zinc-700"
+                        }`}
+                      >
+                        {cnt} câu
+                      </button>
+                    ))}
+                  </div>
+
                   {questionType !== "mixed" && (
-                    <p className="text-[11px] text-gray-500 dark:text-zinc-400">Sẽ tạo <b>{quantity}</b> câu hỏi loại đã chọn. Chọn "Theo cấu hình" để dùng số lượng/điểm từng loại đã lưu trong Cấu hình.</p>
+                    <p className="text-[11px] text-gray-500 dark:text-zinc-400">Sẽ tạo <b>{Number(quantity) || 1}</b> câu hỏi loại đã chọn. Chọn "Theo cấu hình" để dùng số lượng/điểm từng loại đã lưu trong Cấu hình.</p>
                   )}
 
                   <div>
