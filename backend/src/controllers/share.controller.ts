@@ -18,7 +18,7 @@ export const getShareStatus = async (req: AuthRequest, res: Response) => {
       );
       if (docRes.rows.length === 0) return res.status(404).json({ error: 'Document not found' });
       const doc = docRes.rows[0];
-      if (doc.user_id !== userId) return res.status(403).json({ error: 'Permission denied' });
+      if (Number(doc.user_id) !== Number(userId)) return res.status(403).json({ error: 'Permission denied' });
 
       // Check existing active shared link
       const linkRes = await db.query(
@@ -46,7 +46,7 @@ export const getShareStatus = async (req: AuthRequest, res: Response) => {
       );
       if (deckRes.rows.length === 0) return res.status(404).json({ error: 'Deck not found' });
       const deck = deckRes.rows[0];
-      if (deck.user_id !== userId) return res.status(403).json({ error: 'Permission denied' });
+      if (Number(deck.user_id) !== Number(userId)) return res.status(403).json({ error: 'Permission denied' });
 
       const linkRes = await db.query(
         'SELECT share_token, access_type FROM shared_links WHERE deck_id = $1 ORDER BY created_at DESC LIMIT 1',
@@ -98,7 +98,7 @@ export const generateShareLink = async (req: AuthRequest, res: Response) => {
         );
         if (docCheck.rows.length === 0) return res.status(404).json({ error: 'Document not found' });
         const doc = docCheck.rows[0];
-        if (doc.user_id !== userId) return res.status(403).json({ error: 'Permission denied' });
+        if (Number(doc.user_id) !== Number(userId)) return res.status(403).json({ error: 'Permission denied' });
 
         if (visibility === 'public') {
           // Public: published to community AND available via link
@@ -129,22 +129,48 @@ export const generateShareLink = async (req: AuthRequest, res: Response) => {
             );
           }
 
-          // Insert or update shared_links
-          const linkResult = await client.query(
-            `INSERT INTO shared_links (document_id, share_token, access_type, expires_at)
-             VALUES ($1, $2, $3, $4) RETURNING *`,
-            [documentId, shareToken, accessType, expiresAt]
+          // Check if link already exists
+          const existingLink = await client.query(
+            'SELECT share_token FROM shared_links WHERE document_id = $1 ORDER BY created_at DESC LIMIT 1',
+            [documentId]
           );
 
+          let finalShareUrl = shareUrl;
+          let linkRecord;
+
+          if (existingLink.rows.length > 0) {
+            const currentToken = existingLink.rows[0].share_token;
+            finalShareUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/shared/${currentToken}`;
+            const linkRes = await client.query(
+              `UPDATE shared_links SET access_type = $1, expires_at = $2 WHERE document_id = $3 RETURNING *`,
+              [accessType, expiresAt, documentId]
+            );
+            linkRecord = linkRes.rows[0];
+          } else {
+            const linkRes = await client.query(
+              `INSERT INTO shared_links (document_id, share_token, access_type, expires_at)
+               VALUES ($1, $2, $3, $4) RETURNING *`,
+              [documentId, shareToken, accessType, expiresAt]
+            );
+            linkRecord = linkRes.rows[0];
+          }
+
           return res.status(200).json({
+            success: true,
             message: 'Đã xuất bản lên Cộng đồng và tạo liên kết chia sẻ thành công',
             visibility: 'public',
             isCommunityPublished: true,
-            shareUrl,
-            linkData: linkResult.rows[0]
+            shareUrl: finalShareUrl,
+            linkData: linkRecord
           });
 
         } else if (visibility === 'restricted') {
+          // Ensure database constraint allows 'restricted'
+          await client.query(`
+            ALTER TABLE documents DROP CONSTRAINT IF EXISTS chk_documents_visibility;
+            ALTER TABLE documents ADD CONSTRAINT chk_documents_visibility CHECK (visibility IN ('private', 'restricted', 'public'));
+          `).catch(() => {});
+
           // Restricted: Accessible via link only, NOT published to community
           await client.query(
             `UPDATE documents SET visibility = 'restricted', is_community_published = false, updated_at = NOW() WHERE id = $1`,
@@ -157,18 +183,39 @@ export const generateShareLink = async (req: AuthRequest, res: Response) => {
             [documentId, userId]
           );
 
-          const linkResult = await client.query(
-            `INSERT INTO shared_links (document_id, share_token, access_type, expires_at)
-             VALUES ($1, $2, $3, $4) RETURNING *`,
-            [documentId, shareToken, accessType, expiresAt]
+          // Check if link already exists
+          const existingLink = await client.query(
+            'SELECT share_token FROM shared_links WHERE document_id = $1 ORDER BY created_at DESC LIMIT 1',
+            [documentId]
           );
 
+          let finalShareUrl = shareUrl;
+          let linkRecord;
+
+          if (existingLink.rows.length > 0) {
+            const currentToken = existingLink.rows[0].share_token;
+            finalShareUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/shared/${currentToken}`;
+            const linkRes = await client.query(
+              `UPDATE shared_links SET access_type = $1, expires_at = $2 WHERE document_id = $3 RETURNING *`,
+              [accessType, expiresAt, documentId]
+            );
+            linkRecord = linkRes.rows[0];
+          } else {
+            const linkRes = await client.query(
+              `INSERT INTO shared_links (document_id, share_token, access_type, expires_at)
+               VALUES ($1, $2, $3, $4) RETURNING *`,
+              [documentId, shareToken, accessType, expiresAt]
+            );
+            linkRecord = linkRes.rows[0];
+          }
+
           return res.status(200).json({
+            success: true,
             message: 'Đã bật chia sẻ bằng liên kết (Không hiển thị trên Cộng đồng)',
             visibility: 'restricted',
             isCommunityPublished: false,
-            shareUrl,
-            linkData: linkResult.rows[0]
+            shareUrl: finalShareUrl,
+            linkData: linkRecord
           });
 
         } else {
@@ -186,6 +233,7 @@ export const generateShareLink = async (req: AuthRequest, res: Response) => {
           await client.query('DELETE FROM shared_links WHERE document_id = $1', [documentId]);
 
           return res.status(200).json({
+            success: true,
             message: 'Đã chuyển tài liệu về chế độ riêng tư (Chỉ mình bạn xem được)',
             visibility: 'private',
             isCommunityPublished: false,
@@ -202,7 +250,7 @@ export const generateShareLink = async (req: AuthRequest, res: Response) => {
         );
         if (deckCheck.rows.length === 0) return res.status(404).json({ error: 'Deck not found' });
         const deck = deckCheck.rows[0];
-        if (deck.user_id !== userId) return res.status(403).json({ error: 'Permission denied' });
+        if (Number(deck.user_id) !== Number(userId)) return res.status(403).json({ error: 'Permission denied' });
 
         if (visibility === 'public') {
           await client.query(
@@ -231,18 +279,38 @@ export const generateShareLink = async (req: AuthRequest, res: Response) => {
             );
           }
 
-          const linkResult = await client.query(
-            `INSERT INTO shared_links (deck_id, share_token, access_type, expires_at)
-             VALUES ($1, $2, $3, $4) RETURNING *`,
-            [deckId, shareToken, accessType, expiresAt]
+          const existingLink = await client.query(
+            'SELECT share_token FROM shared_links WHERE deck_id = $1 ORDER BY created_at DESC LIMIT 1',
+            [deckId]
           );
 
+          let finalShareUrl = shareUrl;
+          let linkRecord;
+
+          if (existingLink.rows.length > 0) {
+            const currentToken = existingLink.rows[0].share_token;
+            finalShareUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/shared/${currentToken}`;
+            const linkRes = await client.query(
+              `UPDATE shared_links SET access_type = $1, expires_at = $2 WHERE deck_id = $3 RETURNING *`,
+              [accessType, expiresAt, deckId]
+            );
+            linkRecord = linkRes.rows[0];
+          } else {
+            const linkRes = await client.query(
+              `INSERT INTO shared_links (deck_id, share_token, access_type, expires_at)
+               VALUES ($1, $2, $3, $4) RETURNING *`,
+              [deckId, shareToken, accessType, expiresAt]
+            );
+            linkRecord = linkRes.rows[0];
+          }
+
           return res.status(200).json({
+            success: true,
             message: 'Đã xuất bản bộ thẻ lên Cộng đồng và tạo liên kết thành công',
             visibility: 'public',
             isCommunityPublished: true,
-            shareUrl,
-            linkData: linkResult.rows[0]
+            shareUrl: finalShareUrl,
+            linkData: linkRecord
           });
         } else if (visibility === 'restricted') {
           await client.query(
@@ -254,18 +322,38 @@ export const generateShareLink = async (req: AuthRequest, res: Response) => {
             [deckId, userId]
           );
 
-          const linkResult = await client.query(
-            `INSERT INTO shared_links (deck_id, share_token, access_type, expires_at)
-             VALUES ($1, $2, $3, $4) RETURNING *`,
-            [deckId, shareToken, accessType, expiresAt]
+          const existingLink = await client.query(
+            'SELECT share_token FROM shared_links WHERE deck_id = $1 ORDER BY created_at DESC LIMIT 1',
+            [deckId]
           );
 
+          let finalShareUrl = shareUrl;
+          let linkRecord;
+
+          if (existingLink.rows.length > 0) {
+            const currentToken = existingLink.rows[0].share_token;
+            finalShareUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/shared/${currentToken}`;
+            const linkRes = await client.query(
+              `UPDATE shared_links SET access_type = $1, expires_at = $2 WHERE deck_id = $3 RETURNING *`,
+              [accessType, expiresAt, deckId]
+            );
+            linkRecord = linkRes.rows[0];
+          } else {
+            const linkRes = await client.query(
+              `INSERT INTO shared_links (deck_id, share_token, access_type, expires_at)
+               VALUES ($1, $2, $3, $4) RETURNING *`,
+              [deckId, shareToken, accessType, expiresAt]
+            );
+            linkRecord = linkRes.rows[0];
+          }
+
           return res.status(200).json({
+            success: true,
             message: 'Đã bật chia sẻ bộ thẻ bằng liên kết',
             visibility: 'restricted',
             isCommunityPublished: false,
-            shareUrl,
-            linkData: linkResult.rows[0]
+            shareUrl: finalShareUrl,
+            linkData: linkRecord
           });
         } else {
           await client.query(
@@ -279,6 +367,7 @@ export const generateShareLink = async (req: AuthRequest, res: Response) => {
           await client.query('DELETE FROM shared_links WHERE deck_id = $1', [deckId]);
 
           return res.status(200).json({
+            success: true,
             message: 'Đã chuyển bộ thẻ về chế độ riêng tư',
             visibility: 'private',
             isCommunityPublished: false,

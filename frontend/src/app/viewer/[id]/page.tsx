@@ -3,13 +3,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDocumentById } from '@/services/document.service';
-import { ArrowLeft, Share2, Download, AlertCircle, Send, Languages, PenLine, Loader2, Zap, Heart, Bookmark, Globe } from 'lucide-react';
+import { ArrowLeft, Share2, Download, AlertCircle, Send, Languages, PenLine, Loader2, Zap, Heart, Bookmark, Globe, Play, Pause, BrainCircuit, Coffee, Clock } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import ShareModal from '@/components/documents/ShareModal';
+import { useStudy } from '@/context/StudyContext';
+import { usePomodoroTimer } from '@/hooks/usePomodoroTimer';
 
 const PomodoroWidget = dynamic(() => import('@/components/documents/PomodoroWidget'), { ssr: false });
 const SmartNotesWorkspace = dynamic(() => import('@/components/documents/SmartNotesWorkspace'), { ssr: false });
@@ -29,6 +31,7 @@ export default function DocumentViewerPage() {
   const params = useParams();
   const router = useRouter();
   const docId = params.id as string;
+  const pomodoro = usePomodoroTimer(Number(docId));
   
   const [document, setDocument] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -48,10 +51,13 @@ export default function DocumentViewerPage() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
+  const { activeUser } = useStudy();
+
   const fetchEngagement = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const res = await fetch(`${API_BASE_URL}/documents/${docId}/engagement`, {
+        credentials: 'include',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (res.ok) {
@@ -67,8 +73,7 @@ export default function DocumentViewerPage() {
   };
 
   const handleToggleLike = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!activeUser) {
       toast.error('Vui lòng đăng nhập để thích tài liệu');
       return;
     }
@@ -80,9 +85,11 @@ export default function DocumentViewerPage() {
     setLikeCount(prevLiked ? Math.max(0, prevCount - 1) : prevCount + 1);
 
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const res = await fetch(`${API_BASE_URL}/documents/${docId}/like`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (res.ok) {
         const data = await res.json();
@@ -102,8 +109,7 @@ export default function DocumentViewerPage() {
   };
 
   const handleToggleSave = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!activeUser) {
       toast.error('Vui lòng đăng nhập để lưu tài liệu');
       return;
     }
@@ -115,9 +121,11 @@ export default function DocumentViewerPage() {
     setSaveCount(prevSaved ? Math.max(0, prevCount - 1) : prevCount + 1);
 
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const res = await fetch(`${API_BASE_URL}/documents/${docId}/save`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (res.ok) {
         const data = await res.json();
@@ -352,6 +360,62 @@ export default function DocumentViewerPage() {
             <Download size={14} /> Tải xuống
           </a>
 
+          {/* ── KHUNG ĐẾM GIỜ POMODORO TRỰC TIẾP TRÊN THANH CÔNG CỤ ── */}
+          <div
+            onClick={() => {
+              setIsSidebarOpen(true);
+              setActiveTab('tools');
+            }}
+            className={`group flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-xs select-none ${
+              pomodoro.isActive
+                ? pomodoro.mode === 'FOCUS'
+                  ? 'bg-[#0D2B24] text-white border-[#0D2B24] hover:bg-[#154238] dark:bg-emerald-800 dark:border-emerald-700 dark:text-emerald-50'
+                  : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:border-emerald-600'
+                : 'bg-stone-50 dark:bg-zinc-800 text-stone-700 dark:text-zinc-200 border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700'
+            }`}
+            title="Đồng hồ Pomodoro - Bấm để chuyển đến Công cụ"
+          >
+            <div className="flex items-center gap-1.5">
+              {pomodoro.mode === 'FOCUS' ? (
+                <BrainCircuit size={14} className={pomodoro.isActive ? 'text-emerald-300 animate-pulse' : 'text-stone-500 dark:text-zinc-400'} />
+              ) : (
+                <Coffee size={14} className={pomodoro.isActive ? 'text-amber-300 animate-bounce' : 'text-emerald-600'} />
+              )}
+              <span className="text-[11px] font-semibold hidden md:inline">
+                {pomodoro.mode === 'FOCUS' ? 'Pomodoro' : 'Nghỉ'}
+              </span>
+            </div>
+
+            {/* Đếm thời gian còn lại trực tiếp */}
+            <span 
+              className="font-mono text-xs sm:text-sm font-black tracking-tight"
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+              {pomodoro.formatTime(pomodoro.timeLeft)}
+            </span>
+
+            {/* Nút bấm nhanh Tạm dừng / Tiếp tục ngay trên thanh */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                pomodoro.toggleTimer();
+              }}
+              className={`p-1 rounded-md transition-colors ${
+                pomodoro.isActive
+                  ? 'text-white/80 hover:text-white hover:bg-white/20'
+                  : 'text-stone-500 dark:text-zinc-400 hover:text-stone-900 dark:hover:text-zinc-100 hover:bg-stone-200/60 dark:hover:bg-zinc-700'
+              }`}
+              title={pomodoro.isActive ? 'Tạm dừng đếm giờ' : 'Bắt đầu đếm giờ'}
+            >
+              {pomodoro.isActive ? (
+                <Pause size={12} className="fill-current" />
+              ) : (
+                <Play size={12} className="fill-current ml-0.5" />
+              )}
+            </button>
+          </div>
+
           <div className="w-px h-4 bg-gray-200 dark:bg-zinc-700 mx-1"></div>
           <button 
             onClick={toggleSidebar}
@@ -444,23 +508,22 @@ export default function DocumentViewerPage() {
  
                   {/* AI Chat / Mindmap / Tools Content */}
                   <div className="flex-1 flex flex-col overflow-hidden relative">
-                    {activeTab === 'ai' ? (
+                    <div className={`flex-1 flex-col overflow-hidden relative ${activeTab === 'ai' ? 'flex' : 'hidden'}`}>
                       <AIChatWorkspace documentId={Number(docId)} documentTitle={document.title} />
-                    ) : activeTab === 'mindmap' ? (
+                    </div>
+                    <div className={`flex-1 flex-col overflow-hidden relative ${activeTab === 'mindmap' ? 'flex' : 'hidden'}`}>
                       <MindmapWorkspace documentId={Number(docId)} documentTitle={document.title} />
-                    ) : (
-                      <div className="flex-1 overflow-y-auto px-4 pb-8 flex flex-col space-y-6">
-                        <div className="bg-white dark:bg-zinc-800 border border-gray-300/70 dark:border-zinc-700 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
-                          <h3 className="text-[12px] font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider mb-3">Đồng hồ Pomodoro</h3>
-                          <PomodoroWidget documentId={Number(docId)} />
-                        </div>
- 
-                        <div className="bg-white dark:bg-zinc-800 border border-gray-300/70 dark:border-zinc-700 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)] flex-1 min-h-[350px]">
-                          <SmartNotesWorkspace documentId={Number(docId)} />
-                        </div>
-                        
+                    </div>
+                    <div className={`flex-1 overflow-y-auto px-4 pb-8 flex-col space-y-6 ${activeTab === 'tools' ? 'flex' : 'hidden'}`}>
+                      <div className="bg-white dark:bg-zinc-800 border border-gray-300/70 dark:border-zinc-700 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
+                        <h3 className="text-[12px] font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider mb-3">Đồng hồ Pomodoro</h3>
+                        <PomodoroWidget documentId={Number(docId)} pomodoro={pomodoro} />
                       </div>
-                    )}
+
+                      <div className="bg-white dark:bg-zinc-800 border border-gray-300/70 dark:border-zinc-700 rounded-2xl p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)] flex-1 min-h-[350px]">
+                        <SmartNotesWorkspace documentId={Number(docId)} />
+                      </div>
+                    </div>
                   </div>
                 </motion.div>
               )}

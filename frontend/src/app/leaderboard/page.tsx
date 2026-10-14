@@ -57,6 +57,7 @@ export default function LeaderboardPage() {
 
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
       const res = await fetch(`${API_BASE}/leaderboard?category=${category}&period=${period}&limit=50`, {
+        credentials: 'include',
         headers
       });
 
@@ -111,7 +112,7 @@ export default function LeaderboardPage() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-24 pb-12">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
         {/* Header Banner */}
         <div className="bg-[#1a2e1c] dark:bg-zinc-900 border-3 border-[#0d1a10] dark:border-emerald-800/60 rounded-3xl p-6 sm:p-8 text-white shadow-[6px_6px_0px_0px_rgba(13,26,16,1)] dark:shadow-[6px_6px_0px_0px_rgba(16,185,129,0.3)] mb-8 relative overflow-hidden">
           <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -406,7 +407,7 @@ export default function LeaderboardPage() {
       {/* ── STICKY CURRENT USER RANK FOOTER ── */}
       {isAuthenticated && currentUserRank && (
         <div className="fixed bottom-0 inset-x-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t-3 border-[#1a2e1c] dark:border-zinc-800 p-3.5 z-40 shadow-[0_-5px_15px_rgba(26,46,28,0.12)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
-          <div className="max-w-5xl mx-auto flex items-center justify-between gap-4 px-2">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-[#1a2e1c] dark:bg-emerald-900 text-amber-300 border-2 border-[#1a2e1c] dark:border-emerald-600 flex items-center justify-center font-black text-sm sm:text-base shrink-0 shadow-sm">
                 #{currentUserRank.rank}

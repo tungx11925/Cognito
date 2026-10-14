@@ -9,7 +9,7 @@ import {
   markAllNotificationsAsRead,
   getNotificationStreamTicket,
 } from '@/services/notification.service';
-import { apiFetch, getValidToken } from '@/services/api';
+import { apiFetch, getValidToken, getAuthHeaders } from '@/services/api';
 export interface DocumentItem {
   id: number;
   user_id: number;
@@ -104,7 +104,8 @@ interface StudyContextType {
 
   // Documents
   documents: DocumentItem[];
-  fetchDocuments: () => Promise<void>;
+  setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>>;
+  fetchDocuments: (force?: boolean) => Promise<void>;
   activeDoc: DocumentItem | null;
   setActiveDoc: (doc: DocumentItem | null) => void;
   handleOpenWorkspace: (doc: DocumentItem) => void;
@@ -133,6 +134,7 @@ interface StudyContextType {
 
   // Decks & Flashcards
   decks: FlashcardDeck[];
+  setDecks: React.Dispatch<React.SetStateAction<FlashcardDeck[]>>;
   fetchFlashcardDecks: (force?: boolean) => Promise<void>;
   invalidateCache: (type?: 'documents' | 'decks' | 'tasks' | 'friends' | 'all') => Promise<void>;
   activeDeck: FlashcardDeck | null;
@@ -215,8 +217,8 @@ interface StudyContextType {
   tasks: any[];
   setTasks: React.Dispatch<React.SetStateAction<any[]>>;
   friends: any[];
-  fetchTasks: () => Promise<void>;
-  fetchFriends: () => Promise<void>;
+  fetchTasks: (force?: boolean) => Promise<void>;
+  fetchFriends: (force?: boolean) => Promise<void>;
   triggerTaskProgress: (taskType: string, increment?: number) => Promise<void>;
   taskCompletionToast: { type: string; title: string } | null;
   setTaskCompletionToast: (toast: { type: string; title: string } | null) => void;
@@ -236,10 +238,6 @@ interface StudyContextType {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
-const getAuthHeaders = (): Record<string, string> => {
-  return {};
-};
 
 const EMPTY_ANALYTICS = {
   total_study_minutes: 0,
@@ -338,6 +336,11 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Toast message trigger helper
   const triggerMessage = (text: string, type: 'success' | 'error' = 'success') => {
     setGlobalMessage({ text, type });
+    if (type === 'error') {
+      toast.error(text, { id: text });
+    } else {
+      toast.success(text, { id: text });
+    }
     setTimeout(() => {
       setGlobalMessage({ text: '', type: 'success' });
     }, 4000);
@@ -362,7 +365,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
           triggerMessage(data.message || 'Vui lòng đổi mật khẩu để kích hoạt', 'success');
           return { success: true, requiresPasswordChange: true, email: data.email };
         }
-        try { localStorage.removeItem('token'); } catch (e) {}
+        if (data.token) {
+          try { localStorage.setItem('token', data.token); } catch (e) {}
+        }
         setActiveUser(data.user);
         setIsAuthenticated(true);
         setShowDailyRecommendModal(true);
@@ -388,7 +393,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       const data = await res.json();
       if (res.ok) {
-        try { localStorage.removeItem('token'); } catch (e) {}
+        if (data.token) {
+          try { localStorage.setItem('token', data.token); } catch (e) {}
+        }
         setActiveUser(data.user);
         setIsAuthenticated(true);
         setShowDailyRecommendModal(true);
@@ -418,7 +425,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
           await fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
             method: 'POST',
             credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
             body: JSON.stringify({ seconds: totalToSend })
           });
         } catch (e) {
@@ -430,7 +440,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
-        credentials: 'include'
+        credentials: 'include',
+        headers: getAuthHeaders(),
       });
     } catch (e) {}
     try { localStorage.removeItem('token'); } catch (e) {}
@@ -463,6 +474,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const res = await fetch(`${API_BASE_URL}/auth/avatar`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeaders(),
         body: formData
       });
 
@@ -493,6 +505,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify(fields)
       });
@@ -524,6 +537,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ enable })
       });
@@ -555,6 +569,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ currentPassword, newPassword })
       });
@@ -583,7 +598,9 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       const data = await res.json();
       if (res.ok) {
-        try { localStorage.removeItem('token'); } catch (e) {}
+        if (data.token) {
+          try { localStorage.setItem('token', data.token); } catch (e) {}
+        }
         setActiveUser(data.user);
         setIsAuthenticated(true);
         setShowDailyRecommendModal(true);
@@ -610,6 +627,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         }
       });
       const data = await res.json();
@@ -661,7 +679,8 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const fetchMe = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/auth/me`, {
-          credentials: 'include'
+          credentials: 'include',
+          headers: getAuthHeaders(),
         });
         if (res.ok) {
           const data = await res.json();
@@ -688,7 +707,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch Documents
   const fetchDocuments = async (force: boolean = false) => {
     const now = Date.now();
-    if (!force && documents.length > 0 && (now - lastDocsFetchRef.current < 25000)) {
+    if (!force && documents.length > 0 && (now - lastDocsFetchRef.current < 3000)) {
       return;
     }
     lastDocsFetchRef.current = now;
@@ -708,7 +727,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // API Call: Fetch Decks
   const fetchFlashcardDecks = async (force: boolean = false) => {
     const now = Date.now();
-    if (!force && decks.length > 0 && (now - lastDecksFetchRef.current < 25000)) {
+    if (!force && decks.length > 0 && (now - lastDecksFetchRef.current < 3000)) {
       return;
     }
     lastDecksFetchRef.current = now;
@@ -807,7 +826,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const fetchTasks = async (force: boolean = false) => {
     const now = Date.now();
-    if (!force && tasks.length > 0 && (now - lastTasksFetchRef.current < 25000)) {
+    if (!force && tasks.length > 0 && (now - lastTasksFetchRef.current < 3000)) {
       return;
     }
     lastTasksFetchRef.current = now;
@@ -823,7 +842,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const fetchFriends = async (force: boolean = false) => {
     const now = Date.now();
-    if (!force && friends.length > 0 && (now - lastFriendsFetchRef.current < 25000)) {
+    if (!force && friends.length > 0 && (now - lastFriendsFetchRef.current < 3000)) {
       return;
     }
     lastFriendsFetchRef.current = now;
@@ -1520,7 +1539,10 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
         fetch(`${API_BASE_URL}/study-sessions/active-ping`, {
           method: 'POST',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify({ seconds }),
           keepalive: true
         }).catch(() => {});
@@ -1657,6 +1679,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       triggerMessage,
 
       documents,
+      setDocuments,
       fetchDocuments,
       activeDoc,
       setActiveDoc,
@@ -1678,6 +1701,7 @@ export const StudyContextProvider: React.FC<{ children: React.ReactNode }> = ({ 
       handleEditDocument,
 
       decks,
+      setDecks,
       fetchFlashcardDecks,
       invalidateCache,
       activeDeck,

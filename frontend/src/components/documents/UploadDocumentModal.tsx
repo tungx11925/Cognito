@@ -8,7 +8,7 @@ import { getDocumentStatus, reprocessDocument, DocumentProcessingStatus } from '
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (newDoc?: any) => void;
   defaultCategory?: string;
   existingCategories?: string[];
 }
@@ -54,6 +54,7 @@ export default function UploadDocumentModal({
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollStopRef = useRef(false);
+  const uploadedDocRef = useRef<any>(null);
 
   useEffect(() => {
     setCategory(defaultCategory);
@@ -128,13 +129,14 @@ export default function UploadDocumentModal({
       try {
         const res = JSON.parse(xhr.responseText);
         if (xhr.status === 201 || xhr.status === 200) {
+          uploadedDocRef.current = res?.document || null;
           const docId = res?.document?.id || res?.id;
           if (docId) {
             setUploadState('processing');
             pollPipeline(docId, 0);
           } else {
             setUploadState('success');
-            setTimeout(() => { onSuccess(); handleClose(); }, 1200);
+            setTimeout(() => { onSuccess(uploadedDocRef.current); handleClose(); }, 1200);
           }
         } else {
           setUploadState('error');
@@ -152,6 +154,7 @@ export default function UploadDocumentModal({
     };
 
     xhr.open('POST', `${API_BASE}/documents/upload`);
+    xhr.withCredentials = true;
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.send(formData);
   };
@@ -176,7 +179,7 @@ export default function UploadDocumentModal({
       if (effectiveStatus === 'READY') {
         setUploadState('success');
         setTimeout(() => {
-          onSuccess();
+          onSuccess(uploadedDocRef.current || data?.document);
           handleClose();
         }, 1200);
       } else if (effectiveStatus === 'FAILED') {
@@ -207,6 +210,8 @@ export default function UploadDocumentModal({
     if (uploadState === 'uploading' && xhrRef.current) {
       xhrRef.current.abort();
     }
+    const hadDoc = uploadedDocRef.current;
+    const isProcessing = uploadState === 'processing';
     pollStopRef.current = true;
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     setFile(null);
@@ -217,7 +222,11 @@ export default function UploadDocumentModal({
     setUploadState('idle');
     setPipelineStatus(null);
     setError('');
+    uploadedDocRef.current = null;
     onClose();
+    if (hadDoc && isProcessing) {
+      onSuccess(hadDoc);
+    }
   };
 
   if (!isOpen) return null;

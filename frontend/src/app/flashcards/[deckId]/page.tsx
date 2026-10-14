@@ -1206,7 +1206,7 @@ export default function FlashcardDeckPage() {
   const renderDashboardMode = () => {
     const cardBg = dark ? "#1e1e1e" : "#ffffff";
     return (
-      <div className="max-w-4xl mx-auto w-full p-6 animate-in fade-in zoom-in-95 duration-300">
+      <div className="w-full p-6 animate-in fade-in zoom-in-95 duration-300">
         <div className="flex flex-col md:flex-row gap-6 mb-10">
           <div 
             className="flex-1 rounded-2xl p-8 flex flex-col justify-center items-center text-center relative overflow-hidden"
@@ -2044,7 +2044,7 @@ export default function FlashcardDeckPage() {
       {/* Secondary toolbar sub-navbar */}
       <div className="pt-20">
         <div 
-          className="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center border-b"
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center border-b"
           style={{ borderColor: dark ? "#222" : "rgba(26,46,28,0.08)" }}
         >
           <div className="flex items-center gap-2">
@@ -2106,7 +2106,7 @@ export default function FlashcardDeckPage() {
       </div>
 
       {/* Tabs navigation list */}
-      <div className={`${(viewMode === 'study' || viewMode === 'match' || viewMode === 'learn') ? 'max-w-7xl' : 'max-w-4xl'} mx-auto w-full px-4 mt-6 flex-1 flex flex-col overflow-x-hidden relative`}>
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-6 flex-1 flex flex-col overflow-x-hidden relative">
         <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide px-2">
           {[
             { id: 'dashboard', label: 'Quản lý thẻ' },

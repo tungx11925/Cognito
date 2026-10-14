@@ -79,9 +79,10 @@ export default function SharedWorkspacePage() {
           const auth_token = localStorage.getItem('token');
           const res = await fetch(`${API_BASE_URL}/flashcards/decks/${resource.id}/fork`, {
             method: 'POST',
-            headers: {
+            headers: auth_token ? {
               'Authorization': `Bearer ${auth_token}`
-            }
+            } : {},
+            credentials: 'include'
           });
           if (res.ok) {
             toast.success('Đã sao chép vào bộ sưu tập của bạn!');

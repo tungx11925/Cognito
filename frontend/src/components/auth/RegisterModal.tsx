@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Phone, Mail, Lock, Eye, EyeOff, CheckCircle2, XCircle, Circle, X, GraduationCap, Hourglass } from 'lucide-react';
+import { User, Phone, Mail, Lock, Eye, EyeOff, CheckCircle2, XCircle, Circle, X, GraduationCap, Hourglass, AlertTriangle } from 'lucide-react';
 import { useStudy } from '@/context/StudyContext';
 import { useRouter } from 'next/navigation';
 import { googleLogin } from '../../services/auth.service';
@@ -131,8 +131,13 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
   const [twoFAEmail, setTwoFAEmail] = useState('');
   const [twoFACode, setTwoFACode] = useState('');
   const [twoFAError, setTwoFAError] = useState('');
-  
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setShowExitConfirm(false);
+    }
+  }, [isOpen]);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const phoneRegex = /^(03|05|07|08|09)\d{8}$/;
@@ -143,14 +148,14 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
   const isLongEnough = password.length >= 10;
   const isPasswordValid = hasLetter && hasNumberOrSymbol && isLongEnough;
 
-  const hasData = name.trim() !== '' || email.trim() !== '' || phone.trim() !== '' || password.trim() !== '' || confirmPassword.trim() !== '';
+  const hasRegistrationData = isRegisterMode && (name.trim() !== '' || email.trim() !== '' || phone.trim() !== '' || password.trim() !== '' || confirmPassword.trim() !== '');
 
   // Handle ESC to close
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (hasData) {
-          triggerMessage("Dữ liệu của bạn chưa được lưu. Vui lòng bấm dấu X nếu muốn thoát.", "error");
+        if (hasRegistrationData) {
+          setShowExitConfirm(true);
         } else {
           onClose();
         }
@@ -160,7 +165,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
       window.addEventListener('keydown', handleEsc);
     }
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, onClose, hasData, triggerMessage]);
+  }, [isOpen, onClose, hasRegistrationData]);
 
   // Google Sign-In Initialization
   const handleGoogleCredentialResponse = useCallback(async (response: any) => {
@@ -173,7 +178,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         setIsAuthenticated(true);
         onClose();
         triggerMessage("Đăng nhập bằng Google thành công!", "success");
-        const target = getSafeReturnUrl('/home');
+        const target = getSafeReturnUrl('/library');
         router.push(target);
       } else {
         triggerMessage(res.error || "Không thể đăng nhập bằng Google", "error");
@@ -431,7 +436,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
           if (result.role === 'admin') {
             router.push('/admin');
           } else {
-            const target = getSafeReturnUrl('/home');
+            const target = getSafeReturnUrl('/library');
             router.push(target);
           }
         }
@@ -449,7 +454,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     const success = await verify2FA(twoFAEmail, twoFACode);
     if (success) {
       onClose();
-      const target = getSafeReturnUrl('/home');
+      const target = getSafeReturnUrl('/library');
       router.push(target);
     } else {
       setTwoFAError('Mã xác nhận không hợp lệ');
@@ -466,7 +471,7 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
     const success = await verify2FA(twoFAEmail, twoFACode);
     if (success) {
       onClose();
-      const target = getSafeReturnUrl('/home');
+      const target = getSafeReturnUrl('/library');
       router.push(target);
     } else {
       setTwoFAError("Mã xác thực không chính xác hoặc đã hết hạn");
@@ -475,8 +480,8 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
-      if (hasData) {
-        triggerMessage("Bạn đang nhập dở dữ liệu. Vui lòng bấm dấu X để đóng popup.", "error");
+      if (hasRegistrationData) {
+        setShowExitConfirm(true);
       } else {
         onClose();
       }
@@ -484,31 +489,8 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
   };
 
   const handleCloseAttempt = () => {
-    if (hasData) {
-      toast((t) => (
-        <div className="flex flex-col gap-3 font-sans">
-          <p className="text-sm font-semibold text-gray-900">
-            Bạn có chắc chắn muốn thoát? Các thông tin bạn vừa nhập sẽ bị mất.
-          </p>
-          <div className="flex gap-2 justify-end mt-2">
-            <button 
-              className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
-              onClick={() => toast.dismiss(t.id)}
-            >
-              Hủy bỏ
-            </button>
-            <button 
-              className="px-4 py-2 text-xs font-bold text-white bg-rose-500 rounded-xl hover:bg-rose-600 transition-colors"
-              onClick={() => {
-                toast.dismiss(t.id);
-                onClose();
-              }}
-            >
-              Thoát
-            </button>
-          </div>
-        </div>
-      ), { duration: Infinity, style: { borderRadius: '16px' } });
+    if (hasRegistrationData) {
+      setShowExitConfirm(true);
     } else {
       onClose();
     }
@@ -527,6 +509,51 @@ export default function RegisterModal({ isOpen, onClose, triggerMessage }: Regis
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="w-full max-w-md md:max-w-4xl bg-white border border-gray-100 rounded-[28px] shadow-2xl overflow-hidden flex flex-col md:flex-row relative min-h-[500px] max-h-[90vh] md:h-[680px]"
       >
+        {/* In-modal Exit Confirmation for In-progress Registration */}
+        <AnimatePresence>
+          {showExitConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-50 bg-[#0d2b24]/60 backdrop-blur-xs flex items-center justify-center p-6"
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 text-center flex flex-col items-center gap-3"
+              >
+                <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <h3 className="font-bold text-gray-900 text-base">Xác nhận thoát?</h3>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Thông tin đăng ký bạn vừa nhập sẽ không được lưu nếu bạn đóng popup bây giờ.
+                </p>
+                <div className="flex gap-2 w-full mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowExitConfirm(false)}
+                    className="flex-1 py-2.5 px-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    Ở lại nhập tiếp
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowExitConfirm(false);
+                      onClose();
+                    }}
+                    className="flex-1 py-2.5 px-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition-colors shadow-sm cursor-pointer"
+                  >
+                    Đồng ý thoát
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {/* Left Side: Brand Visual Section (hidden on mobile) */}
         <div className="hidden md:flex md:w-5/12 bg-[#1a3d28] p-8 relative flex-col justify-between overflow-hidden">
           {/* Grid pattern background (craft aesthetic on dark green) */}

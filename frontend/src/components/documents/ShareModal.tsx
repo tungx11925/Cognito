@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Globe, Lock, Users, Copy, Check, EyeOff, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { apiFetch } from '@/services/api';
 
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
   resourceId: number;
   resourceType: 'document' | 'deck';
-  triggerMessage: (msg: string, type?: 'success' | 'error') => void;
+  triggerMessage?: (msg: string, type?: 'success' | 'error') => void;
   onShareUpdated?: () => void;
 }
 
@@ -26,8 +28,7 @@ export default function ShareModal({
   const [initialLoading, setInitialLoading] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [copied, setCopied] = useState(false);
-
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !resourceId) return;
@@ -36,18 +37,12 @@ export default function ShareModal({
     const fetchCurrentStatus = async () => {
       setInitialLoading(true);
       try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`${API_BASE_URL}/shares/status/${resourceType}/${resourceId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted) {
-            setVisibility(data.visibility || 'private');
-            setIsCommunityPublished(Boolean(data.isCommunityPublished));
-            if (data.shareUrl) setShareUrl(data.shareUrl);
-            if (data.accessType) setAccessType(data.accessType);
-          }
+        const data = await apiFetch(`/shares/status/${resourceType}/${resourceId}`);
+        if (data && !data.error && isMounted) {
+          setVisibility(data.visibility || 'private');
+          setIsCommunityPublished(Boolean(data.isCommunityPublished));
+          if (data.shareUrl) setShareUrl(data.shareUrl);
+          if (data.accessType) setAccessType(data.accessType);
         }
       } catch (err) {
         console.warn('Could not load current share status', err);
@@ -58,50 +53,66 @@ export default function ShareModal({
 
     fetchCurrentStatus();
     return () => { isMounted = false; };
-  }, [isOpen, resourceId, resourceType, API_BASE_URL]);
+  }, [isOpen, resourceId, resourceType]);
 
   if (!isOpen) return null;
+
+  const notify = (msg: string, type: 'success' | 'error' = 'success') => {
+    toast[type === 'error' ? 'error' : 'success'](msg, { id: 'share-modal-toast' });
+  };
 
   const handleSaveShareSettings = async (targetVisibility?: 'private' | 'restricted' | 'public') => {
     const selectedVis = targetVisibility || visibility;
     setLoading(true);
+    setSavedSuccess(false);
+
     try {
-      const token = localStorage.getItem('token');
       const body: any = { visibility: selectedVis, accessType };
       if (resourceType === 'document') body.documentId = resourceId;
       else body.deckId = resourceId;
 
-      const res = await fetch(`${API_BASE_URL}/shares/generate`, {
+      const data = await apiFetch('/shares/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(body)
       });
 
-      const data = await res.json();
-      if (res.ok) {
+      if (data && !data.error) {
         setVisibility(selectedVis);
         setIsCommunityPublished(selectedVis === 'public');
+        setSavedSuccess(true);
+
+        let successMsg = "Đã cập nhật quyền chia sẻ thành công!";
         if (selectedVis === 'private') {
           setShareUrl('');
-          triggerMessage("Đã gỡ khỏi cộng đồng và chuyển về chế độ riêng tư thành công.", "success");
+          successMsg = "Đã chuyển về chế độ riêng tư (Chỉ mình bạn xem được).";
+        } else if (selectedVis === 'public') {
+          setShareUrl(data.shareUrl || '');
+          successMsg = resourceType === 'document'
+            ? "Tài liệu đã được công khai lên Cộng đồng thành công!"
+            : "Bộ thẻ ghi nhớ đã được công khai lên Cộng đồng thành công!";
         } else {
           setShareUrl(data.shareUrl || '');
-          triggerMessage(
-            selectedVis === 'public'
-              ? "Tài liệu đã được công khai lên Cộng đồng thành công!"
-              : "Đã bật chia sẻ bằng liên kết (Không xuất hiện trên Cộng đồng).",
-            "success"
-          );
+          successMsg = "Đã bật chia sẻ bằng liên kết (Không xuất hiện trên Cộng đồng).";
         }
+
+        notify(successMsg, "success");
         if (onShareUpdated) onShareUpdated();
+
+        // Tự động đóng modal sau khi lưu thành công nếu chuyển chế độ riêng tư hoặc công khai
+        if (selectedVis === 'private' || selectedVis === 'public') {
+          setTimeout(() => {
+            onClose();
+          }, 800);
+        }
       } else {
-        triggerMessage(data.error || "Lỗi khi cập nhật quyền chia sẻ", "error");
+        const errorMsg = data?.error || data?.message || "Lỗi khi cập nhật quyền chia sẻ";
+        notify(errorMsg, "error");
       }
-    } catch (e) {
-      triggerMessage("Lỗi kết nối máy chủ", "error");
+    } catch (e: any) {
+      notify(e?.message || "Lỗi kết nối máy chủ", "error");
     } finally {
       setLoading(false);
     }
@@ -111,6 +122,7 @@ export default function ShareModal({
     if (!shareUrl) return;
     navigator.clipboard.writeText(shareUrl);
     setCopied(true);
+    toast.success("Đã sao chép liên kết vào bộ nhớ tạm!", { id: 'share-copy-toast' });
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -130,7 +142,7 @@ export default function ShareModal({
               Chia sẻ {resourceType === 'document' ? 'tài liệu' : 'bộ thẻ ghi nhớ'}
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              1 Nguồn sự thật: Kiểm soát hiển thị trên Cộng đồng & Liên kết
+              Kiểm soát hiển thị trên Cộng đồng & Chia sẻ liên kết trực tiếp
             </p>
           </div>
           <button 
@@ -154,7 +166,7 @@ export default function ShareModal({
               <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border/60">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">Trạng thái hiện tại:</span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                     visibility === 'public' 
                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                       : visibility === 'restricted'
@@ -170,7 +182,7 @@ export default function ShareModal({
                   <button
                     onClick={() => handleSaveShareSettings('private')}
                     disabled={loading}
-                    className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-600 hover:underline font-medium"
+                    className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-600 hover:underline font-medium disabled:opacity-50"
                   >
                     <EyeOff size={13} />
                     Gỡ khỏi Cộng đồng
@@ -187,7 +199,7 @@ export default function ShareModal({
                   {/* 1. Riêng tư */}
                   <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
                     visibility === 'private' 
-                      ? 'border-primary/60 bg-primary/5 shadow-sm' 
+                      ? 'border-primary/60 bg-primary/5 shadow-sm ring-1 ring-primary/20' 
                       : 'border-border/70 hover:border-border hover:bg-muted/20'
                   }`}>
                     <input 
@@ -211,7 +223,7 @@ export default function ShareModal({
                   {/* 2. Chia sẻ bằng liên kết */}
                   <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
                     visibility === 'restricted' 
-                      ? 'border-primary/60 bg-primary/5 shadow-sm' 
+                      ? 'border-primary/60 bg-primary/5 shadow-sm ring-1 ring-primary/20' 
                       : 'border-border/70 hover:border-border hover:bg-muted/20'
                   }`}>
                     <input 
@@ -235,7 +247,7 @@ export default function ShareModal({
                   {/* 3. Công khai lên Cộng đồng */}
                   <label className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
                     visibility === 'public' 
-                      ? 'border-primary/60 bg-primary/5 shadow-sm' 
+                      ? 'border-primary/60 bg-primary/5 shadow-sm ring-1 ring-primary/20' 
                       : 'border-border/70 hover:border-border hover:bg-muted/20'
                   }`}>
                     <input 
@@ -279,21 +291,34 @@ export default function ShareModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 bg-muted/30 border-t border-border flex justify-end gap-2.5">
-          <button 
-            onClick={onClose} 
-            className="px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors"
-          >
-            Đóng
-          </button>
-          <button 
-            onClick={() => handleSaveShareSettings()} 
-            disabled={loading || initialLoading}
-            className="px-4 py-2 text-xs font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-xl flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
-          >
-            {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {loading ? 'Đang lưu...' : (visibility === 'public' ? 'Lưu & Đăng Cộng đồng' : 'Cập nhật')}
-          </button>
+        <div className="px-6 py-3.5 bg-muted/30 border-t border-border flex items-center justify-between gap-2.5">
+          <div>
+            {savedSuccess && (
+              <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium animate-pulse">
+                <Check size={14} /> Đã cập nhật thành công!
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={onClose} 
+              className="px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors"
+            >
+              Đóng
+            </button>
+            <button 
+              onClick={() => handleSaveShareSettings()} 
+              disabled={loading || initialLoading}
+              className="px-4 py-2 text-xs font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-xl flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
+            >
+              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {loading 
+                ? 'Đang lưu...' 
+                : savedSuccess 
+                ? '✓ Đã cập nhật' 
+                : (visibility === 'public' ? 'Lưu & Đăng Cộng đồng' : 'Cập nhật')}
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>

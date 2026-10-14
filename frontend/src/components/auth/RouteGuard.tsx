@@ -5,39 +5,19 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useStudy } from '@/context/StudyContext';
 
 /**
- * Danh sách route công khai không bắt buộc đăng nhập (Spec 3.14):
+ * Danh sách route công khai không bắt buộc đăng nhập:
  * - / (landing page có modal login / register / forgot-password)
- * - /home
- * - /search (tìm kiếm)
+ * - /home (landing page)
  * - /reset-password (đặt lại mật khẩu)
  * - /not-found, /404 (trang báo lỗi)
- * - /shared/[token] (tài liệu công khai được chia sẻ)
- * - /profile/[userId] (public profile của người dùng khác)
+ * - /shared/[token] (tài liệu chia sẻ công khai)
  */
 export const PUBLIC_ROUTES = [
   '/',
-  '/search',
-  '/community',
+  '/home',
   '/reset-password',
   '/not-found',
   '/404',
-];
-
-/**
- * Danh sách route con riêng tư dưới /profile/ bắt buộc phải đăng nhập (bảo vệ tuyệt đối):
- * - /profile (trang cá nhân của chính mình)
- * - /profile/
- * - /profile/edit, /profile/settings, /profile/security, /profile/account, v.v.
- */
-export const PRIVATE_PROFILE_SUBROUTES = [
-  'edit',
-  'settings',
-  'security',
-  'activity',
-  'account',
-  'billing',
-  'notifications',
-  'password',
 ];
 
 export const isPublicRoute = (pathname: string | null): boolean => {
@@ -45,38 +25,16 @@ export const isPublicRoute = (pathname: string | null): boolean => {
   const cleanPath = pathname.split('?')[0].split('#')[0];
   if (PUBLIC_ROUTES.includes(cleanPath)) return true;
   if (cleanPath.startsWith('/shared/')) return true;
-
-  // Xử lý route /profile
-  if (cleanPath === '/profile' || cleanPath === '/profile/') {
-    return false; // Trang profile cá nhân phải bảo vệ
-  }
-
-  if (cleanPath.startsWith('/profile/')) {
-    const sub = cleanPath.substring('/profile/'.length).replace(/\/+$/, '');
-    if (!sub) return false;
-
-    // Nếu có thêm cấp con (ví dụ /profile/123/edit, /profile/settings/notifications) -> bảo vệ
-    if (sub.includes('/')) return false;
-
-    // Nếu thuộc danh sách route con riêng tư -> bảo vệ
-    if (PRIVATE_PROFILE_SUBROUTES.includes(sub.toLowerCase())) return false;
-
-    // Chỉ /profile/[userId] dạng số/ID là công khai (ví dụ: /profile/10038, /profile/usr_123)
-    if (/^\d+$/.test(sub)) return true;
-    if (/^[a-zA-Z0-9_-]{1,64}$/.test(sub)) return true;
-
-    return false;
-  }
   return false;
 };
 
 /**
  * Hàm kiểm tra và lấy returnUrl an toàn — CHỈ chấp nhận đường dẫn nội bộ:
- * - Loại bỏ toàn bộ ký tự điều khiển (\t, \n, \r, ASCII 0x00-0x1F, 0x7F) trước khi kiểm tra (Item 5).
- * - Bắt đầu bằng "/", KHÔNG bắt đầu bằng "//", KHÔNG chứa ký tự "\" (chặn cả /\ và \),
- * - KHÔNG chứa "://", xóa khỏi sessionStorage sau khi dùng.
+ * - Mặc định chuyển về /library (Không gian học tập) nếu không có returnUrl cụ thể.
+ * - Loại bỏ toàn bộ ký tự điều khiển trước khi kiểm tra.
+ * - Bắt đầu bằng "/", KHÔNG bắt đầu bằng "//", KHÔNG chứa ký tự "\", KHÔNG chứa "://".
  */
-export const getSafeReturnUrl = (fallback = '/home'): string => {
+export const getSafeReturnUrl = (fallback = '/library'): string => {
   if (typeof window === 'undefined') return fallback;
   let rawUrl: string | null = null;
   try {
@@ -89,7 +47,6 @@ export const getSafeReturnUrl = (fallback = '/home'): string => {
   } catch (e) {}
 
   if (rawUrl && typeof rawUrl === 'string') {
-    // Loại bỏ toàn bộ ký tự điều khiển (\t, \n, \r, ASCII 0x00-0x1F và 0x7F) trước khi kiểm tra
     const sanitized = rawUrl.replace(/[\t\n\r\x00-\x1F\x7F]/g, '').trim();
     if (
       sanitized.startsWith('/') &&
@@ -97,6 +54,10 @@ export const getSafeReturnUrl = (fallback = '/home'): string => {
       !sanitized.includes('\\') &&
       !sanitized.includes('://')
     ) {
+      // Tránh lặp vô hạn về chính trang chủ nếu returnUrl là / hoặc /home
+      if (sanitized === '/' || sanitized === '/home') {
+        return fallback;
+      }
       return sanitized;
     }
   }
@@ -104,32 +65,54 @@ export const getSafeReturnUrl = (fallback = '/home'): string => {
 };
 
 /**
- * RouteGuard dùng chung cho toàn bộ các route cần đăng nhập (Spec 3.14).
- * Khi người dùng chưa đăng nhập truy cập route được bảo vệ,
- * lưu returnUrl an toàn và chuyển hướng về trang chủ / mở modal đăng nhập.
+ * RouteGuard bảo vệ tuyệt đối tất cả chức năng trên web:
+ * Người dùng bắt buộc phải đăng nhập mới được truy cập các tính năng.
+ * Khi chưa đăng nhập, lập tức chuyển hướng về trang chủ và kích hoạt modal đăng nhập.
  */
 export const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, loading } = useStudy();
+  const { isAuthenticated, loading, setShowLoginModal, triggerMessage } = useStudy();
   const router = useRouter();
   const pathname = usePathname();
+
+  const isPublic = isPublicRoute(pathname);
 
   useEffect(() => {
     if (loading) return;
 
-    if (!isAuthenticated && !isPublicRoute(pathname)) {
+    if (!isAuthenticated && !isPublic) {
       if (typeof window !== 'undefined') {
         const fullPath = window.location.pathname + window.location.search;
         if (fullPath.startsWith('/') && !fullPath.startsWith('//') && !fullPath.includes('\\')) {
           try {
             sessionStorage.setItem('cognito_return_url', fullPath);
           } catch (e) {}
-          router.push(`/?returnUrl=${encodeURIComponent(fullPath)}`);
+          router.replace(`/?returnUrl=${encodeURIComponent(fullPath)}`);
         } else {
-          router.push('/');
+          router.replace('/');
         }
+        setShowLoginModal(true);
+        triggerMessage('Vui lòng đăng nhập để sử dụng tính năng này', 'error');
       }
     }
-  }, [isAuthenticated, loading, pathname, router]);
+  }, [isAuthenticated, loading, isPublic, router, setShowLoginModal, triggerMessage]);
+
+  if (!isPublic) {
+    if (loading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[#f5f3ee] dark:bg-[#0B0F17]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-4 border-[#1a3d28]/20 border-t-[#1a3d28] rounded-full animate-spin dark:border-emerald-400/20 dark:border-t-emerald-400"></div>
+            <p className="text-xs font-semibold text-stone-500 dark:text-zinc-400">Đang kiểm tra đăng nhập...</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (!isAuthenticated) {
+      // Chặn hoàn toàn việc render giao diện chức năng khi chưa đăng nhập
+      return null;
+    }
+  }
 
   return <>{children}</>;
 };

@@ -1,7 +1,7 @@
 export default function ProfileLoading() {
   return (
     <div className="min-h-screen bg-[#fafafa] dark:bg-[#09090b] p-6 lg:p-10 animate-pulse">
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-8">
         {/* User Profile Card */}
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-gray-200/60 dark:border-zinc-800 flex flex-col md:flex-row items-center gap-6 shadow-xs">
           <div className="h-24 w-24 rounded-full bg-gray-200 dark:bg-zinc-800" />

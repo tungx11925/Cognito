@@ -46,6 +46,9 @@ exports.up = async (pgm) => {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS headline VARCHAR(255);
 
+    -- Tháo gỡ ràng buộc cũ trước khi update role
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+
     -- Di chuyển dữ liệu role hiện tại sang chuẩn ('user', 'admin')
     UPDATE users SET is_premium = true WHERE role = 'premium';
     UPDATE users SET role = 'user' WHERE role IN ('student', 'teacher', 'premium', 'user', '') OR role IS NULL;
@@ -55,7 +58,6 @@ exports.up = async (pgm) => {
     ALTER TABLE users ALTER COLUMN role SET DEFAULT 'user';
 
     -- Cập nhật ràng buộc CHECK constraint trên users.role
-    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
     ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'admin'));
   `);
 

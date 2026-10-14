@@ -29,15 +29,14 @@ function LandingPageContent() {
 
   useEffect(() => {
     setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (isAuthenticated && activeUser) {
-      if (activeUser.role === 'admin') {
-        router.push('/admin');
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const returnUrl = params.get('returnUrl');
+      if (returnUrl && !isAuthenticated) {
+        setShowLoginModal(true);
       }
     }
-  }, [isAuthenticated, activeUser, router]);
+  }, [isAuthenticated, setShowLoginModal]);
 
   const handleDemoScroll = () => {
     const element = document.getElementById('features');
@@ -68,6 +67,7 @@ function LandingPageContent() {
       />
 
       <HeroSection 
+        isLoggedIn={isAuthenticated}
         onStartClick={() => {
           if (!isAuthenticated) setShowLoginModal(true);
           else router.push('/library');

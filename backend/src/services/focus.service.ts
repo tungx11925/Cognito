@@ -136,19 +136,23 @@ export class FocusService {
       [sessionId, eventType, durationSeconds, JSON.stringify(details)]
     );
 
-    // Tăng distraction_count trong study_sessions
-    const updateRes = await db.query(
-      `UPDATE study_sessions
-       SET distraction_count = distraction_count + 1
-       WHERE id = $1
-       RETURNING distraction_count`,
-      [sessionId]
-    );
+    let distractionCount = session.distraction_count;
+    // Chỉ tăng distraction_count khi đây là sự kiện gây mất tập trung (KHÔNG tăng khi là sự kiện RETURNED)
+    if (eventType !== 'RETURNED') {
+      const updateRes = await db.query(
+        `UPDATE study_sessions
+         SET distraction_count = distraction_count + 1
+         WHERE id = $1
+         RETURNING distraction_count`,
+        [sessionId]
+      );
+      distractionCount = updateRes.rows[0].distraction_count;
+    }
 
     return {
       sessionId,
       eventType,
-      distractionCount: updateRes.rows[0].distraction_count,
+      distractionCount,
     };
   }
 
@@ -188,18 +192,27 @@ export class FocusService {
           [sessionId, ev.eventType, ev.durationSeconds || 0, JSON.stringify(ev.details || {})]
         );
       }
-      const updateRes = await client.query(
-        `UPDATE study_sessions
-         SET distraction_count = distraction_count + $2
-         WHERE id = $1
-         RETURNING distraction_count`,
-        [sessionId, events.length]
-      );
+
+      // Chỉ tính tăng số lần xao nhãng cho các sự kiện thực tế (bỏ qua sự kiện RETURNED)
+      const actualDistractionsCount = events.filter(ev => ev.eventType !== 'RETURNED').length;
+      let distractionCount = session.distraction_count;
+
+      if (actualDistractionsCount > 0) {
+        const updateRes = await client.query(
+          `UPDATE study_sessions
+           SET distraction_count = distraction_count + $2
+           WHERE id = $1
+           RETURNING distraction_count`,
+          [sessionId, actualDistractionsCount]
+        );
+        distractionCount = updateRes.rows[0].distraction_count;
+      }
+
       await client.query('COMMIT');
       return {
         sessionId,
         addedCount: events.length,
-        distractionCount: updateRes.rows[0].distraction_count,
+        distractionCount,
       };
     } catch (e) {
       await client.query('ROLLBACK');

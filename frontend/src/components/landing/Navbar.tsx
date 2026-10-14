@@ -227,6 +227,18 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
     return true;
   });
 
+  const handleFeatureNav = (e: React.MouseEvent, href: string) => {
+    if (!isLoggedIn) {
+      e.preventDefault();
+      try {
+        sessionStorage.setItem('cognito_return_url', href);
+      } catch (err) {}
+      setLearningDropdownOpen(false);
+      setMobileOpen(false);
+      onSignInClick();
+    }
+  };
+
   useEffect(() => {
     if (taskCompletionToast) {
       setToastProgress(50);
@@ -284,19 +296,21 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
         boxShadow: scrolled ? "0 2px 20px rgba(26,61,40,0.08)" : "none",
       }}
     >
-      <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-14 gap-2 xl:gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 cursor-pointer shrink-0 group">
-            <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1a3d28] to-[#2d5a3d] flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+          <Link href="/" className="flex items-center gap-2.5 cursor-pointer shrink-0 group text-[#0d1a14] dark:text-zinc-100">
+            <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1a3d28] to-[#2d5a3d] flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform shrink-0 overflow-hidden">
               <svg
+                width="18"
+                height="18"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="w-4.5 h-4.5 text-[#f5f3ee]"
+                className="w-[18px] h-[18px] text-[#f5f3ee] shrink-0"
               >
                 <path d="M12 2a10 10 0 1 0 10 10" />
                 <path d="M12 12 19 5" />
@@ -372,7 +386,10 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                             key={item.href}
                             href={item.href}
                             prefetch={true}
-                            onClick={() => setLearningDropdownOpen(false)}
+                            onClick={(e) => {
+                              setLearningDropdownOpen(false);
+                              handleFeatureNav(e, item.href);
+                            }}
                             className={`flex items-start gap-3 p-2.5 rounded-xl transition-all ${
                               isActive
                                 ? 'bg-emerald-50/70 border border-emerald-200/70'
@@ -408,6 +425,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             <Link
               href="/community"
               prefetch={true}
+              onClick={(e) => handleFeatureNav(e, '/community')}
               className={getNavItemClass(Boolean(pathname?.startsWith('/community')))}
             >
               <Users size={14} className={getNavIconClass(Boolean(pathname?.startsWith('/community')))} />
@@ -418,6 +436,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             <Link
               href="/focus"
               prefetch={true}
+              onClick={(e) => handleFeatureNav(e, '/focus')}
               className={getNavItemClass(pathname === '/focus')}
             >
               <Zap size={14} className={getNavIconClass(pathname === '/focus')} />
@@ -428,6 +447,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             <Link
               href="/progress"
               prefetch={true}
+              onClick={(e) => handleFeatureNav(e, '/progress')}
               className={getNavItemClass(pathname === '/progress')}
             >
               <TrendingUp size={14} className={getNavIconClass(pathname === '/progress')} />
@@ -438,23 +458,13 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
             <Link
               href="/search"
               prefetch={true}
+              onClick={(e) => handleFeatureNav(e, '/search')}
               className={getNavItemClass(pathname === '/search')}
             >
               <Search size={14} className={getNavIconClass(pathname === '/search')} />
               <span>Tìm kiếm</span>
             </Link>
 
-            {/* Admin (Only if role === 'admin') */}
-            {isMounted && activeUser?.role === 'admin' && (
-              <Link
-                href="/admin"
-                prefetch={true}
-                className={getNavItemClass(Boolean(pathname?.startsWith('/admin')))}
-              >
-                <Shield size={14} className={getNavIconClass(Boolean(pathname?.startsWith('/admin')))} />
-                <span>Admin</span>
-              </Link>
-            )}
           </nav>
 
           {/* Actions */}
@@ -465,9 +475,9 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                   <Link
                     href="/admin"
                     prefetch={true}
-                    className="px-3.5 py-1.5 rounded-xl text-xs xl:text-sm font-bold transition-all flex items-center gap-1.5 text-white bg-[#1a3d28] hover:bg-[#153422] shadow-sm hover:shadow active:scale-95"
+                    className="px-3.5 py-1.5 rounded-xl text-xs xl:text-sm font-bold transition-all flex items-center gap-1.5 text-white bg-[#1a3d28] hover:bg-[#153422] shadow-sm hover:shadow active:scale-95 shrink-0"
                   >
-                    <Shield size={14} className="text-emerald-300" />
+                    <Shield size={14} className="text-emerald-300 shrink-0" />
                     <span>Bảng điều khiển Admin</span>
                   </Link>
                 ) : activeUser?.role === 'premium' ? (
@@ -961,7 +971,10 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
                         <Link
                           key={item.href}
                           href={item.href}
-                          onClick={() => setMobileOpen(false)}
+                          onClick={(e) => {
+                            setMobileOpen(false);
+                            handleFeatureNav(e, item.href);
+                          }}
                           className={`text-sm font-semibold flex items-center justify-between py-1.5 px-2 rounded-lg transition-colors ${
                             isItemActive
                               ? 'text-[#1a3d28] font-bold bg-emerald-50'
@@ -982,7 +995,10 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
 
               <Link
                 href="/community"
-                onClick={() => setMobileOpen(false)}
+                onClick={(e) => {
+                  setMobileOpen(false);
+                  handleFeatureNav(e, '/community');
+                }}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-base font-semibold transition-colors ${
                   pathname?.startsWith('/community')
                     ? 'bg-[#1a3d28]/10 text-[#1a3d28] font-bold'
@@ -995,7 +1011,10 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
 
               <Link
                 href="/focus"
-                onClick={() => setMobileOpen(false)}
+                onClick={(e) => {
+                  setMobileOpen(false);
+                  handleFeatureNav(e, '/focus');
+                }}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-base font-semibold transition-colors ${
                   pathname === '/focus'
                     ? 'bg-[#1a3d28]/10 text-[#1a3d28] font-bold'
@@ -1008,7 +1027,10 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
 
               <Link
                 href="/progress"
-                onClick={() => setMobileOpen(false)}
+                onClick={(e) => {
+                  setMobileOpen(false);
+                  handleFeatureNav(e, '/progress');
+                }}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-base font-semibold transition-colors ${
                   pathname === '/progress'
                     ? 'bg-[#1a3d28]/10 text-[#1a3d28] font-bold'
@@ -1021,7 +1043,10 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
 
               <Link
                 href="/search"
-                onClick={() => setMobileOpen(false)}
+                onClick={(e) => {
+                  setMobileOpen(false);
+                  handleFeatureNav(e, '/search');
+                }}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-base font-semibold transition-colors ${
                   pathname === '/search'
                     ? 'bg-[#1a3d28]/10 text-[#1a3d28] font-bold'

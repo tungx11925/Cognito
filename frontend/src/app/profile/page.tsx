@@ -543,7 +543,7 @@ export default function UserProfile() {
         activeUser={activeUser!}
       />
 
-      <div className="max-w-6xl mx-auto px-4 pt-20 pb-7 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-7 space-y-6">
         {/* Profile Card */}
         <Card className="border-0 shadow-md overflow-hidden bg-white dark:bg-zinc-900">
           {/* Cover */}

@@ -6,7 +6,7 @@ import {
   Search, Plus, BookOpen, Calendar, Trash2, Loader2, ArrowLeft,
   Moon, Sun, Flame, EyeOff, Palette, Activity,
   Grid3X3, List, FolderOpen, Star, FileText, ChevronDown, X,
-  SlidersHorizontal, Edit2, Share2, Presentation, Sparkles
+  SlidersHorizontal, Edit2, Share2, Presentation, Sparkles, Globe, Users
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -192,6 +192,15 @@ function DocCard({
               {pages} trang
             </span>
           )}
+          {doc.visibility === 'public' || doc.is_community_published ? (
+            <span style={{ fontSize: 11, color: '#10b981', background: '#10b98118', border: '1px solid #10b98133', padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: "'Outfit', sans-serif" }}>
+              <Globe size={11} /> Cộng đồng
+            </span>
+          ) : doc.visibility === 'restricted' ? (
+            <span style={{ fontSize: 11, color: '#3b82f6', background: '#3b82f618', border: '1px solid #3b82f633', padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: "'Outfit', sans-serif" }}>
+              <Users size={11} /> Link-only
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -259,6 +268,15 @@ function DocRow({
       <span style={{ fontSize: 11, color: tagColor, background: tagColor + "18", border: `1px solid ${tagColor}33`, padding: "2px 8px", borderRadius: 6, fontWeight: 600, flexShrink: 0, fontFamily: "'Outfit', sans-serif" }}>
         {doc.category || "Khác"}
       </span>
+      {doc.visibility === 'public' || doc.is_community_published ? (
+        <span style={{ fontSize: 11, color: '#10b981', background: '#10b98118', border: '1px solid #10b98133', padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, fontFamily: "'Outfit', sans-serif" }}>
+          <Globe size={11} /> Cộng đồng
+        </span>
+      ) : doc.visibility === 'restricted' ? (
+        <span style={{ fontSize: 11, color: '#3b82f6', background: '#3b82f618', border: '1px solid #3b82f633', padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, fontFamily: "'Outfit', sans-serif" }}>
+          <Users size={11} /> Link-only
+        </span>
+      ) : null}
       <span style={{ fontSize: 11, color: textSub, width: 60, textAlign: "right", flexShrink: 0, fontFamily: "'Outfit', sans-serif" }}>{size}</span>
       
       <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
@@ -486,7 +504,9 @@ export default function LibraryPage() {
     globalMessage,
     triggerMessage,
     documents,
+    setDocuments,
     fetchDocuments,
+    invalidateCache,
     handleDeleteDocument,
     handleEditDocument,
     handleOpenWorkspace
@@ -839,7 +859,7 @@ export default function LibraryPage() {
       {/* Toolbar Sub-navbar */}
       <div className="pt-20">
         <div
-          className="max-w-5xl mx-auto px-4 md:px-6 py-3 flex justify-between items-center border-b"
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center border-b"
           style={{ borderColor: dark ? "#222" : "rgba(26,46,28,0.08)" }}
         >
           <div className="flex items-center gap-2">
@@ -914,7 +934,7 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto w-full px-4 md:px-6 mt-6 flex-1 flex flex-col overflow-x-hidden relative z-10">
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-6 flex-1 flex flex-col overflow-x-hidden relative z-10">
         <div className="flex-1 flex flex-col space-y-6 w-full">
           {/* Page Heading Section */}
           <div className="flex justify-between items-center" style={{ marginBottom: 4 }}>
@@ -1299,7 +1319,16 @@ export default function LibraryPage() {
           <UploadDocumentModal
             isOpen={isUploadOpen}
             onClose={() => setIsUploadOpen(false)}
-            onSuccess={fetchDocuments}
+            onSuccess={async (newDoc?: any) => {
+              if (newDoc && newDoc.id) {
+                setDocuments((prev: any[]) => {
+                  if (prev.some((d: any) => d.id === newDoc.id)) return prev;
+                  return [newDoc, ...prev];
+                });
+              }
+              await invalidateCache('documents');
+              await fetchDocuments(true);
+            }}
             defaultCategory={selectedFolder || ""}
             existingCategories={folderCategories}
           />
@@ -1635,6 +1664,7 @@ export default function LibraryPage() {
         resourceId={shareDoc?.id} 
         resourceType="document" 
         triggerMessage={triggerMessage} 
+        onShareUpdated={() => fetchDocuments(true)}
       />
     </div>
   );

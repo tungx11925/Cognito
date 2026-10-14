@@ -86,7 +86,10 @@ export default function TargetUserProfilePage() {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      const res = await fetch(`${API_BASE_URL}/users/${userId}/profile`, { headers });
+      const res = await fetch(`${API_BASE_URL}/users/${userId}/profile`, { 
+        headers,
+        credentials: "include"
+      });
       const data = await res.json();
 
       if (res.ok) {
@@ -292,7 +295,7 @@ export default function TargetUserProfilePage() {
         activeUser={activeUser!}
       />
 
-      <div className="max-w-5xl mx-auto px-4 pt-24 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 space-y-6">
         
         {/* Profile Info Header Card */}
         <Card className="overflow-hidden">

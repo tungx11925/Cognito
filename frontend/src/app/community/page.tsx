@@ -745,7 +745,7 @@ export default function CommunityPage() {
       />
 
       {/* Hero Banner Header */}
-      <header className="border-b border-stone-200/80 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-20">
+      <header className="border-b border-stone-200/80 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/80 backdrop-blur-md pt-16 sm:pt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>

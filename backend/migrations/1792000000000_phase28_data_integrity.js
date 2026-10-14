@@ -13,9 +13,13 @@ exports.up = (pgm) => {
     CREATE INDEX IF NOT EXISTS idx_conversations_last_sender_id ON conversations(last_sender_id);
     CREATE INDEX IF NOT EXISTS idx_flashcard_decks_forked_from_id ON flashcard_decks(forked_from_id);
     CREATE INDEX IF NOT EXISTS idx_flashcards_document_id ON flashcards(document_id);
-    CREATE INDEX IF NOT EXISTS idx_generation_jobs_document_id ON generation_jobs(document_id);
-    CREATE INDEX IF NOT EXISTS idx_generation_jobs_result_deck_id ON generation_jobs(result_deck_id);
-    CREATE INDEX IF NOT EXISTS idx_generation_jobs_user_id ON generation_jobs(user_id);
+    DO $$ BEGIN
+      IF to_regclass('public.generation_jobs') IS NOT NULL THEN
+        CREATE INDEX IF NOT EXISTS idx_generation_jobs_document_id ON generation_jobs(document_id);
+        CREATE INDEX IF NOT EXISTS idx_generation_jobs_result_deck_id ON generation_jobs(result_deck_id);
+        CREATE INDEX IF NOT EXISTS idx_generation_jobs_user_id ON generation_jobs(user_id);
+      END IF;
+    END $$;
     CREATE INDEX IF NOT EXISTS idx_match_game_leaderboards_user_id ON match_game_leaderboards(user_id);
     CREATE INDEX IF NOT EXISTS idx_moderation_logs_report_id ON moderation_logs(report_id);
     CREATE INDEX IF NOT EXISTS idx_payment_orders_plan_id ON payment_orders(plan_id);
@@ -23,12 +27,20 @@ exports.up = (pgm) => {
     CREATE INDEX IF NOT EXISTS idx_purchased_resources_document_id ON purchased_resources(document_id);
     CREATE INDEX IF NOT EXISTS idx_purchased_resources_user_id ON purchased_resources(user_id);
     CREATE INDEX IF NOT EXISTS idx_questions_source_chunk_id ON questions(source_chunk_id);
-    CREATE INDEX IF NOT EXISTS idx_quiz_attempts_document_id ON quiz_attempts(document_id);
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'quiz_attempts' AND column_name = 'document_id') THEN
+        CREATE INDEX IF NOT EXISTS idx_quiz_attempts_document_id ON quiz_attempts(document_id);
+      END IF;
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'study_sessions' AND column_name = 'learning_goal_id') THEN
+        CREATE INDEX IF NOT EXISTS idx_study_sessions_learning_goal_id ON study_sessions(learning_goal_id);
+      END IF;
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'study_sessions' AND column_name = 'quiz_id') THEN
+        CREATE INDEX IF NOT EXISTS idx_study_sessions_quiz_id ON study_sessions(quiz_id);
+      END IF;
+    END $$;
     CREATE INDEX IF NOT EXISTS idx_shared_links_deck_id ON shared_links(deck_id);
     CREATE INDEX IF NOT EXISTS idx_shared_links_document_id ON shared_links(document_id);
     CREATE INDEX IF NOT EXISTS idx_study_sessions_document_id ON study_sessions(document_id);
-    CREATE INDEX IF NOT EXISTS idx_study_sessions_learning_goal_id ON study_sessions(learning_goal_id);
-    CREATE INDEX IF NOT EXISTS idx_study_sessions_quiz_id ON study_sessions(quiz_id);
     CREATE INDEX IF NOT EXISTS idx_subscriptions_plan_id ON subscriptions(plan_id);
     CREATE INDEX IF NOT EXISTS idx_test_sets_ai_model_id ON test_sets(ai_model_id);
     CREATE INDEX IF NOT EXISTS idx_test_sets_config_id ON test_sets(config_id);
