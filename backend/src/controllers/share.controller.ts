@@ -165,6 +165,12 @@ export const generateShareLink = async (req: AuthRequest, res: Response) => {
           });
 
         } else if (visibility === 'restricted') {
+          // Ensure database constraint allows 'restricted'
+          await client.query(`
+            ALTER TABLE documents DROP CONSTRAINT IF EXISTS chk_documents_visibility;
+            ALTER TABLE documents ADD CONSTRAINT chk_documents_visibility CHECK (visibility IN ('private', 'restricted', 'public'));
+          `).catch(() => {});
+
           // Restricted: Accessible via link only, NOT published to community
           await client.query(
             `UPDATE documents SET visibility = 'restricted', is_community_published = false, updated_at = NOW() WHERE id = $1`,

@@ -9,6 +9,7 @@ process.on('unhandledRejection', (reason: any) => {
 
 import app from './app';
 import http from 'http';
+import { db } from './db';
 
 import { initSubscriptionScheduler } from './services/subscription.service';
 import { documentProcessingService } from './services/document-processing.service';
@@ -22,6 +23,15 @@ server.headersTimeout = 66000;
 
 server.listen(PORT, () => {
   console.log(`🚀 Backend server running on port ${PORT}`);
+  
+  // Ensure documents visibility check constraint allows 'restricted'
+  db.query(`
+    ALTER TABLE documents DROP CONSTRAINT IF EXISTS chk_documents_visibility;
+    ALTER TABLE documents ADD CONSTRAINT chk_documents_visibility CHECK (visibility IN ('private', 'restricted', 'public'));
+  `).catch(err => {
+    console.warn('[DB] chk_documents_visibility constraint update notice:', err?.message);
+  });
+
   // Initialize periodic background sweep for subscriptions and abandoned orders
   initSubscriptionScheduler();
   // GAP-08: Tự động phục hồi các tài liệu PENDING / PROCESSING khi khởi động

@@ -8,7 +8,9 @@ export const uploadDocumentSchema = z.object({
     visibility: z.string().optional().transform(val => {
       if (!val) return 'private';
       const lower = val.toLowerCase().trim();
-      return lower === 'public' ? 'public' : 'private';
+      if (lower === 'public') return 'public';
+      if (lower === 'restricted' || lower === 'link') return 'restricted';
+      return 'private';
     }),
     is_community_published: z.union([z.boolean(), z.string().transform(val => val === 'true')]).optional().default(false),
   }),
@@ -38,7 +40,9 @@ export const createDocumentSchema = z.object({
     visibility: z.string().optional().transform(val => {
       if (!val) return 'private';
       const lower = val.toLowerCase().trim();
-      return lower === 'public' ? 'public' : 'private';
+      if (lower === 'public') return 'public';
+      if (lower === 'restricted' || lower === 'link') return 'restricted';
+      return 'private';
     }),
     is_community_published: z.union([z.boolean(), z.string().transform(val => val === 'true')]).optional().default(false),
   }),
@@ -56,7 +60,9 @@ export const updateDocumentSchema = z.object({
     visibility: z.string().optional().transform(val => {
       if (!val) return undefined;
       const lower = val.toLowerCase().trim();
-      return lower === 'public' ? 'public' : 'private';
+      if (lower === 'public') return 'public';
+      if (lower === 'restricted' || lower === 'link') return 'restricted';
+      return 'private';
     }),
     is_community_published: z.union([z.boolean(), z.string().transform(val => val === 'true')]).optional(),
   }),
