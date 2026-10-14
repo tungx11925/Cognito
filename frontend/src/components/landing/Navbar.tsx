@@ -296,7 +296,7 @@ export function Navbar({ isLoggedIn, onSignInClick, onDashboardClick, activeUser
         boxShadow: scrolled ? "0 2px 20px rgba(26,61,40,0.08)" : "none",
       }}
     >
-      <div className="max-w-7xl mx-auto px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 gap-2 xl:gap-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 cursor-pointer shrink-0 group text-[#0d1a14] dark:text-zinc-100">

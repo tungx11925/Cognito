@@ -53,7 +53,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         activeUser={activeUser!}
       />
       
-      <main className="max-w-7xl mx-auto px-4 md:px-8 pt-20 pb-20">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-20">
         {children}
       </main>
 

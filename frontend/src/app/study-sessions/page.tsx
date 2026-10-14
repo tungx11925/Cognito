@@ -124,8 +124,8 @@ export default function StudySessionsPage() {
       />
 
       {/* Hero Header */}
-      <div className="bg-white dark:bg-zinc-900 border-b border-gray-200/80 dark:border-zinc-800 px-4 sm:px-8 pt-24 pb-10 transition-colors">
-        <div className="max-w-5xl mx-auto">
+      <div className="bg-white dark:bg-zinc-900 border-b border-gray-200/80 dark:border-zinc-800 pt-24 pb-10 transition-colors">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-400 text-xs font-bold rounded-full mb-3 border border-emerald-200/60 dark:border-emerald-800">
             <Sparkles size={13} />
             <span>Không gian tự học cá nhân hóa</span>
@@ -140,7 +140,7 @@ export default function StudySessionsPage() {
       </div>
 
       {/* Grid of Study Tools */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-8 flex-1 w-full">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {studyTools.map((tool) => {
             const Icon = tool.icon;

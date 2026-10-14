@@ -841,7 +841,7 @@ export default function LibraryPage() {
       {/* Toolbar Sub-navbar */}
       <div className="pt-20">
         <div
-          className="max-w-5xl mx-auto px-4 md:px-6 py-3 flex justify-between items-center border-b"
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center border-b"
           style={{ borderColor: dark ? "#222" : "rgba(26,46,28,0.08)" }}
         >
           <div className="flex items-center gap-2">
@@ -916,7 +916,7 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto w-full px-4 md:px-6 mt-6 flex-1 flex flex-col overflow-x-hidden relative z-10">
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-6 flex-1 flex flex-col overflow-x-hidden relative z-10">
         <div className="flex-1 flex flex-col space-y-6 w-full">
           {/* Page Heading Section */}
           <div className="flex justify-between items-center" style={{ marginBottom: 4 }}>

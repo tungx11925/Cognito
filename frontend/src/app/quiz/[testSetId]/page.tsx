@@ -561,8 +561,8 @@ export default function QuizPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] flex flex-col justify-between">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur border-b border-gray-200 dark:border-zinc-800 px-4 sm:px-6 py-3.5 shadow-sm">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur border-b border-gray-200 dark:border-zinc-800 px-4 sm:px-6 lg:px-8 py-3.5 shadow-sm">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link
               href="/ai-test"
@@ -616,7 +616,7 @@ export default function QuizPage() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         {/* Left: Question Card (3 cols) */}
         <div className="lg:col-span-3 space-y-4">
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-200 dark:border-zinc-800">

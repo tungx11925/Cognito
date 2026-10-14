@@ -401,7 +401,7 @@ export default function AITestPage() {
 
   return (
     <MainLayout>
-      <div className="max-w-6xl mx-auto p-6 space-y-6 text-gray-900 dark:text-zinc-100 transition-colors duration-200">
+      <div className="w-full space-y-6 text-gray-900 dark:text-zinc-100 transition-colors duration-200">
         {/* HEADER */}
         <div className="flex items-center justify-between">
           <div>
