@@ -1,14 +1,19 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { Panel, Group, Separator } from "react-resizable-panels";
 import Link from "next/link";
-import { X, Save, CheckCircle2, Clock, Sparkles, Send, Loader2, Play, BookOpen, Trash2, BadgeCheck, FileEdit } from "lucide-react";
+import { X, Save, CheckCircle2, Clock, Sparkles, Send, Loader2, Play, BookOpen, Trash2, BadgeCheck, FileEdit, AlertTriangle, PlusCircle, BarChart2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getQuestions, bulkUpdateQuestions, approveTestSet, deleteQuestion, getTestSetDetail, updateQuestion } from "@/services/ai-test.service";
 import { apiFetch } from "@/services/api";
 import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 interface Option { A: string; B: string; C: string; D: string }
 interface Question {
@@ -51,9 +56,10 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
   // Chat state
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<{role: "user" | "ai", content: string}[]>([
-    { role: "ai", content: "Chào bạn! Tôi là trợ lý AI. Bạn có thể yêu cầu tôi tạo thêm câu hỏi, sửa đổi đáp án, hoặc giải thích chi tiết về bộ đề này." }
+    { role: "ai", content: "Chào bạn! Tôi là **AI Trợ giảng** 🎓\n\nTôi có thể giúp bạn:\n- ✅ **Kiểm tra lỗi sai** trong câu hỏi\n- ➕ **Tạo thêm câu hỏi** theo yêu cầu\n- 📊 **Phân tích độ khó** của bộ đề\n- 💡 **Gợi ý cải thiện** đề thi\n\nHãy nhập yêu cầu hoặc chọn nhanh bên dưới!" }
   ]);
   const [chatLoading, setChatLoading] = useState(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const { register, control, handleSubmit, reset, getValues } = useForm<FormValues>({
     defaultValues: { questions: [] },
@@ -139,31 +145,67 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
     else toast.success(`Đã lưu ${result.updatedIds?.length ?? 0} câu hỏi!`);
   };
 
-  const handleChatSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim() || chatLoading) return;
-    const msg = chatInput.trim();
-    setChatInput("");
+  // Auto-scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, chatLoading]);
+
+  // Compact context prefix — chỉ ~30 tokens
+  const buildCtx = (qs: Question[]) => {
+    const counts: Record<string, number> = {};
+    qs.forEach(q => { counts[q.type] = (counts[q.type] || 0) + 1; });
+    const typeStr = Object.entries(counts)
+      .map(([t, n]) => `${t==='MULTIPLE_CHOICE'?'MC':t==='FILL_BLANK'?'FB':t==='ESSAY'?'ES':'TF'}:${n}`)
+      .join(',');
+    return `[Đề:"${testSetName.slice(0,30)}"|${qs.length}câu|${typeStr}]`;
+  };
+
+  // withQs=true: đính kèm preview 3 câu đầu (cho quick actions cần biết nội dung)
+  const sendChatMessage = async (msg: string, withQs = false) => {
+    if (!msg.trim() || chatLoading) return;
     setChatMessages(prev => [...prev, { role: "user", content: msg }]);
     setChatLoading(true);
 
+    const qs = getValues().questions || [];
+    const ctx = buildCtx(qs);
+
+    let payload: string;
+    if (withQs && qs.length > 0) {
+      const preview = qs.slice(0, 3)
+        .map((q, i) => `Q${i+1}[${q.type[0]}]:${(q.content||'').slice(0,45)}|ans:${q.correct_answer||'?'}`)
+        .join(';');
+      payload = `${ctx}\n${preview}\n${msg}`;
+    } else {
+      payload = `${ctx} ${msg}`;
+    }
+
     try {
-      // Mocked AI generation for chat, since actual backend context chat isn't provided
-      // But we use the groq/gemini logic. We'll call a dummy or existing endpoint.
-      // Since there isn't a direct chat endpoint for testset, we can simulate or use general AI chat.
       const res = await apiFetch('/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, context: `Tôi đang làm việc trên bộ đề "${testSetName}".` })
+        body: JSON.stringify({ message: payload, context_mode: 'GENERAL' })
       });
-      
-      const aiReply = res?.reply || "Đã ghi nhận yêu cầu. Bạn có thể sử dụng cấu hình AI bên ngoài để tạo thêm câu hỏi trực tiếp vào bộ đề này!";
+      const aiReply = res?.reply || "Vui lòng mô tả rõ hơn để tôi hỗ trợ!";
       setChatMessages(prev => [...prev, { role: "ai", content: aiReply }]);
-    } catch (err) {
-      setChatMessages(prev => [...prev, { role: "ai", content: "Xin lỗi, tôi đang gặp lỗi kết nối." }]);
+    } catch {
+      setChatMessages(prev => [...prev, { role: "ai", content: "⚠️ Lỗi kết nối. Vui lòng thử lại." }]);
     } finally {
       setChatLoading(false);
     }
+  };
+
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const msg = chatInput.trim();
+    if (!msg) return;
+    setChatInput("");
+    await sendChatMessage(msg);
+  };
+
+  const handleQuickAction = (text: string, withQs = false) => {
+    sendChatMessage(text, withQs);
   };
 
   return (
@@ -429,59 +471,90 @@ export default function TestSetWorkspace({ testSetId, testSetName, onClose }: Pr
         </Separator>
 
         {/* Right Panel - AI Assistant */}
-        <Panel defaultSize={35} minSize={25} className="flex flex-col bg-[#F8FAFC]">
-          <div className="p-4 border-b border-gray-200 bg-white shadow-sm flex items-center justify-between">
-            <h3 className="text-sm font-black text-gray-800 flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600">
+        <Panel defaultSize={35} minSize={25} className="flex flex-col bg-[#f5f3ee]">
+          <div className="p-4 border-b border-[rgba(26,46,28,0.1)] bg-white shadow-sm flex items-center justify-between flex-shrink-0">
+            <h3 className="text-sm font-black text-[#1a2e1c] flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-[#1a3a2a]">
                 <Sparkles size={14} />
               </div>
               AI Trợ giảng
             </h3>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Markdown + LaTeX ✓
+            </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
             {chatMessages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
-                  msg.role === 'user' 
-                    ? 'bg-[#1a3a2a] text-white rounded-tr-sm' 
-                    : 'bg-white text-gray-800 border border-gray-100 rounded-tl-sm'
+                <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                  msg.role === 'user'
+                    ? 'bg-[#1a3a2a] text-white rounded-tr-sm'
+                    : 'bg-white text-gray-800 border border-[rgba(26,46,28,0.12)] rounded-tl-sm'
                 }`}>
-                  {msg.content}
+                  {msg.role === 'ai' ? (
+                    <div className="prose prose-sm max-w-none prose-headings:text-[#1a3a2a] prose-strong:text-gray-900 prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <span>{msg.content}</span>
+                  )}
                 </div>
               </div>
             ))}
             {chatLoading && (
               <div className="flex justify-start">
-                <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2 shadow-sm">
-                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-75"></div>
-                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-150"></div>
+                <div className="bg-white border border-[rgba(26,46,28,0.12)] rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5 shadow-sm">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '120ms' }}></div>
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '240ms' }}></div>
+                  <span className="text-[11px] text-gray-400 ml-1">AI đang soạn...</span>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="p-4 bg-white border-t border-gray-200">
-            <div className="flex gap-2 overflow-x-auto pb-3 mb-1 no-scrollbar">
-              <button onClick={() => setChatInput("Kiểm tra lỗi sai trong bộ đề này")} className="flex-shrink-0 px-3 py-1.5 bg-indigo-50 text-indigo-700 text-[11px] font-bold rounded-lg border border-indigo-100 hover:bg-indigo-100 transition-colors">
-                Kiểm tra lỗi sai
+          <div className="p-4 bg-white border-t border-[rgba(26,46,28,0.08)] flex-shrink-0">
+            <div className="flex gap-1.5 overflow-x-auto pb-2.5 mb-2 no-scrollbar flex-wrap">
+              <button
+                onClick={() => handleQuickAction("Liệt kê lỗi: câu mơ hồ, đáp án sai, thiếu giải thích.", true)}
+                disabled={chatLoading}
+                className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-700 text-[11px] font-bold rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors disabled:opacity-50"
+              >
+                <AlertTriangle size={11} /> Kiểm tra lỗi
               </button>
-              <button onClick={() => setChatInput("Tạo thêm 5 câu trắc nghiệm khó")} className="flex-shrink-0 px-3 py-1.5 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors">
-                Thêm 5 câu TN
+              <button
+                onClick={() => handleQuickAction("Tạo 5 câu TN khó, 4 đáp án A-D, kèm đáp án+giải thích 1 dòng.")}
+                disabled={chatLoading}
+                className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+              >
+                <PlusCircle size={11} /> Thêm 5 câu
+              </button>
+              <button
+                onClick={() => handleQuickAction("Tóm tắt: độ khó, chủ đề trọng tâm, gợi ý cải thiện.")}
+                disabled={chatLoading}
+                className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-[#f0fdf4] text-[#1a3a2a] text-[11px] font-bold rounded-lg border border-[#d1fae5] hover:bg-emerald-100 transition-colors disabled:opacity-50"
+              >
+                <BarChart2 size={11} /> Phân tích
               </button>
             </div>
             <form onSubmit={handleChatSubmit} className="flex items-center gap-2">
               <input
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSubmit(e as any); } }}
                 placeholder="Nhắn tin với AI để hỗ trợ bộ đề..."
-                className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+                className="flex-1 bg-gray-50 border border-[rgba(26,46,28,0.18)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#1a3a2a] focus:ring-2 focus:ring-[#1a3a2a]/10 transition-all"
               />
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={!chatInput.trim() || chatLoading}
-                className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm shadow-indigo-200"
+                className="p-2.5 bg-[#1a3a2a] text-white rounded-xl hover:bg-[#234b37] disabled:opacity-50 transition-colors shadow-sm"
               >
                 <Send size={16} />
               </button>

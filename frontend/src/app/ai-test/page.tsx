@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Navbar } from "@/components/landing/Navbar";
+import { Background } from "@/components/flashcards/Background";
 import { useStudy } from "@/context/StudyContext";
 import dynamic from "next/dynamic";
 import {
@@ -79,6 +80,14 @@ const SCORE_ROWS = [
   { label: "Điền từ",     ck: "fill_blank_count",       sk: "fill_blank_score" },
   { label: "Tự luận",     ck: "essay_count",             sk: "essay_score" },
   { label: "Đúng / Sai",  ck: "true_false_count",        sk: "true_false_score" },
+];
+
+const PROMPT_TEMPLATES = [
+  { label: "📚 Trắc nghiệm từ bài giảng", text: "Tạo 10 câu trắc nghiệm từ nội dung sau. Mỗi câu có 4 lựa chọn A/B/C/D rõ ràng, không mơ hồ, kèm đáp án đúng:\n\n" },
+  { label: "⏱️ Kiểm tra 15 phút", text: "Soạn bài kiểm tra 15 phút gồm 10 câu trắc nghiệm, độ khó trung bình, về chủ đề:\n\n" },
+  { label: "🔄 Ôn tập cuối chương", text: "Tạo 20 câu hỏi ôn tập cuối chương bao gồm trắc nghiệm và điền từ, độ khó vừa phải. Nội dung:\n\n" },
+  { label: "🌍 Tình huống thực tế", text: "Tạo 10 câu trắc nghiệm dựa trên tình huống thực tế liên quan đến chủ đề:\n\n" },
+  { label: "🧠 Phân loại Bloom", text: "Tạo 12 câu theo thang Bloom (4 câu nhớ, 4 câu hiểu, 4 câu vận dụng) từ nội dung:\n\n" },
 ];
 
 function StatBadge({
@@ -157,6 +166,7 @@ export default function AITestPage() {
   const [modelId, setModelId]                 = useState<number | null>(null);
   const [customInstruction, setCustomInstruction] = useState("");
   const [mode, setMode]                       = useState<"practice" | "exam">("practice");
+  const [autoScale, setAutoScale]             = useState(true);
 
 
   const { register, handleSubmit, watch, reset } = useForm<AIConfig>();
@@ -356,7 +366,10 @@ export default function AITestPage() {
         setFileUrl(null);
       }
       toast.dismiss(tid);
-    } catch (err: any) { 
+      toast.success(`✓ Đã đọc "${file.name}" — nhấn "⚡ Tạo đề ngay" để bắt đầu.`, { duration: 4000 });
+      setSourceType("upload");
+      setShowGenPanel(true);
+    } catch (err: any) {
       toast.dismiss(tid);
       toast.error("Lỗi đọc file: " + err.message); 
       console.error(err);
@@ -409,6 +422,10 @@ export default function AITestPage() {
         modelId: modelId ?? undefined,
         customInstruction: customInstruction.trim() || undefined,
       };
+      if (autoScale && questionType !== "mixed") {
+        payload.targetTotalScore = 10;
+        payload.scorePerQuestion = parseFloat((10 / effectiveQuantity).toFixed(4));
+      }
       let legacyContent = "";
       if (sourceType === "document") {
         if (selectedDocs.length === 0) {
@@ -479,8 +496,8 @@ export default function AITestPage() {
 
   if (loading) return (
     <div
-      className="min-h-screen bg-[#FDFCFB] dark:bg-[#0B0F17] flex flex-col font-sans transition-colors duration-200"
-      style={{ fontFamily: "'Outfit', sans-serif" }}
+      className="min-h-screen flex flex-col transition-colors duration-300 relative overflow-x-hidden"
+      style={{ background: dark ? "#121212" : "#ebe8e0", fontFamily: "'Outfit', sans-serif" }}
     >
       <Navbar
         isLoggedIn={isAuthenticated}
@@ -499,9 +516,14 @@ export default function AITestPage() {
 
   return (
     <div
-      className="min-h-screen bg-[#FDFCFB] dark:bg-[#0B0F17] flex flex-col font-sans transition-colors duration-200"
-      style={{ fontFamily: "'Outfit', sans-serif" }}
+      className="min-h-screen flex flex-col transition-colors duration-300 pb-12 relative overflow-x-hidden"
+      style={{
+        background: bgStyle === "default" ? (dark ? "#121212" : "#ebe8e0") : "transparent",
+        fontFamily: "'Outfit', sans-serif",
+      }}
     >
+      <Background styleType={bgStyle} dark={dark} />
+
       <Navbar
         isLoggedIn={isAuthenticated}
         onSignInClick={() => setShowLoginModal(true)}
@@ -756,16 +778,39 @@ export default function AITestPage() {
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
               <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-5 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-zinc-100">✨ Tạo bộ đề mới</h3>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-zinc-100 flex items-center gap-2">
+                    <Sparkles size={15} className="text-emerald-500" /> Tạo bộ đề mới với AI
+                  </h3>
                   <button onClick={() => setShowGenPanel(false)}><X size={16} className="text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300" /></button>
                 </div>
 
-                {/* Test name */}
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Tên bộ đề (tuỳ chọn)</label>
-                  <input value={testName} onChange={e => setTestName(e.target.value)}
-                    placeholder="Để trống sẽ tự tạo tên theo ngày..."
-                    className="w-full border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 placeholder:text-gray-400 dark:placeholder:text-zinc-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600" />
+                {/* Step 1: Model AI + Test name — always visible at top */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block flex items-center gap-1">
+                      <Cpu size={12} className="text-emerald-500" /> Model AI <span className="text-gray-400 font-normal">(quan trọng)</span>
+                    </label>
+                    <select value={modelId ?? ""} onChange={e => setModelId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full border-2 border-emerald-200 dark:border-emerald-800 rounded-xl px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-500 font-medium">
+                      <option value="">⚡ Tự động (Fast Groq → Balanced Gemini)</option>
+                      {aiModels.map(m => {
+                        const isAvail = m.is_available ?? m.isAvailable ?? true;
+                        const tierBadge = m.tier === 'fast' ? '⚡ ' : m.tier === 'balanced' ? '⚖️ ' : m.tier === 'advanced' ? '🧠 ' : '';
+                        return (
+                          <option key={m.id} value={m.id} disabled={!isAvail}>
+                            {tierBadge}{m.display_name}{!isAvail ? " — [Chưa khả dụng]" : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-0.5">⚡ Fast: tốc độ cao · ⚖️ Balanced: chất lượng cân bằng · 🧠 Advanced: tự luận sâu</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Tên bộ đề (tuỳ chọn)</label>
+                    <input value={testName} onChange={e => setTestName(e.target.value)}
+                      placeholder="Để trống sẽ tự tạo tên theo ngày..."
+                      className="w-full border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 placeholder:text-gray-400 dark:placeholder:text-zinc-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600" />
+                  </div>
                 </div>
 
                 {/* Source type tabs */}
@@ -788,9 +833,24 @@ export default function AITestPage() {
 
                 {/* Source content */}
                 {sourceType === "paste" && (
-                  <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={7}
-                    placeholder="Dán nội dung bài giảng, ghi chú, hoặc bất kỳ văn bản nào vào đây..."
-                    className="w-full border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl p-3 text-sm text-gray-700 dark:text-zinc-200 placeholder:text-gray-400 dark:placeholder:text-zinc-500 resize-none focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600" />
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {PROMPT_TEMPLATES.map((t, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setPasteText(t.text)}
+                          className="px-2.5 py-1 text-[11px] font-semibold rounded-full border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:border-[#1a3a2a] dark:hover:border-emerald-500 hover:bg-[#f0fdf4] dark:hover:bg-emerald-950/30 transition-all"
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                    <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={7}
+                      placeholder="Dán nội dung bài giảng, ghi chú hoặc nhập prompt hướng dẫn AI tạo đề... (tối thiểu 20 ký tự)"
+                      className="w-full border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl p-3 text-sm text-gray-700 dark:text-zinc-200 placeholder:text-gray-400 dark:placeholder:text-zinc-500 resize-none focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600" />
+                    <p className="text-[11px] text-gray-400 dark:text-zinc-500">💡 Chọn mẫu prompt ở trên để điền nhanh, rồi thêm nội dung cụ thể vào sau.</p>
+                  </div>
                 )}
 
                 {sourceType === "document" && (
@@ -881,6 +941,24 @@ export default function AITestPage() {
                     </div>
                     <input ref={fileRef} type="file" accept=".txt,.docx,.pptx,.ppsx,.odp,.pdf,.ppt,.key" className="hidden" onChange={handleFileUpload} />
                     
+                    {/* Quick Generate CTA after upload */}
+                    {uploadedText && (
+                      <div className="flex items-center justify-between p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+                        <div>
+                          <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">✓ File đã sẵn sàng: {fileName}</p>
+                          <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{uploadedText.length.toLocaleString()} ký tự đã trích xuất</p>
+                        </div>
+                        <button
+                          onClick={handleGenerate}
+                          disabled={generating}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-[#1a3a2a] dark:bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-[#234b37] dark:hover:bg-emerald-600 transition-colors shadow-sm disabled:opacity-50 active:scale-95"
+                        >
+                          {generating ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                          ⚡ Tạo đề ngay
+                        </button>
+                      </div>
+                    )}
+
                     {/* File Preview directly on web */}
                     {uploadedText && (
                       <div className="border border-gray-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-gray-50 dark:bg-zinc-900 flex flex-col">
@@ -957,44 +1035,18 @@ export default function AITestPage() {
                     <Cpu size={14} className="text-[#1a3a2a] dark:text-emerald-400" /> Cấu hình AI
                   </h4>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Model AI</label>
-                      <select value={modelId ?? ""} onChange={e => setModelId(e.target.value ? Number(e.target.value) : null)}
-                        className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600">
-                        <option value="">⚡ Tự động (Ưu tiên Fast Groq → Balanced Gemini, hoặc Gemini khi tài liệu &gt; 8.000 ký tự)</option>
-                        {aiModels.map(m => {
-                          const isAvail = m.is_available ?? m.isAvailable ?? true;
-                          const tierBadge = m.tier === 'fast' ? '⚡ [FAST] ' : m.tier === 'balanced' ? '⚖️ [BALANCED] ' : m.tier === 'advanced' ? '🧠 [ADVANCED] ' : '';
-                          return (
-                            <option
-                              key={m.id}
-                              value={m.id}
-                              disabled={!isAvail}
-                              className={!isAvail ? "text-gray-400 bg-gray-100 dark:bg-zinc-800 italic" : ""}
-                            >
-                              {tierBadge}{m.display_name} ({m.provider}){!isAvail ? " — [Chưa khả dụng / Thiếu API Key]" : ""}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1">
-                        Fast: Xử lý nhanh · Balanced: Đề thi chuẩn · Advanced: Tự luận chuyên sâu
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Kiểu prompt</label>
-                      <select value={templateId} onChange={e => {
-                        const id = e.target.value;
-                        setTemplateId(id);
-                        if (id === "beginner_explanation") setAudienceLevel("weak");
-                      }} className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600">
-                        {aiTemplates.length === 0 && <option value="basic_quiz">Basic Quiz</option>}
-                        {aiTemplates.map(t => (
-                          <option key={t.id} value={t.id}>{t.name} — {t.description}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 dark:text-zinc-400 mb-1 block">Kiểu prompt AI</label>
+                    <select value={templateId} onChange={e => {
+                      const id = e.target.value;
+                      setTemplateId(id);
+                      if (id === "beginner_explanation") setAudienceLevel("weak");
+                    }} className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:outline-none focus:border-[#1a3a2a] dark:focus:border-emerald-600">
+                      {aiTemplates.length === 0 && <option value="basic_quiz">Basic Quiz</option>}
+                      {aiTemplates.map(t => (
+                        <option key={t.id} value={t.id}>{t.name} — {t.description}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -1081,6 +1133,26 @@ export default function AITestPage() {
                     </div>
                   </div>
 
+                  {/* Auto-scale thang điểm 10 */}
+                  <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl">
+                    <div>
+                      <p className="text-xs font-bold text-amber-800 dark:text-amber-300">Thang điểm 10 tự động</p>
+                      {autoScale && questionType !== "mixed" ? (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                          {Number(quantity) || 10} câu × {(10 / Math.max(1, Number(quantity) || 10)).toFixed(2)} điểm = <b>10.00 điểm</b>
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                          {autoScale ? "Chọn loại câu hỏi cụ thể để bật thang điểm 10" : "Điểm theo cấu hình đã lưu"}
+                        </p>
+                      )}
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" checked={autoScale} onChange={e => setAutoScale(e.target.checked)} className="sr-only peer" />
+                      <div className="w-10 h-5 bg-gray-200 dark:bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500 dark:peer-checked:bg-amber-600"></div>
+                    </label>
+                  </div>
+
                   {/* Preset gợi ý chọn nhanh số câu */}
                   <div className="flex items-center gap-1.5 flex-wrap pt-1">
                     <span className="text-[11px] text-gray-500 dark:text-zinc-400 font-medium">Chọn nhanh số câu:</span>
@@ -1113,12 +1185,17 @@ export default function AITestPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-zinc-800">
-                  <p className="text-xs text-gray-400 dark:text-zinc-500">
-                    Bộ đề sẽ ở trạng thái NHÁP — xem lại, sửa rồi bấm "Duyệt &amp; Lưu".
-                  </p>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
+                      AI tạo → Xem lại &amp; chỉnh → Duyệt &amp; Lưu
+                    </p>
+                    <p className="text-[11px] text-gray-400 dark:text-zinc-500">
+                      Bộ đề nháp sẽ mở ngay để bạn kiểm tra trước khi lưu chính thức.
+                    </p>
+                  </div>
                   <button onClick={handleGenerate} disabled={generating}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#1a3a2a] dark:bg-emerald-700 hover:bg-[#234b37] dark:hover:bg-emerald-600 text-white text-sm font-bold rounded-xl disabled:opacity-50 transition-colors shadow-md shadow-[#1a3a2a]/20">
-                    {generating ? <><Loader2 size={14} className="animate-spin" /> Đang tạo...</> : <><Sparkles size={14} /> Tạo bộ đề</>}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#1a3a2a] dark:bg-emerald-700 hover:bg-[#234b37] dark:hover:bg-emerald-600 text-white text-sm font-bold rounded-xl disabled:opacity-50 transition-colors shadow-md shadow-[#1a3a2a]/20 active:scale-95">
+                    {generating ? <><Loader2 size={14} className="animate-spin" /> AI đang tạo đề...</> : <><Sparkles size={14} /> Tạo bộ đề</>}
                   </button>
                 </div>
 

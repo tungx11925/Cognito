@@ -298,7 +298,8 @@ export default function QuizPage() {
     });
 
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] py-8 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8" style={{ background: "var(--result-bg, #ebe8e0)", fontFamily: "'Outfit', sans-serif" }}
+        data-theme-result>
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -309,7 +310,7 @@ export default function QuizPage() {
               <ArrowLeft size={16} /> Quay lại danh sách đề thi
             </Link>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[rgba(26,46,28,0.1)] dark:bg-zinc-800 text-[#1a3a2a] dark:text-zinc-300">
                 Lượt làm #{resAttempt.id}
               </span>
             </div>
@@ -352,7 +353,7 @@ export default function QuizPage() {
 
             {/* Stats Row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-6 border-t border-gray-100 dark:border-zinc-800">
-              <div className="bg-slate-50 dark:bg-zinc-800/60 p-3.5 rounded-2xl text-center">
+              <div className="bg-white/70 dark:bg-zinc-800/60 p-3.5 rounded-2xl text-center border border-[rgba(26,46,28,0.08)]">
                 <p className="text-xs font-semibold text-gray-400 dark:text-zinc-400">Tổng số câu</p>
                 <p className="text-xl font-bold text-gray-800 dark:text-zinc-100 mt-1">{resAttempt.totalQuestions}</p>
               </div>
@@ -382,7 +383,7 @@ export default function QuizPage() {
               )}
               <button
                 onClick={handleRetryAll}
-                className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-slate-700 dark:text-zinc-200 bg-slate-100 dark:bg-zinc-800 rounded-xl hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-[#1a3a2a] dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-[rgba(26,46,28,0.2)] rounded-xl hover:bg-[#f0fdf4] dark:hover:bg-zinc-700 transition-colors"
               >
                 <RotateCcw size={16} /> Làm lại cả bộ đề
               </button>
@@ -559,7 +560,7 @@ export default function QuizPage() {
   ).length;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] flex flex-col justify-between">
+    <div className="min-h-screen flex flex-col justify-between" style={{ background: "#ebe8e0", fontFamily: "'Outfit', sans-serif" }}>
       {/* Top Navbar */}
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur border-b border-gray-200 dark:border-zinc-800 px-4 sm:px-6 lg:px-8 py-3.5 shadow-sm">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
