@@ -115,7 +115,7 @@ app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 app.get(['/health', '/api/health'], (req, res) => {
-  res.json({ status: 'OK', version: '2.1.0-feedback', timestamp: new Date().toISOString() });
+  res.json({ status: 'OK', version: '2.2.0-timeline', timestamp: new Date().toISOString() });
 });
 
 app.use('/api/auth', authRoutes);
