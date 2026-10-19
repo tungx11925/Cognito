@@ -1034,25 +1034,6 @@ export default function AdminPage() {
 
                   </div>
 
-                  {/* Secondary Learning & AI Usage Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/80 dark:border-zinc-800 p-4 text-center">
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase">Flashcard Decks</span>
-                      <p className="text-xl font-black text-gray-800 dark:text-zinc-100 mt-1">{stats.totalDecks?.toLocaleString() || 0}</p>
-                    </div>
-                    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/80 dark:border-zinc-800 p-4 text-center">
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase">Bộ đề trắc nghiệm</span>
-                      <p className="text-xl font-black text-gray-800 dark:text-zinc-100 mt-1">{stats.totalTestSets?.toLocaleString() || 0}</p>
-                    </div>
-                    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/80 dark:border-zinc-800 p-4 text-center">
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase">Sơ đồ Mindmap</span>
-                      <p className="text-xl font-black text-gray-800 dark:text-zinc-100 mt-1">{stats.totalMindmaps?.toLocaleString() || 0}</p>
-                    </div>
-                    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/80 dark:border-zinc-800 p-4 text-center">
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase">Lượt tạo câu hỏi AI</span>
-                      <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.totalQuestionGens?.toLocaleString() || 0}</p>
-                    </div>
-                  </div>
 
                   {/* User Registration Growth Chart Over Time */}
                   <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 p-6 shadow-sm space-y-6">
