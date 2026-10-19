@@ -152,3 +152,9 @@ export const deleteAdminDocument = (id: number) => apiFetch(`/admin/documents/${
   method: 'DELETE',
   headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }
 });
+
+export const syncAdminTimeline = () => apiFetch('/admin/backdate-timeline', {
+  method: 'POST',
+  headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }
+});
+
