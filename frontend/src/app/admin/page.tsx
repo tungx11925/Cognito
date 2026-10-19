@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, FileText, DollarSign, Search, Trash2, 
   Loader2, ArrowLeft, ShieldAlert, TrendingUp, BookOpen, 
-  Layers, Clock, RefreshCw, ChevronRight, CheckCircle,
+  Layers, Clock, RefreshCw, ChevronLeft, ChevronRight, CheckCircle,
   AlertTriangle, UserPlus, Edit, X, Mail, Lock, Phone, Eye,
   Flag, UserX, UserCheck, CreditCard, HardDrive, Sparkles, Check,
   Calendar, Zap, Shield, AlertCircle, Unlock,
@@ -72,6 +72,8 @@ export default function AdminPage() {
   const [feedbackFilterRating, setFeedbackFilterRating] = useState<number | "all">("all");
   const [feedbackFilterCategory, setFeedbackFilterCategory] = useState<string | "all">("all");
   const [feedbackSearch, setFeedbackSearch] = useState("");
+  const [feedbackPage, setFeedbackPage] = useState(1);
+  const [feedbackLimit, setFeedbackLimit] = useState(8);
 
   // Users Tab states
   const [users, setUsers] = useState<any[]>([]);
@@ -2157,6 +2159,7 @@ export default function AdminPage() {
                               setFeedbackFilterRating('all');
                               setFeedbackFilterCategory('all');
                               setFeedbackSearch('');
+                              setFeedbackPage(1);
                             }}
                             className="text-xs font-bold text-emerald-600 hover:text-emerald-700 underline"
                           >
@@ -2174,13 +2177,19 @@ export default function AdminPage() {
                       <input
                         type="text"
                         value={feedbackSearch}
-                        onChange={(e) => setFeedbackSearch(e.target.value)}
+                        onChange={(e) => {
+                          setFeedbackSearch(e.target.value);
+                          setFeedbackPage(1);
+                        }}
                         placeholder="Tìm theo tên, email, nội dung góp ý..."
                         className="w-full text-xs pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 font-medium"
                       />
                       {feedbackSearch && (
                         <button
-                          onClick={() => setFeedbackSearch('')}
+                          onClick={() => {
+                            setFeedbackSearch('');
+                            setFeedbackPage(1);
+                          }}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                         >
                           <X size={14} />
@@ -2195,9 +2204,10 @@ export default function AdminPage() {
                         <span className="text-xs font-bold text-gray-500">Sao:</span>
                         <select
                           value={feedbackFilterRating}
-                          onChange={(e) =>
-                            setFeedbackFilterRating(e.target.value === 'all' ? 'all' : Number(e.target.value))
-                          }
+                          onChange={(e) => {
+                            setFeedbackFilterRating(e.target.value === 'all' ? 'all' : Number(e.target.value));
+                            setFeedbackPage(1);
+                          }}
                           className="text-xs font-semibold px-3 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-emerald-500"
                         >
                           <option value="all">Tất cả sao</option>
@@ -2212,7 +2222,10 @@ export default function AdminPage() {
                       {/* Category Filter Dropdown */}
                       <select
                         value={feedbackFilterCategory}
-                        onChange={(e) => setFeedbackFilterCategory(e.target.value)}
+                        onChange={(e) => {
+                          setFeedbackFilterCategory(e.target.value);
+                          setFeedbackPage(1);
+                        }}
                         className="text-xs font-semibold px-3 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-emerald-500"
                       >
                         <option value="all">Tất cả chủ đề</option>
@@ -2225,7 +2238,10 @@ export default function AdminPage() {
                       </select>
 
                       <button
-                        onClick={loadFeedbacks}
+                        onClick={() => {
+                          loadFeedbacks();
+                          setFeedbackPage(1);
+                        }}
                         className="p-2 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl border border-gray-200 transition-colors"
                         title="Làm mới danh sách đánh giá"
                       >
@@ -2270,16 +2286,41 @@ export default function AdminPage() {
                       );
                     }
 
+                    const totalItems = filtered.length;
+                    const totalPages = Math.ceil(totalItems / feedbackLimit) || 1;
+                    const safeCurrentPage = Math.min(Math.max(1, feedbackPage), totalPages);
+                    const startIndex = (safeCurrentPage - 1) * feedbackLimit;
+                    const endIndex = Math.min(startIndex + feedbackLimit, totalItems);
+                    const paginated = filtered.slice(startIndex, endIndex);
+
                     return (
                       <div className="space-y-4">
-                        <div className="flex items-center justify-between px-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
                           <span className="text-xs font-bold text-gray-500">
-                            Hiển thị {filtered.length} / {feedbacks.length} đánh giá
+                            Hiển thị <span className="text-gray-900 font-extrabold">{startIndex + 1} - {endIndex}</span> trong tổng số <span className="text-emerald-700 font-extrabold">{totalItems}</span> đánh giá (Trang {safeCurrentPage}/{totalPages})
                           </span>
+
+                          <div className="flex items-center gap-2 self-end sm:self-auto">
+                            <span className="text-xs text-gray-400 font-medium">Số lượng mỗi trang:</span>
+                            <select
+                              value={feedbackLimit}
+                              onChange={(e) => {
+                                setFeedbackLimit(Number(e.target.value));
+                                setFeedbackPage(1);
+                              }}
+                              className="text-xs font-bold px-2.5 py-1.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-emerald-500 shadow-xs"
+                            >
+                              <option value="6">6 thẻ / trang</option>
+                              <option value="8">8 thẻ / trang</option>
+                              <option value="10">10 thẻ / trang</option>
+                              <option value="12">12 thẻ / trang</option>
+                              <option value="20">20 thẻ / trang</option>
+                            </select>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {filtered.map((item) => {
+                          {paginated.map((item) => {
                             const isFeatureProposal = item.category === 'Đề xuất tính năng mới';
                             const isBug = item.category === 'Báo lỗi (Bug)';
 
@@ -2400,6 +2441,70 @@ export default function AdminPage() {
                             );
                           })}
                         </div>
+
+                        {/* Pagination Bar */}
+                        {totalPages > 1 && (
+                          <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+                            <span className="text-gray-500 font-medium text-center sm:text-left">
+                              Trang <strong className="text-gray-900 font-extrabold">{safeCurrentPage}</strong> trên tổng số <strong className="text-gray-900 font-extrabold">{totalPages}</strong> trang ({totalItems} đánh giá)
+                            </span>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => setFeedbackPage((p) => Math.max(1, p - 1))}
+                                disabled={safeCurrentPage <= 1}
+                                className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-30 disabled:pointer-events-none flex items-center gap-1 shadow-xs transition-all"
+                              >
+                                <ChevronLeft size={14} />
+                                <span>Trước</span>
+                              </button>
+
+                              {/* Numbered Page Buttons with intelligent ellipsis */}
+                              {Array.from({ length: totalPages }, (_, idx) => idx + 1)
+                                .filter((p) => p === 1 || p === totalPages || Math.abs(p - safeCurrentPage) <= 1)
+                                .reduce((acc: (number | string)[], p, idx, arr) => {
+                                  if (idx > 0 && p - (arr[idx - 1] as number) > 1) {
+                                    acc.push(`dots-${p}`);
+                                  }
+                                  acc.push(p);
+                                  return acc;
+                                }, [])
+                                .map((item) => {
+                                  if (typeof item === 'string') {
+                                    return (
+                                      <span key={item} className="px-1.5 text-gray-400 font-bold select-none">
+                                        ...
+                                      </span>
+                                    );
+                                  }
+                                  const pageNum = item as number;
+                                  const isActive = pageNum === safeCurrentPage;
+                                  return (
+                                    <button
+                                      key={pageNum}
+                                      onClick={() => setFeedbackPage(pageNum)}
+                                      className={`min-w-[34px] h-8 px-2 rounded-xl text-xs font-bold transition-all shadow-xs ${
+                                        isActive
+                                          ? 'bg-[#0D2B24] text-white shadow-sm'
+                                          : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                                      }`}
+                                    >
+                                      {pageNum}
+                                    </button>
+                                  );
+                                })}
+
+                              <button
+                                onClick={() => setFeedbackPage((p) => Math.min(totalPages, p + 1))}
+                                disabled={safeCurrentPage >= totalPages}
+                                className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-30 disabled:pointer-events-none flex items-center gap-1 shadow-xs transition-all"
+                              >
+                                <span>Sau</span>
+                                <ChevronRight size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
