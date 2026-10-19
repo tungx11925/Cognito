@@ -17,6 +17,7 @@ export class AdminRepository {
       aiUsageRes,
       moderationRes,
       recentOrdersRes,
+      userTrendRes,
     ] = await Promise.all([
       // 1. User population metrics
       db.query(
@@ -132,6 +133,17 @@ export class AdminRepository {
          ORDER BY o.created_at DESC
          LIMIT 8`
       ),
+      // 10. User registration trend
+      db.query(`
+        SELECT 
+          TO_CHAR(created_at, 'YYYY-MM-DD') as date,
+          TO_CHAR(created_at, 'DD/MM') as label,
+          COUNT(*)::int as count
+        FROM users
+        WHERE email != 'admin'
+        GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD'), TO_CHAR(created_at, 'DD/MM')
+        ORDER BY TO_CHAR(created_at, 'YYYY-MM-DD') ASC`
+      ),
     ]);
 
     return {
@@ -144,6 +156,7 @@ export class AdminRepository {
       aiUsage: aiUsageRes.rows[0],
       modStats: moderationRes.rows[0],
       recentOrders: recentOrdersRes.rows,
+      userRegistrationTrend: userTrendRes.rows,
     };
   }
 

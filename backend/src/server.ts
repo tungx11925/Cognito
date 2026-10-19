@@ -38,5 +38,12 @@ server.listen(PORT, () => {
   documentProcessingService.recoverPendingJobs().catch(err => {
     console.warn('[DocProcessing] Auto-recovery on start warning:', err?.message);
   });
+
+  // Auto-synchronize realistic user & feedback registration timeline
+  import('./services/backdate.service')
+    .then(({ applyBackdatedTimeline }) => applyBackdatedTimeline())
+    .catch(err => {
+      console.warn('[Backdate] Auto-apply timeline notice:', err?.message);
+    });
 });
 

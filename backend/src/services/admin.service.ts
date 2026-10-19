@@ -97,6 +97,7 @@ export class AdminService {
         monthlyRevenue: raw.monthlyRevenue,
         subscriptionsByPlan: raw.plansBreakdown,
         recentOrders: raw.recentOrders,
+        userRegistrationTrend: raw.userRegistrationTrend || [],
       },
     };
 

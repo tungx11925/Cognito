@@ -17,7 +17,8 @@ import {
   getAdminOrders, 
   syncSubscriptionsCron, 
   cancelAdminSubscription,
-  getAICostStats
+  getAICostStats,
+  backdateTimeline
 } from '../controllers/admin.controller';
 import { getAdminFeedbacks, deleteAdminFeedback } from '../controllers/feedback.controller';
 
@@ -52,5 +53,6 @@ router.get('/documents', rateLimiter(60000, 120), getDocuments);
 router.delete('/documents/:id', rateLimiter(60000, 30), deleteDocument);
 router.get('/feedbacks', rateLimiter(60000, 120), getAdminFeedbacks);
 router.delete('/feedbacks/:id', rateLimiter(60000, 30), deleteAdminFeedback);
+router.post('/backdate-timeline', rateLimiter(60000, 30), backdateTimeline);
 
 export default router;

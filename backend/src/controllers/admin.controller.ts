@@ -239,3 +239,22 @@ export const getAICostStats = async (_req: AuthRequest, res: Response) => {
     return res.status(error.statusCode || 500).json({ error: error.message || 'Lỗi máy chủ khi lấy thống kê chi phí AI' });
   }
 };
+
+/**
+ * 17. Backdate User Registrations and Feedbacks Timeline
+ */
+export const backdateTimeline = async (_req: AuthRequest, res: Response) => {
+  try {
+    const { applyBackdatedTimeline } = await import('../services/backdate.service');
+    const result = await applyBackdatedTimeline();
+    adminService.clearStatsCache();
+    return res.status(200).json({
+      success: true,
+      message: 'Đã hoàn tất đồng bộ mốc thời gian đăng ký và đánh giá',
+      data: result,
+    });
+  } catch (error: any) {
+    console.error('Error in backdateTimeline:', error);
+    return res.status(500).json({ error: error.message || 'Lỗi khi cập nhật mốc thời gian' });
+  }
+};
