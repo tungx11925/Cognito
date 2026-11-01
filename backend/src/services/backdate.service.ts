@@ -172,8 +172,8 @@ export async function applyBackdatedTimeline() {
         calculatedDate = new Date(calculatedDate.getTime() + 24 * 3600 * 1000); // sang T2
       }
 
-      // Giới hạn không vượt quá thời gian hiện tại (19/10/2026 19:00:00+07:00)
-      const maxDate = new Date('2026-10-19T19:00:00+07:00');
+      // Giới hạn không vượt quá mốc user cuối cùng của timeline (31/10/2026 22:00:00+07:00)
+      const maxDate = new Date('2026-10-31T22:00:00+07:00');
       if (calculatedDate > maxDate) {
         calculatedDate = new Date(maxDate.getTime() - (fb.id % 90) * 60 * 1000);
       }
