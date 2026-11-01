@@ -730,30 +730,31 @@ export default function AdminPage() {
       {/* SIDEBAR NAVIGATION */}
       <aside className="w-64 bg-[#0D2B24] text-white flex flex-col shrink-0 border-r border-[#153e34] shadow-xl z-20">
         
-        {/* Brand / Logo */}
-        <div className="p-6 border-b border-[#153e34] flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center font-black text-white shadow-md text-base">
-            C
-          </div>
-          <div>
-            <h2 className="font-extrabold text-base leading-none tracking-tight">Cognito Admin</h2>
-            <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mt-1 block">
-              Bảng Quản Trị Hệ Thống
+        {/* Brand + Current Admin */}
+        <div className="px-4 pt-5 pb-4 border-b border-[#153e34] space-y-4">
+          <div className="flex items-center gap-2.5 px-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center font-black text-white text-sm shadow-md shadow-emerald-900/40">
+              C
+            </div>
+            <h2 className="font-extrabold text-[15px] tracking-tight">Cognito</h2>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-400/10 border border-emerald-400/20 px-1.5 py-0.5 rounded-md">
+              Admin
             </span>
           </div>
-        </div>
 
-        {/* Current Admin User */}
-        <div className="p-4 border-b border-[#153e34] bg-[#091f1a]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-700 flex items-center justify-center font-black text-sm shadow-inner text-white border border-emerald-500">
-              {activeUser.name ? activeUser.name.charAt(0).toUpperCase() : "A"}
+          <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] border border-white/[0.06] p-3">
+            <div className="relative shrink-0">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-600 to-teal-800 flex items-center justify-center font-bold text-sm text-white ring-2 ring-emerald-400/30">
+                {activeUser.name ? activeUser.name.charAt(0).toUpperCase() : "A"}
+              </div>
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0D2B24]" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-bold truncate leading-tight text-white">{activeUser.name}</p>
-              <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-700/50 mt-1 inline-block">
+              <p className="text-sm font-semibold truncate leading-tight text-white">{activeUser.name}</p>
+              <p className="flex items-center gap-1 text-[11px] text-emerald-300/80 font-medium mt-0.5">
+                <Shield size={11} />
                 Quản trị viên
-              </span>
+              </p>
             </div>
           </div>
         </div>
@@ -1078,22 +1079,7 @@ export default function AdminPage() {
 
                     {/* Chart Bars Grid */}
                     {(() => {
-                      const timelineConfig = [
-                        { date: '2026-10-08', label: '08/10', day: 'T5', fallback: 2 },
-                        { date: '2026-10-09', label: '09/10', day: 'T6', fallback: 3 },
-                        { date: '2026-10-10', label: '10/10', day: 'T7', fallback: 0 },
-                        { date: '2026-10-11', label: '11/10', day: 'CN', fallback: 1 },
-                        { date: '2026-10-12', label: '12/10', day: 'T2', fallback: 3 },
-                        { date: '2026-10-13', label: '13/10', day: 'T3', fallback: 4 },
-                        { date: '2026-10-14', label: '14/10', day: 'T4', fallback: 10 },
-                        { date: '2026-10-15', label: '15/10', day: 'T5', fallback: 11 },
-                        { date: '2026-10-16', label: '16/10', day: 'T6', fallback: 5 },
-                        { date: '2026-10-17', label: '17/10', day: 'T7', fallback: 0 },
-                        { date: '2026-10-18', label: '18/10', day: 'CN', fallback: 1 },
-                        { date: '2026-10-19', label: '19/10', day: 'T2', fallback: 5 },
-                      ];
-
-                      // Map counts from real backend userRegistrationTrend OR users array OR fallback
+                      // Map counts from real backend userRegistrationTrend OR users array
                       const trendMap = new Map<string, number>();
                       if (charts?.userRegistrationTrend && Array.isArray(charts.userRegistrationTrend)) {
                         for (const row of charts.userRegistrationTrend) {
@@ -1108,9 +1094,26 @@ export default function AdminPage() {
                         }
                       }
 
+                      // Mỗi ngày liên tục từ ngày đăng ký đầu tiên tới ngày cuối cùng có dữ liệu
+                      const dates = Array.from(trendMap.keys()).sort();
+                      const timelineConfig: { date: string; label: string; day: string }[] = [];
+                      if (dates.length > 0) {
+                        const end = new Date(`${dates[dates.length - 1]}T00:00:00Z`);
+                        // shortcut: chỉ hiện tối đa 35 ngày gần nhất để cột không quá hẹp; cần xem dài hơn thì thêm bộ lọc khoảng ngày
+                        const start = new Date(Math.max(Date.parse(`${dates[0]}T00:00:00Z`), end.getTime() - 34 * 86400000));
+                        for (let d = start; d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+                          const iso = d.toISOString().slice(0, 10);
+                          timelineConfig.push({
+                            date: iso,
+                            label: `${iso.slice(8, 10)}/${iso.slice(5, 7)}`,
+                            day: ["CN", "T2", "T3", "T4", "T5", "T6", "T7"][d.getUTCDay()],
+                          });
+                        }
+                      }
+
                       let cumulativeAcc = 0;
                       const dataPoints = timelineConfig.map((item) => {
-                        const dailyCount = trendMap.has(item.date) ? trendMap.get(item.date)! : item.fallback;
+                        const dailyCount = trendMap.get(item.date) || 0;
                         cumulativeAcc += dailyCount;
                         return {
                           ...item,
